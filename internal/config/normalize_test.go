@@ -1,0 +1,73 @@
+package config
+
+import (
+	"reflect"
+	"testing"
+)
+
+func TestNormalize(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   Input
+		want    Config
+		wantErr bool
+	}{
+		{
+			name: "node defaults and deterministic sets",
+			input: Input{
+				Root:           "/tmp/My Project",
+				Preset:         PresetNode,
+				Ports:          []int{3000, 1024, 3000},
+				SystemPackages: []string{"libpq-dev", "curl", "libpq-dev"},
+			},
+			want: Config{
+				SchemaVersion: 1, ProjectName: "my-project", Preset: PresetNode,
+				Database: DatabaseNone, AITools: []AITool{AIToolOpenCode},
+				PackageManager: PackageManagerNPM, LanguageVersion: "22",
+				Ports: []int{1024, 3000}, SystemPackages: []string{"curl", "libpq-dev"},
+				Workspace: Workspace{HostPath: "/tmp/My Project", ContainerPath: "/workspaces/my-project"},
+				Container: Container{User: "vscode", Home: "/home/vscode", ServiceName: "app"},
+			},
+		},
+		{
+			name: "postgres enables compose",
+			input: Input{Root: "/tmp/api", Preset: PresetPython, Database: DatabasePostgres,
+				AITools: []AITool{}, PackageManager: PackageManagerUV},
+			want: Config{
+				SchemaVersion: 1, ProjectName: "api", Preset: PresetPython,
+				Database: DatabasePostgres, AITools: []AITool{},
+				PackageManager: PackageManagerUV, LanguageVersion: "3.13",
+				Ports: []int{}, SystemPackages: []string{},
+				Workspace: Workspace{HostPath: "/tmp/api", ContainerPath: "/workspaces/api"},
+				Container: Container{User: "vscode", Home: "/home/vscode", ServiceName: "app", UseCompose: true},
+			},
+		},
+		{name: "rejects incompatible manager", input: Input{Root: "/tmp/api", Preset: PresetPython, PackageManager: PackageManagerNPM}, wantErr: true},
+		{name: "rejects invalid port", input: Input{Root: "/tmp/api", Preset: PresetPython, Ports: []int{70000}}, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Normalize(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("Normalize() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr && !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("Normalize() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSanitizeName(t *testing.T) {
+	tests := map[string]string{
+		"My API":              "my-api",
+		"  example.com_web  ": "example.com_web",
+		"---":                 "",
+	}
+	for input, want := range tests {
+		if got := SanitizeName(input); got != want {
+			t.Errorf("SanitizeName(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
