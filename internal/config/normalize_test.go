@@ -44,6 +44,8 @@ func TestNormalize(t *testing.T) {
 		},
 		{name: "rejects incompatible manager", input: Input{Root: "/tmp/api", Preset: PresetPython, PackageManager: PackageManagerNPM}, wantErr: true},
 		{name: "rejects invalid port", input: Input{Root: "/tmp/api", Preset: PresetPython, Ports: []int{70000}}, wantErr: true},
+		{name: "rejects unsafe system package", input: Input{Root: "/tmp/api", Preset: PresetPython, SystemPackages: []string{"curl; false"}}, wantErr: true},
+		{name: "rejects unsafe language version", input: Input{Root: "/tmp/api", Preset: PresetRails, LanguageVersion: "3.3\nRUN false"}, wantErr: true},
 	}
 
 	for _, tt := range tests {

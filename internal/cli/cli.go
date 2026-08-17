@@ -1,9 +1,9 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"io"
+	"os"
 )
 
 const usage = `Usage:
@@ -17,7 +17,7 @@ Commands:
   doctor  Diagnose host dependencies and dworm compatibility
 `
 
-func Run(args []string, stdout, _ io.Writer) error {
+func Run(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
 		_, err := io.WriteString(stdout, usage)
 		return err
@@ -28,11 +28,15 @@ func Run(args []string, stdout, _ io.Writer) error {
 		_, err := io.WriteString(stdout, usage)
 		return err
 	case "init":
-		return errors.New("init generation is not implemented yet")
+		root, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("determine current directory: %w", err)
+		}
+		return runInit(root, args[1:], stdout, stderr)
 	case "check":
-		return errors.New("check is not implemented yet")
+		return fmt.Errorf("check is not implemented yet")
 	case "doctor":
-		return errors.New("doctor is not implemented yet")
+		return fmt.Errorf("doctor is not implemented yet")
 	default:
 		return fmt.Errorf("unknown command %q; run projectsetup --help for usage", args[0])
 	}

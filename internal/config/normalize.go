@@ -9,6 +9,8 @@ import (
 )
 
 var invalidNameCharacters = regexp.MustCompile(`[^a-z0-9._-]+`)
+var validSystemPackage = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9+.-]*$`)
+var validLanguageVersion = regexp.MustCompile(`^[0-9]+(?:\.[0-9]+){0,2}(?:[-+][a-zA-Z0-9.-]+)?$`)
 
 type Input struct {
 	Root            string
@@ -70,6 +72,9 @@ func Normalize(input Input) (Config, error) {
 	if version == "" {
 		version = defaultVersion(input.Preset)
 	}
+	if !validLanguageVersion.MatchString(version) {
+		return Config{}, fmt.Errorf("language version %q must be a numeric version such as 22 or 3.13.1", version)
+	}
 
 	ports := append(make([]int, 0, len(input.Ports)), input.Ports...)
 	sort.Ints(ports)
@@ -81,6 +86,11 @@ func Normalize(input Input) (Config, error) {
 	}
 
 	packages := normalizeStrings(input.SystemPackages)
+	for _, pkg := range packages {
+		if !validSystemPackage.MatchString(pkg) {
+			return Config{}, fmt.Errorf("system package %q is not a valid apt package name", pkg)
+		}
+	}
 	root, err := filepath.Abs(input.Root)
 	if err != nil {
 		return Config{}, fmt.Errorf("resolve project root: %w", err)

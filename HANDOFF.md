@@ -615,19 +615,19 @@ Known inconsistencies to avoid:
 
 ## Implementation Order
 
-1. Initialize the Go module and CLI command dispatch.
-2. Define enums, the normalized configuration model, manifest schema, and validation.
-3. Implement project detection for Node, Rails, and Python with table-driven tests.
-4. Implement non-interactive `init` flags first so generation is easy to test.
-5. Implement shared rendering, AI mounts, and the canonical AI installer.
-6. Add Dockerfile-only Node, Rails, and Python presets.
-7. Add the PostgreSQL Compose capability.
-8. Add golden fixtures and external configuration validation.
-9. Add interactive prompting on top of the same normalization path.
-10. Implement `check` and aggregate diagnostics.
-11. Implement `doctor`.
-12. Run real builds for all three presets and correct first-run permission or lifecycle problems.
-13. Add installation and usage documentation.
+- [x] Initialize the Go module and CLI command dispatch.
+- [x] Define enums, the normalized configuration model, manifest schema, and validation.
+- [x] Implement project detection for Node, Rails, and Python with table-driven tests.
+- [x] Implement non-interactive `init` flags first so generation is easy to test.
+- [x] Implement shared rendering, AI mounts, and the canonical AI installer.
+- [x] Add Dockerfile-only Node, Rails, and Python presets.
+- [x] Add the PostgreSQL Compose capability.
+- [ ] Add golden fixtures and external configuration validation.
+- [ ] Add interactive prompting on top of the same normalization path.
+- [ ] Implement `check` and aggregate diagnostics.
+- [ ] Implement `doctor`.
+- [ ] Run real builds for all three presets and correct first-run permission or lifecycle problems.
+- [ ] Add installation and usage documentation.
 
 ## MVP Acceptance Criteria
 
