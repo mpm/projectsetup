@@ -11,7 +11,7 @@ import (
 
 func TestRunHelp(t *testing.T) {
 	var stdout bytes.Buffer
-	if err := Run([]string{"--help"}, &stdout, &bytes.Buffer{}); err != nil {
+	if err := Run([]string{"--help"}, &bytes.Buffer{}, &stdout, &bytes.Buffer{}); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 	if !strings.Contains(stdout.String(), "projectsetup init") {
@@ -26,7 +26,7 @@ func TestRunInitNonInteractive(t *testing.T) {
 		t.Fatal(err)
 	}
 	var stdout bytes.Buffer
-	if err := runInit(root, []string{"--non-interactive", "--ai", "none", "--port", "3000"}, &stdout, &bytes.Buffer{}); err != nil {
+	if err := runInit(root, []string{"--non-interactive", "--ai", "none", "--port", "3000"}, &bytes.Buffer{}, &stdout, &bytes.Buffer{}); err != nil {
 		t.Fatalf("runInit() error = %v", err)
 	}
 	if !strings.Contains(stdout.String(), "Generated .devcontainer") {
@@ -44,7 +44,7 @@ func TestRunInitRejectsAmbiguousDetection(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	err := runInit(root, []string{"--non-interactive"}, &bytes.Buffer{}, &bytes.Buffer{})
+	err := runInit(root, []string{"--non-interactive"}, &bytes.Buffer{}, &bytes.Buffer{}, &bytes.Buffer{})
 	if err == nil || !strings.Contains(err.Error(), "multiple project presets detected") {
 		t.Fatalf("runInit() error = %v", err)
 	}
@@ -57,18 +57,65 @@ func TestRunInitRejectsAmbiguousManagers(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	err := runInit(root, []string{"--non-interactive"}, &bytes.Buffer{}, &bytes.Buffer{})
+	err := runInit(root, []string{"--non-interactive"}, &bytes.Buffer{}, &bytes.Buffer{}, &bytes.Buffer{})
 	if err == nil || !strings.Contains(err.Error(), "multiple package managers detected") {
 		t.Fatalf("runInit() error = %v", err)
 	}
 }
 
-func TestRunInitTreatsExplicitFlagsAsNonInteractive(t *testing.T) {
+func TestRunInitInteractiveUsesDetectedDefaults(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", t.TempDir())
-	err := runInit(root, []string{"--preset", "node", "--ai", "none"}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"engines":{"node":"22"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "package-lock.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout bytes.Buffer
+	err := runInit(root, nil, strings.NewReader("\n\ny\n"), &stdout, &bytes.Buffer{})
 	if err != nil {
 		t.Fatalf("runInit() error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Configuration:") || !strings.Contains(stdout.String(), "AI tools: opencode") {
+		t.Fatalf("stdout does not contain normalized summary:\n%s", stdout.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, ".devcontainer", "projectsetup.json")); err != nil {
+		t.Fatalf("generated projectsetup.json: %v", err)
+	}
+}
+
+func TestRunInitInteractiveResolvesAmbiguity(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	for _, name := range []string{"package.json", "pyproject.toml", "package-lock.json", "yarn.lock"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte("{}"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	input := strings.NewReader("node\nyarn\nnone\nnone\n\ny\n")
+	if err := runInit(root, nil, input, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runInit() error = %v", err)
+	}
+}
+
+func TestRunInitInteractiveCancellationWritesNothing(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"engines":{"node":"22"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "package-lock.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout bytes.Buffer
+	if err := runInit(root, nil, strings.NewReader("\n\n\n"), &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runInit() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".devcontainer")); !os.IsNotExist(err) {
+		t.Fatalf(".devcontainer exists after cancellation: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Initialization cancelled") {
+		t.Fatalf("stdout = %q", stdout.String())
 	}
 }
 
@@ -84,7 +131,7 @@ func TestResolveAIToolsRejectsUnsupportedCombination(t *testing.T) {
 }
 
 func TestRunRejectsUnknownCommand(t *testing.T) {
-	err := Run([]string{"generate"}, &bytes.Buffer{}, &bytes.Buffer{})
+	err := Run([]string{"generate"}, &bytes.Buffer{}, &bytes.Buffer{}, &bytes.Buffer{})
 	if err == nil || !strings.Contains(err.Error(), `unknown command "generate"`) {
 		t.Fatalf("Run() error = %v", err)
 	}

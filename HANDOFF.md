@@ -623,7 +623,7 @@ Known inconsistencies to avoid:
 - [x] Add Dockerfile-only Node, Rails, and Python presets.
 - [x] Add the PostgreSQL Compose capability.
 - [x] Add golden fixtures and external configuration validation.
-- [ ] Add interactive prompting on top of the same normalization path.
+- [x] Add interactive prompting on top of the same normalization path.
 - [ ] Implement `check` and aggregate diagnostics.
 - [ ] Implement `doctor`.
 - [ ] Run real builds for all three presets and correct first-run permission or lifecycle problems.

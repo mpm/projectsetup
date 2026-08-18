@@ -70,7 +70,7 @@ func Normalize(input Input) (Config, error) {
 
 	version := strings.TrimSpace(input.LanguageVersion)
 	if version == "" {
-		version = defaultVersion(input.Preset)
+		version = DefaultLanguageVersion(input.Preset)
 	}
 	if !validLanguageVersion.MatchString(version) {
 		return Config{}, fmt.Errorf("language version %q must be a numeric version such as 22 or 3.13.1", version)
@@ -125,7 +125,7 @@ func SanitizeName(value string) string {
 	return strings.Trim(value, ".-_")
 }
 
-func defaultVersion(preset Preset) string {
+func DefaultLanguageVersion(preset Preset) string {
 	switch preset {
 	case PresetNode:
 		return "22"

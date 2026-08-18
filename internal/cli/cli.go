@@ -17,7 +17,7 @@ Commands:
   doctor  Diagnose host dependencies and dworm compatibility
 `
 
-func Run(args []string, stdout, stderr io.Writer) error {
+func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
 		_, err := io.WriteString(stdout, usage)
 		return err
@@ -32,7 +32,7 @@ func Run(args []string, stdout, stderr io.Writer) error {
 		if err != nil {
 			return fmt.Errorf("determine current directory: %w", err)
 		}
-		return runInit(root, args[1:], stdout, stderr)
+		return runInit(root, args[1:], stdin, stdout, stderr)
 	case "check":
 		return fmt.Errorf("check is not implemented yet")
 	case "doctor":
