@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "projectName": "node-app",
+  "preset": "node",
+  "database": "none",
+  "aiTools": [
+    "opencode"
+  ],
+  "packageManager": "npm",
+  "languageVersion": "22",
+  "ports": null,
+  "systemPackages": null,
+  "generatedBy": "projectsetup"
+}

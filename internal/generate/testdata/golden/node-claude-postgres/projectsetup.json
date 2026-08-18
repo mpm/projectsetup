@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "projectName": "node-postgres",
+  "preset": "node",
+  "database": "postgres",
+  "aiTools": [
+    "claude",
+    "opencode"
+  ],
+  "packageManager": "pnpm",
+  "languageVersion": "20",
+  "ports": [
+    5173
+  ],
+  "systemPackages": null,
+  "generatedBy": "projectsetup"
+}

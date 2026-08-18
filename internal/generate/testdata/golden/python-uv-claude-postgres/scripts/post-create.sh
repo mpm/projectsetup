@@ -3,35 +3,9 @@
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-"${script_dir}/install-ai-tools.sh" {{.AITools}}
+"${script_dir}/install-ai-tools.sh" claude opencode
 
-{{if eq .Config.Preset "node"}}if [[ -f package.json ]]; then
-  case "{{.Config.PackageManager}}" in
-    npm)
-      if [[ -f package-lock.json ]]; then
-        npm ci
-      fi
-      ;;
-    pnpm)
-      corepack enable
-      if [[ -f pnpm-lock.yaml ]]; then
-        pnpm install --frozen-lockfile
-      fi
-      ;;
-    yarn)
-      corepack enable
-      if [[ -f yarn.lock ]]; then
-        yarn install --immutable || yarn install --frozen-lockfile
-      fi
-      ;;
-  esac
-fi
-{{else if eq .Config.Preset "rails"}}if [[ -x bin/setup ]]; then
-  bin/setup --skip-server
-elif [[ -f Gemfile ]]; then
-  bundle install
-fi
-{{else if eq .Config.Preset "python"}}case "{{.Config.PackageManager}}" in
+case "uv" in
   uv)
     command -v uv >/dev/null 2>&1 || python -m pip install --user uv
     if [[ -f uv.lock ]]; then
@@ -55,4 +29,3 @@ fi
     fi
     ;;
 esac
-{{end -}}

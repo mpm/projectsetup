@@ -622,7 +622,7 @@ Known inconsistencies to avoid:
 - [x] Implement shared rendering, AI mounts, and the canonical AI installer.
 - [x] Add Dockerfile-only Node, Rails, and Python presets.
 - [x] Add the PostgreSQL Compose capability.
-- [ ] Add golden fixtures and external configuration validation.
+- [x] Add golden fixtures and external configuration validation.
 - [ ] Add interactive prompting on top of the same normalization path.
 - [ ] Implement `check` and aggregate diagnostics.
 - [ ] Implement `doctor`.

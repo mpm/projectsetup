@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "projectName": "rails-app",
+  "preset": "rails",
+  "database": "none",
+  "aiTools": [
+    "opencode"
+  ],
+  "languageVersion": "3.3.6",
+  "ports": null,
+  "systemPackages": null,
+  "generatedBy": "projectsetup"
+}

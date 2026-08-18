@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "projectName": "rails-postgres",
+  "preset": "rails",
+  "database": "postgres",
+  "aiTools": [
+    "claude",
+    "opencode"
+  ],
+  "languageVersion": "3.3.6",
+  "ports": [
+    3000
+  ],
+  "systemPackages": null,
+  "generatedBy": "projectsetup"
+}

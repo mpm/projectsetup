@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "projectName": "python-pip",
+  "preset": "python",
+  "database": "none",
+  "aiTools": [
+    "opencode"
+  ],
+  "packageManager": "pip",
+  "languageVersion": "3.13",
+  "ports": null,
+  "systemPackages": null,
+  "generatedBy": "projectsetup"
+}

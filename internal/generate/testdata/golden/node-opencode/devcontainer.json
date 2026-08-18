@@ -1,0 +1,27 @@
+{
+  "name": "node-app",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "workspaceFolder": "/workspaces/node-app",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/node-app,type=bind",
+  "containerUser": "vscode",
+  "remoteUser": "vscode",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "22"
+    }
+  },
+  "containerEnv": {
+    "PATH": "/home/vscode/.local/bin:/home/vscode/.opencode/bin:${containerEnv:PATH}"
+  },
+  "mounts": [
+    "source=${localEnv:HOME}/.config/opencode,target=/home/vscode/.config/opencode,type=bind",
+    "source=${localEnv:HOME}/.local/share/opencode,target=/home/vscode/.local/share/opencode,type=bind",
+    "source=${localEnv:HOME}/.opencode,target=/home/vscode/.opencode,type=bind",
+    "source=${localEnv:HOME}/.cache/opencode,target=/home/vscode/.cache/opencode,type=bind"
+  ],
+  "postCreateCommand": ".devcontainer/scripts/post-create.sh"
+}

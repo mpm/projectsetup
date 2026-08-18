@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "projectName": "python-poetry",
+  "preset": "python",
+  "database": "none",
+  "aiTools": [
+    "opencode"
+  ],
+  "packageManager": "poetry",
+  "languageVersion": "3.11",
+  "ports": null,
+  "systemPackages": null,
+  "generatedBy": "projectsetup"
+}

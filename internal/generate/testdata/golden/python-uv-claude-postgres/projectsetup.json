@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "projectName": "python-uv",
+  "preset": "python",
+  "database": "postgres",
+  "aiTools": [
+    "claude",
+    "opencode"
+  ],
+  "packageManager": "uv",
+  "languageVersion": "3.12",
+  "ports": [
+    8000
+  ],
+  "systemPackages": [
+    "build-essential"
+  ],
+  "generatedBy": "projectsetup"
+}

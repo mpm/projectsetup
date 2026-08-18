@@ -1,0 +1,36 @@
+{
+  "name": "python-uv",
+  "dockerComposeFile": "compose.yaml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/python-uv",
+  "containerUser": "vscode",
+  "remoteUser": "vscode",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12"
+    }
+  },
+  "containerEnv": {
+    "CLAUDE_CONFIG_DIR": "/home/vscode/.claude",
+    "DB_HOST": "postgres",
+    "PATH": "/home/vscode/.local/bin:/home/vscode/.opencode/bin:${containerEnv:PATH}",
+    "PGDATABASE": "python-uv",
+    "PGHOST": "postgres",
+    "PGPASSWORD": "projectsetup",
+    "PGUSER": "projectsetup"
+  },
+  "mounts": [
+    "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind",
+    "source=${localEnv:HOME}/.local/share/claude,target=/home/vscode/.local/share/claude,type=bind",
+    "source=${localEnv:HOME}/.config/opencode,target=/home/vscode/.config/opencode,type=bind",
+    "source=${localEnv:HOME}/.local/share/opencode,target=/home/vscode/.local/share/opencode,type=bind",
+    "source=${localEnv:HOME}/.opencode,target=/home/vscode/.opencode,type=bind",
+    "source=${localEnv:HOME}/.cache/opencode,target=/home/vscode/.cache/opencode,type=bind"
+  ],
+  "forwardPorts": [
+    8000
+  ],
+  "postCreateCommand": ".devcontainer/scripts/post-create.sh",
+  "shutdownAction": "stopCompose"
+}
