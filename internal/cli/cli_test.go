@@ -136,3 +136,22 @@ func TestRunRejectsUnknownCommand(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 }
+
+func TestRunCheckReportsAggregatedFailure(t *testing.T) {
+	root := t.TempDir()
+	devDir := filepath.Join(root, ".devcontainer")
+	if err := os.Mkdir(devDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(devDir, "projectsetup.json"), []byte(`{"schemaVersion":99}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stderr bytes.Buffer
+	err := runCheck(root, nil, &bytes.Buffer{}, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "configuration check failed") {
+		t.Fatalf("runCheck() error = %v", err)
+	}
+	if !strings.Contains(stderr.String(), "unsupported schemaVersion") || !strings.Contains(stderr.String(), "required generated file") {
+		t.Fatalf("stderr does not contain aggregated diagnostics:\n%s", stderr.String())
+	}
+}

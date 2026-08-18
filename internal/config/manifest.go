@@ -1,5 +1,11 @@
 package config
 
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+)
+
 type Manifest struct {
 	SchemaVersion   int            `json:"schemaVersion"`
 	ProjectName     string         `json:"projectName"`
@@ -19,11 +25,27 @@ func NewManifest(config Config) Manifest {
 		ProjectName:     config.ProjectName,
 		Preset:          config.Preset,
 		Database:        config.Database,
-		AITools:         append([]AITool(nil), config.AITools...),
+		AITools:         append(make([]AITool, 0, len(config.AITools)), config.AITools...),
 		PackageManager:  config.PackageManager,
 		LanguageVersion: config.LanguageVersion,
-		Ports:           append([]int(nil), config.Ports...),
-		SystemPackages:  append([]string(nil), config.SystemPackages...),
+		Ports:           append(make([]int, 0, len(config.Ports)), config.Ports...),
+		SystemPackages:  append(make([]string, 0, len(config.SystemPackages)), config.SystemPackages...),
 		GeneratedBy:     "projectsetup",
 	}
+}
+
+func ReadManifest(reader io.Reader) (Manifest, error) {
+	decoder := json.NewDecoder(reader)
+	decoder.DisallowUnknownFields()
+	var manifest Manifest
+	if err := decoder.Decode(&manifest); err != nil {
+		return Manifest{}, fmt.Errorf("parse manifest: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return Manifest{}, fmt.Errorf("parse manifest: multiple JSON values")
+		}
+		return Manifest{}, fmt.Errorf("parse manifest: %w", err)
+	}
+	return manifest, nil
 }

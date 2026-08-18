@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"projectsetup/internal/config"
+	"projectsetup/internal/validate"
 )
 
 const directoryName = ".devcontainer"
@@ -56,8 +57,9 @@ func Write(root string, cfg config.Config, force bool) error {
 			return fmt.Errorf("set generated %s mode: %w", generated.name, err)
 		}
 	}
-	if err := validateStaging(staging, cfg); err != nil {
-		return fmt.Errorf("validate generated configuration: %w", err)
+	diagnostics := validate.Check(root, validate.Options{DevcontainerDir: staging})
+	if count := validate.ErrorCount(diagnostics); count > 0 {
+		return fmt.Errorf("validate generated configuration: %d error(s): %s", count, diagnostics[0].Message)
 	}
 	if err := createHostMountDirectories(cfg); err != nil {
 		return err
@@ -190,35 +192,6 @@ func checkGeneratedContents(target string) error {
 		}
 		return nil
 	})
-}
-
-func validateStaging(root string, cfg config.Config) error {
-	for _, name := range []string{"devcontainer.json", "Dockerfile", "projectsetup.json", "scripts/install-ai-tools.sh", "scripts/post-create.sh"} {
-		if _, err := os.Stat(filepath.Join(root, name)); err != nil {
-			return fmt.Errorf("required file %s: %w", name, err)
-		}
-	}
-	for _, name := range []string{"devcontainer.json", "projectsetup.json"} {
-		data, err := os.ReadFile(filepath.Join(root, name))
-		if err != nil {
-			return fmt.Errorf("read %s: %w", name, err)
-		}
-		if !json.Valid(data) {
-			return fmt.Errorf("%s is not valid JSON", name)
-		}
-	}
-	for _, name := range []string{"scripts/install-ai-tools.sh", "scripts/post-create.sh"} {
-		info, err := os.Stat(filepath.Join(root, name))
-		if err != nil || info.Mode().Perm()&0o111 == 0 {
-			return fmt.Errorf("%s is not executable", name)
-		}
-	}
-	if cfg.Container.UseCompose {
-		if _, err := os.Stat(filepath.Join(root, "compose.yaml")); err != nil {
-			return fmt.Errorf("required file compose.yaml: %w", err)
-		}
-	}
-	return nil
 }
 
 func createHostMountDirectories(cfg config.Config) error {

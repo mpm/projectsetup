@@ -34,7 +34,11 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		}
 		return runInit(root, args[1:], stdin, stdout, stderr)
 	case "check":
-		return fmt.Errorf("check is not implemented yet")
+		root, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("determine current directory: %w", err)
+		}
+		return runCheck(root, args[1:], stdout, stderr)
 	case "doctor":
 		return fmt.Errorf("doctor is not implemented yet")
 	default:

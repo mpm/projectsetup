@@ -7,7 +7,7 @@
     "opencode"
   ],
   "languageVersion": "3.3.6",
-  "ports": null,
-  "systemPackages": null,
+  "ports": [],
+  "systemPackages": [],
   "generatedBy": "projectsetup"
 }

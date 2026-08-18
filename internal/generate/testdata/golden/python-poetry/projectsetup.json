@@ -8,7 +8,7 @@
   ],
   "packageManager": "poetry",
   "languageVersion": "3.11",
-  "ports": null,
-  "systemPackages": null,
+  "ports": [],
+  "systemPackages": [],
   "generatedBy": "projectsetup"
 }

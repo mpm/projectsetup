@@ -12,6 +12,6 @@
   "ports": [
     5173
   ],
-  "systemPackages": null,
+  "systemPackages": [],
   "generatedBy": "projectsetup"
 }
