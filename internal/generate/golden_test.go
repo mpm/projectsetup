@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"projectsetup/internal/config"
+	"github.com/mpm/projectsetup/internal/config"
 )
 
 type goldenCase struct {

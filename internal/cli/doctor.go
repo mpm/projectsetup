@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"projectsetup/internal/doctor"
+	"github.com/mpm/projectsetup/internal/doctor"
 )
 
 func runDoctor(root string, args []string, stdout, stderr io.Writer, environment doctor.Environment) error {

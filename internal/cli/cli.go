@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"projectsetup/internal/doctor"
+	"github.com/mpm/projectsetup/internal/doctor"
 )
 
 const usage = `Usage:

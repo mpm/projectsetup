@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"projectsetup/internal/config"
+	"github.com/mpm/projectsetup/internal/config"
 )
 
 func TestReadManifestRejectsUnknownFields(t *testing.T) {

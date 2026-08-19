@@ -11,8 +11,8 @@ import (
 	"sort"
 	"strings"
 
-	"projectsetup/internal/config"
-	"projectsetup/internal/validate"
+	"github.com/mpm/projectsetup/internal/config"
+	"github.com/mpm/projectsetup/internal/validate"
 )
 
 const directoryName = ".devcontainer"

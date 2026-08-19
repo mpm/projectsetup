@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"projectsetup/internal/config"
+	"github.com/mpm/projectsetup/internal/config"
 )
 
 type PresetResult struct {

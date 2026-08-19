@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"text/template"
 
-	"projectsetup/internal/config"
+	"github.com/mpm/projectsetup/internal/config"
 )
 
 //go:embed templates/*

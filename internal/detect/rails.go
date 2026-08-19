@@ -3,7 +3,7 @@ package detect
 import (
 	"regexp"
 
-	"projectsetup/internal/config"
+	"github.com/mpm/projectsetup/internal/config"
 )
 
 var railsGem = regexp.MustCompile(`(?m)^\s*gem\s+["']rails["']`)

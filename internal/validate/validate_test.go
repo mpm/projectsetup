@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"projectsetup/internal/config"
-	"projectsetup/internal/generate"
-	"projectsetup/internal/validate"
+	"github.com/mpm/projectsetup/internal/config"
+	"github.com/mpm/projectsetup/internal/generate"
+	"github.com/mpm/projectsetup/internal/validate"
 )
 
 type fakeRunner struct {

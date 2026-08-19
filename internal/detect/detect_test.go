@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"projectsetup/internal/config"
+	"github.com/mpm/projectsetup/internal/config"
 )
 
 func TestDetect(t *testing.T) {

@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"projectsetup/internal/config"
-	"projectsetup/internal/detect"
-	"projectsetup/internal/generate"
+	"github.com/mpm/projectsetup/internal/config"
+	"github.com/mpm/projectsetup/internal/detect"
+	"github.com/mpm/projectsetup/internal/generate"
 )
 
 type repeatedStrings []string

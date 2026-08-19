@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"projectsetup/internal/cli"
+	"github.com/mpm/projectsetup/internal/cli"
 )
 
 func main() {

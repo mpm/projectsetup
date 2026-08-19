@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"projectsetup/internal/config"
+	"github.com/mpm/projectsetup/internal/config"
 )
 
 func TestWriteGeneratesSupportedPresets(t *testing.T) {

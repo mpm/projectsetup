@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	"projectsetup/internal/config"
-	"projectsetup/internal/detect"
+	"github.com/mpm/projectsetup/internal/config"
+	"github.com/mpm/projectsetup/internal/detect"
 )
 
 type Severity string

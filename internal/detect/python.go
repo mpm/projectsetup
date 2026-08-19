@@ -3,7 +3,7 @@ package detect
 import (
 	"regexp"
 
-	"projectsetup/internal/config"
+	"github.com/mpm/projectsetup/internal/config"
 )
 
 var requiresPython = regexp.MustCompile(`(?m)^\s*requires-python\s*=\s*["'][^"']*?(\d+(?:\.\d+){1,2})`)

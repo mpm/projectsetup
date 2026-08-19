@@ -16,7 +16,7 @@ User templates, plugins, automatic migration/update of hand-written configuratio
 
 ## Prerequisites
 
-- Go 1.23 or newer to install or build `projectsetup`
+- Go 1.23 or newer when installing from source
 - Docker with Docker Compose for PostgreSQL configurations and build validation
 - [Dev Container CLI](https://github.com/devcontainers/cli) (`devcontainer`) for external configuration checks and `check --build`
 - `dworm` for the intended container workflow
@@ -25,10 +25,25 @@ Docker and `devcontainer` are not required merely to generate files. A normal `c
 
 ## Installation
 
-From this checkout, install into `GOBIN` (or `$(go env GOPATH)/bin`):
+Install the latest release for Linux or macOS (`amd64` or `arm64`) into `~/.local/bin`:
 
 ```bash
-go install ./cmd/projectsetup
+curl -fsSL https://raw.githubusercontent.com/mpm/projectsetup/main/install.sh | sh
+```
+
+Set `PROJECTSETUP_INSTALL_DIR` to choose another directory, or pass a release tag to install a specific version:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mpm/projectsetup/main/install.sh | PROJECTSETUP_INSTALL_DIR=/usr/local/bin sh
+curl -fsSL https://raw.githubusercontent.com/mpm/projectsetup/main/install.sh | sh -s v0.1.0
+```
+
+Release archives and SHA-256 checksums are also available on the [GitHub Releases page](https://github.com/mpm/projectsetup/releases).
+
+Install from source into `GOBIN` (or `$(go env GOPATH)/bin`):
+
+```bash
+go install github.com/mpm/projectsetup/cmd/projectsetup@latest
 ```
 
 Or build a local executable:

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"projectsetup/internal/doctor"
+	"github.com/mpm/projectsetup/internal/doctor"
 )
 
 func TestRunHelp(t *testing.T) {

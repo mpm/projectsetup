@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"projectsetup/internal/doctor"
+	"github.com/mpm/projectsetup/internal/doctor"
 )
 
 func TestCheckReportsHealthyEnvironment(t *testing.T) {

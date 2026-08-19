@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"projectsetup/internal/config"
+	"github.com/mpm/projectsetup/internal/config"
 )
 
 var nodeEngineVersion = regexp.MustCompile(`\d+(?:\.\d+){0,2}`)

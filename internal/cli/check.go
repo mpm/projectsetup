@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"projectsetup/internal/validate"
+	"github.com/mpm/projectsetup/internal/validate"
 )
 
 func runCheck(root string, args []string, stdout, stderr io.Writer) error {
