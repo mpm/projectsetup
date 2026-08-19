@@ -36,7 +36,7 @@ func renderDevcontainer(cfg config.Config) ([]byte, error) {
 		RemoteUser:      cfg.Container.User,
 		Features:        features(cfg),
 		ContainerEnv: map[string]string{
-			"PATH": cfg.Container.Home + "/.local/bin:" + cfg.Container.Home + "/.opencode/bin:${containerEnv:PATH}",
+			"PATH": cfg.Container.Home + "/.local/bin:" + cfg.Container.Home + "/.opencode/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 		},
 		Mounts:            aiMounts(cfg),
 		ForwardPorts:      append([]int(nil), cfg.Ports...),

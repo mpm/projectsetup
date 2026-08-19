@@ -275,8 +275,11 @@ func validateDevcontainer(root, devDir string, manifest config.Manifest, documen
 			add(Error, path, "mount %q conflicts with dworm credential forwarding", mount)
 		}
 	}
-	if !strings.Contains(document.ContainerEnv["PATH"], "/home/vscode/.local/bin") {
-		add(Error, path, "containerEnv.PATH must include /home/vscode/.local/bin for dworm exec")
+	containerPath := strings.Split(document.ContainerEnv["PATH"], ":")
+	for _, required := range []string{"/home/vscode/.local/bin", "/usr/bin", "/bin"} {
+		if !containsString(containerPath, required) {
+			add(Error, path, "containerEnv.PATH must include %s", required)
+		}
 	}
 	if checkHost {
 		home, err := os.UserHomeDir()

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"projectsetup/internal/doctor"
 )
 
 func TestRunHelp(t *testing.T) {
@@ -153,5 +155,29 @@ func TestRunCheckReportsAggregatedFailure(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "unsupported schemaVersion") || !strings.Contains(stderr.String(), "required generated file") {
 		t.Fatalf("stderr does not contain aggregated diagnostics:\n%s", stderr.String())
+	}
+}
+
+func TestRunDoctorRendersDistinctSeverities(t *testing.T) {
+	root := t.TempDir()
+	environment := doctor.Environment{
+		GOOS:   "linux",
+		GOARCH: "amd64",
+		Getenv: func(string) string { return "" },
+		LookPath: func(string) (string, error) {
+			return "", os.ErrNotExist
+		},
+		ReadFile: func(string) ([]byte, error) { return nil, os.ErrNotExist },
+	}
+	var stdout, stderr bytes.Buffer
+	err := runDoctor(root, nil, &stdout, &stderr, environment)
+	if err == nil || !strings.Contains(err.Error(), "doctor found 3 error(s)") {
+		t.Fatalf("runDoctor() error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "INFO: host: GOOS=linux GOARCH=amd64") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "ERROR: docker: not found") || !strings.Contains(stderr.String(), "WARNING: SSH_AUTH_SOCK:") {
+		t.Fatalf("stderr = %q", stderr.String())
 	}
 }

@@ -68,6 +68,7 @@ func TestCheckAggregatesIndependentFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	data = []byte(strings.ReplaceAll(string(data), `"remoteUser": "vscode"`, `"remoteUser": "root"`))
+	data = []byte(strings.ReplaceAll(string(data), `:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`, `:${containerEnv:PATH}`))
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -79,6 +80,7 @@ func TestCheckAggregatesIndependentFailures(t *testing.T) {
 	assertDiagnostic(t, diagnostics, validate.Error, "containerUser and remoteUser")
 	assertDiagnostic(t, diagnostics, validate.Error, "not executable")
 	assertDiagnostic(t, diagnostics, validate.Error, "disagrees with detected project version")
+	assertDiagnostic(t, diagnostics, validate.Error, "containerEnv.PATH must include /usr/bin")
 	assertDiagnostic(t, diagnostics, validate.Warning, "outside dworm's scanned range")
 }
 

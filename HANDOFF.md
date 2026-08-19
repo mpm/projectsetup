@@ -625,9 +625,9 @@ Known inconsistencies to avoid:
 - [x] Add golden fixtures and external configuration validation.
 - [x] Add interactive prompting on top of the same normalization path.
 - [x] Implement `check` and aggregate diagnostics.
-- [ ] Implement `doctor`.
-- [ ] Run real builds for all three presets and correct first-run permission or lifecycle problems.
-- [ ] Add installation and usage documentation.
+- [x] Implement `doctor`.
+- [x] Run real builds for all three presets and correct first-run permission or lifecycle problems.
+- [x] Add installation and usage documentation.
 
 ## MVP Acceptance Criteria
 

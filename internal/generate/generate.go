@@ -199,7 +199,7 @@ func createHostMountDirectories(cfg config.Config) error {
 	if err != nil {
 		return fmt.Errorf("locate host home directory for AI mounts: %w", err)
 	}
-	for _, relative := range hostMountDirectories(cfg.AITools) {
+	for _, relative := range config.AIHostDirectories(cfg.AITools) {
 		path := filepath.Join(home, filepath.FromSlash(relative))
 		if err := os.MkdirAll(path, 0o755); err != nil {
 			return fmt.Errorf("create host mount source %q: %w", path, err)
@@ -209,17 +209,7 @@ func createHostMountDirectories(cfg config.Config) error {
 }
 
 func hostMountDirectories(tools []config.AITool) []string {
-	var directories []string
-	for _, tool := range tools {
-		switch tool {
-		case config.AIToolOpenCode:
-			directories = append(directories, ".config/opencode", ".local/share/opencode", ".opencode", ".cache/opencode")
-		case config.AIToolClaude:
-			directories = append(directories, ".claude", ".local/share/claude")
-		}
-	}
-	sort.Strings(directories)
-	return directories
+	return config.AIHostDirectories(tools)
 }
 
 func marshalJSON(value any) ([]byte, error) {

@@ -168,6 +168,90 @@ func TestGoldenDevcontainerConfigurations(t *testing.T) {
 	}
 }
 
+func TestBuildPresetFixtures(t *testing.T) {
+	if os.Getenv("PROJECTSETUP_BUILD_TESTS") != "1" {
+		t.Skip("set PROJECTSETUP_BUILD_TESTS=1 to build one fixture per preset")
+	}
+	devcontainer, err := exec.LookPath("devcontainer")
+	if err != nil {
+		t.Fatal("devcontainer is not installed")
+	}
+	if _, err := exec.LookPath("docker"); err != nil {
+		t.Fatal("docker is not installed")
+	}
+
+	for _, name := range []string{"node-opencode", "rails-opencode", "python-pip"} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			if err := replaceTree(filepath.Join(root, directoryName), filepath.Join("testdata", "golden", name)); err != nil {
+				t.Fatalf("prepare fixture workspace: %v", err)
+			}
+			command := exec.Command(devcontainer, "build", "--workspace-folder", root)
+			if output, err := command.CombinedOutput(); err != nil {
+				t.Fatalf("devcontainer build: %v\n%s", err, output)
+			}
+		})
+	}
+}
+
+func TestSmokePresetFixtures(t *testing.T) {
+	if os.Getenv("PROJECTSETUP_SMOKE_TESTS") != "1" {
+		t.Skip("set PROJECTSETUP_SMOKE_TESTS=1 to create and smoke-test one container per preset")
+	}
+	devcontainer, err := exec.LookPath("devcontainer")
+	if err != nil {
+		t.Fatal("devcontainer is not installed")
+	}
+	docker, err := exec.LookPath("docker")
+	if err != nil {
+		t.Fatal("docker is not installed")
+	}
+
+	for _, name := range []string{"node-opencode", "rails-opencode", "python-pip"} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			home := t.TempDir()
+			if err := replaceTree(filepath.Join(root, directoryName), filepath.Join("testdata", "golden", name)); err != nil {
+				t.Fatalf("prepare fixture workspace: %v", err)
+			}
+			for _, relative := range config.AIHostDirectories([]config.AITool{config.AIToolOpenCode}) {
+				if err := os.MkdirAll(filepath.Join(home, relative), 0o755); err != nil {
+					t.Fatalf("prepare clean AI host directory: %v", err)
+				}
+			}
+
+			up := exec.Command(devcontainer, "up", "--workspace-folder", root)
+			up.Env = append(os.Environ(), "HOME="+home)
+			var stderr bytes.Buffer
+			up.Stderr = &stderr
+			output, err := up.Output()
+			var result struct {
+				ContainerID string `json:"containerId"`
+			}
+			parseErr := json.Unmarshal(output, &result)
+			if result.ContainerID != "" {
+				t.Cleanup(func() {
+					if output, err := exec.Command(docker, "rm", "-f", result.ContainerID).CombinedOutput(); err != nil {
+						t.Errorf("remove smoke-test container: %v\n%s", err, output)
+					}
+				})
+			}
+			if err != nil {
+				t.Fatalf("devcontainer up: %v\n%s\n%s", err, output, stderr.Bytes())
+			}
+			if parseErr != nil || result.ContainerID == "" {
+				t.Fatalf("parse devcontainer up output: %v\n%s", parseErr, output)
+			}
+
+			smoke := exec.Command(devcontainer, "exec", "--workspace-folder", root, "bash", "-lc", `test "$(id -un)" = vscode && test "$HOME" = /home/vscode && test -w "$HOME" && command -v opencode >/dev/null && opencode --version >/dev/null`)
+			smoke.Env = append(os.Environ(), "HOME="+home)
+			if output, err := smoke.CombinedOutput(); err != nil {
+				t.Fatalf("smoke test container: %v\n%s", err, output)
+			}
+		})
+	}
+}
+
 type treeFile struct {
 	data []byte
 	mode fs.FileMode

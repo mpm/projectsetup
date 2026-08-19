@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"projectsetup/internal/doctor"
 )
 
 const usage = `Usage:
@@ -40,7 +42,11 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		}
 		return runCheck(root, args[1:], stdout, stderr)
 	case "doctor":
-		return fmt.Errorf("doctor is not implemented yet")
+		root, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("determine current directory: %w", err)
+		}
+		return runDoctor(root, args[1:], stdout, stderr, doctor.Environment{})
 	default:
 		return fmt.Errorf("unknown command %q; run projectsetup --help for usage", args[0])
 	}

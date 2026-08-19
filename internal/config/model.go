@@ -1,6 +1,9 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 const SchemaVersion = 1
 
@@ -60,6 +63,20 @@ func ParseAITool(value string) (AITool, error) {
 
 func (a AITool) Valid() bool {
 	return a == AIToolOpenCode || a == AIToolClaude
+}
+
+func AIHostDirectories(tools []AITool) []string {
+	var directories []string
+	for _, tool := range tools {
+		switch tool {
+		case AIToolOpenCode:
+			directories = append(directories, ".config/opencode", ".local/share/opencode", ".opencode", ".cache/opencode")
+		case AIToolClaude:
+			directories = append(directories, ".claude", ".local/share/claude")
+		}
+	}
+	sort.Strings(directories)
+	return directories
 }
 
 type PackageManager string
