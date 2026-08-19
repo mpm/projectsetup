@@ -146,7 +146,7 @@ printf '%s\n' 'mkdir -p "$HOME/.local/share/claude/versions"' 'printf "#!/usr/bi
 		t.Fatal(err)
 	}
 	command := exec.Command("bash", installer, "claude")
-	command.Env = append(os.Environ(), "HOME="+home, "PATH="+bin+":"+os.Getenv("PATH"))
+	command.Env = append(os.Environ(), "HOME="+home, "PATH="+bin+":"+filepath.Join(home, ".local/bin")+":"+os.Getenv("PATH"))
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("install-ai-tools.sh claude: %v\n%s", err, output)
 	}
