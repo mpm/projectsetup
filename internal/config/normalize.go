@@ -128,7 +128,7 @@ func SanitizeName(value string) string {
 func DefaultLanguageVersion(preset Preset) string {
 	switch preset {
 	case PresetNode:
-		return "22"
+		return "24"
 	case PresetRails:
 		return "3.3"
 	case PresetPython:

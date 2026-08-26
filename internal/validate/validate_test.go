@@ -25,7 +25,7 @@ func (runner *fakeRunner) Run(name string, args ...string) ([]byte, error) {
 func TestCheckAcceptsGeneratedConfiguration(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", t.TempDir())
-	if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"engines":{"node":"22"}}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"engines":{"node":"24"}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: config.PresetNode, AITools: []config.AITool{}})

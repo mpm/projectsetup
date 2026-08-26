@@ -26,7 +26,7 @@ var goldenCases = []goldenCase{
 		name: "node-opencode",
 		input: config.Input{
 			ProjectName: "node-app", Preset: config.PresetNode,
-			PackageManager: config.PackageManagerNPM, LanguageVersion: "22",
+			PackageManager: config.PackageManagerNPM,
 		},
 	},
 	{

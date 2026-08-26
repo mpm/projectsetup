@@ -23,7 +23,7 @@ func TestNormalize(t *testing.T) {
 			want: Config{
 				SchemaVersion: 1, ProjectName: "my-project", Preset: PresetNode,
 				Database: DatabaseNone, AITools: []AITool{AIToolOpenCode},
-				PackageManager: PackageManagerNPM, LanguageVersion: "22",
+				PackageManager: PackageManagerNPM, LanguageVersion: "24",
 				Ports: []int{1024, 3000}, SystemPackages: []string{"curl", "libpq-dev"},
 				Workspace: Workspace{HostPath: "/tmp/My Project", ContainerPath: "/workspaces/my-project"},
 				Container: Container{User: "vscode", Home: "/home/vscode", ServiceName: "app"},

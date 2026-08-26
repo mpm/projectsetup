@@ -87,7 +87,7 @@ Available `init` flags:
 --force
 ```
 
-Defaults are detected from version files, manifests, and lockfiles. Without a detected language version, the defaults are Node 22, Ruby 3.3, and Python 3.13. OpenCode is enabled by default; the database defaults to none.
+Defaults are detected from version files, manifests, and lockfiles. Without a detected language version, the defaults are Node 24, Ruby 3.3, and Python 3.13. OpenCode is enabled by default; the database defaults to none.
 
 ## Validate a configuration
 
