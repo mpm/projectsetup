@@ -20,6 +20,7 @@ type devcontainerConfig struct {
 	ContainerEnv      map[string]string         `json:"containerEnv"`
 	Mounts            []string                  `json:"mounts,omitempty"`
 	ForwardPorts      []int                     `json:"forwardPorts,omitempty"`
+	RunArgs           []string                  `json:"runArgs,omitempty"`
 	PostCreateCommand string                    `json:"postCreateCommand"`
 	ShutdownAction    string                    `json:"shutdownAction,omitempty"`
 }
@@ -55,6 +56,7 @@ func renderDevcontainer(cfg config.Config) ([]byte, error) {
 	} else {
 		document.Build = &devcontainerBuild{Dockerfile: "Dockerfile", Context: ".."}
 		document.WorkspaceMount = fmt.Sprintf("source=${localWorkspaceFolder},target=%s,type=bind", cfg.Workspace.ContainerPath)
+		document.RunArgs = []string{"--name", cfg.Container.Name}
 	}
 	for _, tool := range cfg.AITools {
 		if tool == config.AIToolClaude {

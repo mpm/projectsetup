@@ -89,6 +89,8 @@ Available `init` flags:
 
 Defaults are detected from version files, manifests, and lockfiles. Without a detected language version, the defaults are Node 24, Ruby 3.3, and Python 3.13. OpenCode is enabled by default; the database defaults to none.
 
+The normalized project name also determines Docker resource names. Dockerfile-only setups use `<project>-app`; Compose setups use the project name as their Compose project, producing names such as `<project>-app-1` and `<project>-postgres-1`. Use `--name` to select a different prefix. Docker names are host-global, so separate checkouts that need to run simultaneously must use different project names.
+
 ## Validate a configuration
 
 ```bash

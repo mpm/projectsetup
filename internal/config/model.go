@@ -141,8 +141,10 @@ type Workspace struct {
 }
 
 type Container struct {
-	User        string
-	Home        string
-	ServiceName string
-	UseCompose  bool
+	User               string
+	Home               string
+	Name               string
+	ComposeProjectName string
+	ServiceName        string
+	UseCompose         bool
 }

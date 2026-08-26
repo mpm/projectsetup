@@ -23,5 +23,9 @@
     "source=${localEnv:HOME}/.opencode,target=/home/vscode/.opencode,type=bind",
     "source=${localEnv:HOME}/.cache/opencode,target=/home/vscode/.cache/opencode,type=bind"
   ],
+  "runArgs": [
+    "--name",
+    "python-pip-app"
+  ],
   "postCreateCommand": ".devcontainer/scripts/post-create.sh"
 }

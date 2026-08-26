@@ -96,6 +96,8 @@ func Normalize(input Input) (Config, error) {
 		return Config{}, fmt.Errorf("resolve project root: %w", err)
 	}
 
+	serviceName := "app"
+	composeProjectName := RuntimeProjectName(name)
 	return Config{
 		SchemaVersion:   SchemaVersion,
 		ProjectName:     name,
@@ -111,10 +113,12 @@ func Normalize(input Input) (Config, error) {
 			ContainerPath: "/workspaces/" + name,
 		},
 		Container: Container{
-			User:        "vscode",
-			Home:        "/home/vscode",
-			ServiceName: "app",
-			UseCompose:  database == DatabasePostgres,
+			User:               "vscode",
+			Home:               "/home/vscode",
+			Name:               composeProjectName + "-" + serviceName,
+			ComposeProjectName: composeProjectName,
+			ServiceName:        serviceName,
+			UseCompose:         database == DatabasePostgres,
 		},
 	}, nil
 }
@@ -123,6 +127,11 @@ func SanitizeName(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	value = invalidNameCharacters.ReplaceAllString(value, "-")
 	return strings.Trim(value, ".-_")
+}
+
+// RuntimeProjectName returns a project prefix accepted by Docker Compose.
+func RuntimeProjectName(projectName string) string {
+	return strings.ReplaceAll(projectName, ".", "-")
 }
 
 func DefaultLanguageVersion(preset Preset) string {

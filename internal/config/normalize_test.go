@@ -26,7 +26,7 @@ func TestNormalize(t *testing.T) {
 				PackageManager: PackageManagerNPM, LanguageVersion: "24",
 				Ports: []int{1024, 3000}, SystemPackages: []string{"curl", "libpq-dev"},
 				Workspace: Workspace{HostPath: "/tmp/My Project", ContainerPath: "/workspaces/my-project"},
-				Container: Container{User: "vscode", Home: "/home/vscode", ServiceName: "app"},
+				Container: Container{User: "vscode", Home: "/home/vscode", Name: "my-project-app", ComposeProjectName: "my-project", ServiceName: "app"},
 			},
 		},
 		{
@@ -39,7 +39,7 @@ func TestNormalize(t *testing.T) {
 				PackageManager: PackageManagerUV, LanguageVersion: "3.13",
 				Ports: []int{}, SystemPackages: []string{},
 				Workspace: Workspace{HostPath: "/tmp/api", ContainerPath: "/workspaces/api"},
-				Container: Container{User: "vscode", Home: "/home/vscode", ServiceName: "app", UseCompose: true},
+				Container: Container{User: "vscode", Home: "/home/vscode", Name: "api-app", ComposeProjectName: "api", ServiceName: "app", UseCompose: true},
 			},
 		},
 		{name: "rejects incompatible manager", input: Input{Root: "/tmp/api", Preset: PresetPython, PackageManager: PackageManagerNPM}, wantErr: true},
@@ -71,5 +71,11 @@ func TestSanitizeName(t *testing.T) {
 		if got := SanitizeName(input); got != want {
 			t.Errorf("SanitizeName(%q) = %q, want %q", input, got, want)
 		}
+	}
+}
+
+func TestRuntimeProjectName(t *testing.T) {
+	if got, want := RuntimeProjectName("example.com_web"), "example-com_web"; got != want {
+		t.Errorf("RuntimeProjectName() = %q, want %q", got, want)
 	}
 }

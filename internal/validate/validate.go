@@ -48,6 +48,7 @@ func (commandRunner) Run(name string, args ...string) ([]byte, error) {
 }
 
 type devcontainerDocument struct {
+	Name  string `json:"name"`
 	Build struct {
 		Dockerfile string `json:"dockerfile"`
 		Context    string `json:"context"`
@@ -64,6 +65,7 @@ type devcontainerDocument struct {
 	} `json:"features"`
 	Mounts            []string `json:"mounts"`
 	ForwardPorts      []int    `json:"forwardPorts"`
+	RunArgs           []string `json:"runArgs"`
 	PostCreateCommand string   `json:"postCreateCommand"`
 }
 
@@ -221,6 +223,11 @@ func validateManifest(root string, manifest config.Manifest, add func(Severity, 
 func validateDevcontainer(root, devDir string, manifest config.Manifest, document devcontainerDocument, checkHost bool, add func(Severity, string, string, ...any)) {
 	path := relative(root, filepath.Join(devDir, "devcontainer.json"))
 	wantWorkspace := "/workspaces/" + manifest.ProjectName
+	wantRuntimeProject := config.RuntimeProjectName(manifest.ProjectName)
+	wantContainerName := wantRuntimeProject + "-app"
+	if document.Name != manifest.ProjectName {
+		add(Error, path, "name is %q; expected project name %q", document.Name, manifest.ProjectName)
+	}
 	if document.WorkspaceFolder != wantWorkspace {
 		add(Error, path, "workspaceFolder is %q; expected %q", document.WorkspaceFolder, wantWorkspace)
 	}
@@ -243,6 +250,9 @@ func validateDevcontainer(root, devDir string, manifest config.Manifest, documen
 		}
 		if document.Build.Dockerfile != "Dockerfile" || document.Build.Context != ".." {
 			add(Error, path, "direct build must use Dockerfile with context ..")
+		}
+		if len(document.RunArgs) != 2 || document.RunArgs[0] != "--name" || document.RunArgs[1] != wantContainerName {
+			add(Error, path, "direct build runArgs must name the container %q", wantContainerName)
 		}
 	}
 	if document.PostCreateCommand != ".devcontainer/scripts/post-create.sh" {
@@ -358,6 +368,10 @@ func validateCompose(root, devDir string, manifest config.Manifest, document dev
 		return
 	}
 	text := string(data)
+	wantName := "name: " + config.RuntimeProjectName(manifest.ProjectName)
+	if !containsString(strings.Split(text, "\n"), wantName) {
+		add(Error, relative(root, path), "missing expected Compose configuration %q", wantName)
+	}
 	checks := []string{"services:", "  " + document.Service + ":", "  postgres:", "- ..:/workspaces/" + manifest.ProjectName, "POSTGRES_USER: projectsetup", "POSTGRES_PASSWORD: projectsetup", "POSTGRES_DB: '" + manifest.ProjectName + "'", "condition: service_healthy", "postgres-data:/var/lib/postgresql/data"}
 	for _, expected := range checks {
 		if !strings.Contains(text, expected) {

@@ -57,6 +57,45 @@ func TestCheckAcceptsRailsConfigurationWithoutProjectSignals(t *testing.T) {
 	}
 }
 
+func TestCheckRejectsMismatchedRuntimeNames(t *testing.T) {
+	tests := []struct {
+		name        string
+		database    config.Database
+		file        string
+		old         string
+		replacement string
+		want        string
+	}{
+		{name: "direct container", file: "devcontainer.json", old: `"example-app"`, replacement: `"other-app"`, want: "runArgs must name the container"},
+		{name: "compose project", database: config.DatabasePostgres, file: "compose.yaml", old: "name: example", replacement: "name: other", want: `missing expected Compose configuration "name: example"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			t.Setenv("HOME", t.TempDir())
+			cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: config.PresetNode, Database: tt.database, AITools: []config.AITool{}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := generate.Write(root, cfg, false); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(root, ".devcontainer", tt.file)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(strings.Replace(string(data), tt.old, tt.replacement, 1)), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			diagnostics := validate.Check(root, validate.Options{})
+			assertDiagnostic(t, diagnostics, validate.Error, tt.want)
+		})
+	}
+}
+
 func TestCheckAggregatesIndependentFailures(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", t.TempDir())
