@@ -2,6 +2,7 @@ package generate
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/mpm/projectsetup/internal/config"
 )
@@ -36,7 +37,7 @@ func renderDevcontainer(cfg config.Config) ([]byte, error) {
 		RemoteUser:      cfg.Container.User,
 		Features:        features(cfg),
 		ContainerEnv: map[string]string{
-			"PATH": cfg.Container.Home + "/.local/bin:" + cfg.Container.Home + "/.opencode/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+			"PATH": containerPath(cfg),
 		},
 		Mounts:            aiMounts(cfg),
 		ForwardPorts:      append([]int(nil), cfg.Ports...),
@@ -71,6 +72,10 @@ func features(cfg config.Config) map[string]map[string]any {
 	case config.PresetNode:
 		result["ghcr.io/devcontainers/features/node:1"] = map[string]any{"version": cfg.LanguageVersion}
 	case config.PresetRails:
+		result["ghcr.io/rails/devcontainer/features/ruby:2"] = map[string]any{
+			"version":              cfg.LanguageVersion,
+			"usePrecompiledRubies": true,
+		}
 		result["ghcr.io/devcontainers/features/node:1"] = map[string]any{"version": "lts"}
 		result["ghcr.io/rails/devcontainer/features/activestorage"] = map[string]any{}
 		if cfg.Database == config.DatabasePostgres {
@@ -80,6 +85,18 @@ func features(cfg config.Config) map[string]map[string]any {
 		result["ghcr.io/devcontainers/features/python:1"] = map[string]any{"version": cfg.LanguageVersion}
 	}
 	return result
+}
+
+func containerPath(cfg config.Config) string {
+	paths := []string{
+		cfg.Container.Home + "/.local/bin",
+		cfg.Container.Home + "/.opencode/bin",
+	}
+	if cfg.Preset == config.PresetRails {
+		paths = append(paths, cfg.Container.Home+"/.local/share/mise/shims")
+	}
+	paths = append(paths, "/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin")
+	return strings.Join(paths, ":")
 }
 
 func aiMounts(cfg config.Config) []string {

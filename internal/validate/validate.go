@@ -256,6 +256,10 @@ func validateDevcontainer(root, devDir string, manifest config.Manifest, documen
 		if document.Features["ghcr.io/devcontainers/features/node:1"].Version != manifest.LanguageVersion {
 			add(Error, path, "Node feature version does not match manifest languageVersion %q", manifest.LanguageVersion)
 		}
+	case config.PresetRails:
+		if document.Features["ghcr.io/rails/devcontainer/features/ruby:2"].Version != manifest.LanguageVersion {
+			add(Error, path, "Rails Ruby feature version does not match manifest languageVersion %q", manifest.LanguageVersion)
+		}
 	case config.PresetPython:
 		if document.Features["ghcr.io/devcontainers/features/python:1"].Version != manifest.LanguageVersion {
 			add(Error, path, "Python feature version does not match manifest languageVersion %q", manifest.LanguageVersion)
@@ -280,6 +284,9 @@ func validateDevcontainer(root, devDir string, manifest config.Manifest, documen
 		if !containsString(containerPath, required) {
 			add(Error, path, "containerEnv.PATH must include %s", required)
 		}
+	}
+	if manifest.Preset == config.PresetRails && !containsString(containerPath, "/home/vscode/.local/share/mise/shims") {
+		add(Error, path, "containerEnv.PATH must include /home/vscode/.local/share/mise/shims for Rails")
 	}
 	if checkHost {
 		home, err := os.UserHomeDir()
@@ -312,9 +319,6 @@ func validateDockerfile(root, devDir string, manifest config.Manifest, add func(
 	if !strings.Contains(text, "bash") {
 		add(Error, relative(root, path), "image must provide /bin/bash")
 	}
-	if manifest.Preset == config.PresetRails && !strings.Contains(text, "FROM ghcr.io/rails/devcontainer/images/ruby:"+manifest.LanguageVersion) {
-		add(Error, relative(root, path), "Rails image version does not match manifest languageVersion %q", manifest.LanguageVersion)
-	}
 }
 
 func validateProjectConventions(root string, manifest config.Manifest, add func(Severity, string, string, ...any)) {
@@ -325,7 +329,6 @@ func validateProjectConventions(root string, manifest config.Manifest, add func(
 	}
 	detail, found := detected.Details[manifest.Preset]
 	if !found {
-		add(Warning, ".", "no project signals found for configured preset %q", manifest.Preset)
 		return
 	}
 	if detail.LanguageVersion != "" && detail.LanguageVersion != manifest.LanguageVersion {

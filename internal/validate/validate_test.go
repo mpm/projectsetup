@@ -41,6 +41,22 @@ func TestCheckAcceptsGeneratedConfiguration(t *testing.T) {
 	}
 }
 
+func TestCheckAcceptsRailsConfigurationWithoutProjectSignals(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: config.PresetRails, AITools: []config.AITool{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := generate.Write(root, cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	diagnostics := validate.Check(root, validate.Options{})
+	if len(diagnostics) != 0 {
+		t.Fatalf("Check() diagnostics = %#v, want none", diagnostics)
+	}
+}
+
 func TestCheckAggregatesIndependentFailures(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", t.TempDir())

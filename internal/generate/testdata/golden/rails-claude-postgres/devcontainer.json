@@ -11,12 +11,16 @@
       "version": "lts"
     },
     "ghcr.io/rails/devcontainer/features/activestorage": {},
-    "ghcr.io/rails/devcontainer/features/postgres-client": {}
+    "ghcr.io/rails/devcontainer/features/postgres-client": {},
+    "ghcr.io/rails/devcontainer/features/ruby:2": {
+      "usePrecompiledRubies": true,
+      "version": "3.3.6"
+    }
   },
   "containerEnv": {
     "CLAUDE_CONFIG_DIR": "/home/vscode/.claude",
     "DB_HOST": "postgres",
-    "PATH": "/home/vscode/.local/bin:/home/vscode/.opencode/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "PATH": "/home/vscode/.local/bin:/home/vscode/.opencode/bin:/home/vscode/.local/share/mise/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
     "PGDATABASE": "rails-postgres",
     "PGHOST": "postgres",
     "PGPASSWORD": "projectsetup",

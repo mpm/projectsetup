@@ -52,7 +52,6 @@ var goldenCases = []goldenCase{
 		name: "rails-opencode",
 		input: config.Input{
 			ProjectName: "rails-app", Preset: config.PresetRails,
-			LanguageVersion: "3.3.6",
 		},
 	},
 	{

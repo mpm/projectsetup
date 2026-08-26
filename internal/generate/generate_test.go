@@ -50,10 +50,13 @@ func TestWriteGeneratesSupportedPresets(t *testing.T) {
 			}
 			dockerfile := readGenerated(t, root, "Dockerfile")
 			if tt.preset == config.PresetRails {
-				if !strings.Contains(string(dockerfile), "FROM ghcr.io/rails/devcontainer/images/ruby:") ||
+				if !strings.Contains(string(dockerfile), "FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04") ||
+					!strings.Contains(string(devcontainer), `"ghcr.io/rails/devcontainer/features/ruby:2"`) ||
+					!strings.Contains(string(devcontainer), `"version": "3.3"`) ||
+					!strings.Contains(string(devcontainer), "/home/vscode/.local/share/mise/shims") ||
 					!strings.Contains(string(devcontainer), "ghcr.io/rails/devcontainer/features/activestorage") ||
 					!strings.Contains(string(devcontainer), "ghcr.io/rails/devcontainer/features/postgres-client") {
-					t.Fatalf("Rails output lacks the official image or required features:\n%s\n%s", dockerfile, devcontainer)
+					t.Fatalf("Rails output lacks the official Ruby feature or required settings:\n%s\n%s", dockerfile, devcontainer)
 				}
 			}
 			postCreate := readGenerated(t, root, "scripts/post-create.sh")
