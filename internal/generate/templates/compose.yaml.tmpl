@@ -10,7 +10,7 @@ services:
     user: vscode
     volumes:
       - ..:{{.Config.Workspace.ContainerPath}}
-    depends_on:
+{{if eq .Config.Database "postgres"}}    depends_on:
       postgres:
         condition: service_healthy
 
@@ -31,3 +31,4 @@ services:
 
 volumes:
   postgres-data:
+{{end -}}

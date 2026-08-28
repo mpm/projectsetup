@@ -1,11 +1,8 @@
 {
   "name": "rails-app",
-  "build": {
-    "dockerfile": "Dockerfile",
-    "context": ".."
-  },
+  "dockerComposeFile": "compose.yaml",
+  "service": "app",
   "workspaceFolder": "/workspaces/rails-app",
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/rails-app,type=bind",
   "containerUser": "vscode",
   "remoteUser": "vscode",
   "features": {
@@ -28,9 +25,6 @@
     "source=${localEnv:HOME}/.opencode,target=/home/vscode/.opencode,type=bind",
     "source=${localEnv:HOME}/.cache/opencode,target=/home/vscode/.cache/opencode,type=bind"
   ],
-  "runArgs": [
-    "--name",
-    "rails-app-app"
-  ],
-  "postCreateCommand": ".devcontainer/scripts/post-create.sh"
+  "postCreateCommand": ".devcontainer/scripts/post-create.sh",
+  "shutdownAction": "stopCompose"
 }

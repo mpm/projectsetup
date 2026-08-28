@@ -66,8 +66,9 @@ func TestCheckRejectsMismatchedRuntimeNames(t *testing.T) {
 		replacement string
 		want        string
 	}{
-		{name: "direct container", file: "devcontainer.json", old: `"example-app"`, replacement: `"other-app"`, want: "runArgs must name the container"},
-		{name: "compose project", database: config.DatabasePostgres, file: "compose.yaml", old: "name: example", replacement: "name: other", want: `missing expected Compose configuration "name: example"`},
+		{name: "compose project", file: "compose.yaml", old: "name: example", replacement: "name: other", want: `missing expected Compose configuration "name: example"`},
+		{name: "compose service", database: config.DatabasePostgres, file: "devcontainer.json", old: `"service": "app"`, replacement: `"service": "other"`, want: "must use compose.yaml service app"},
+		{name: "unselected postgres", file: "compose.yaml", old: "services:\n", replacement: "services:\n  postgres:\n    image: postgres:17\n", want: "PostgreSQL service is configured but database is"},
 	}
 
 	for _, tt := range tests {
@@ -170,8 +171,12 @@ func TestCheckBuildRunsAfterStaticValidation(t *testing.T) {
 		t.Fatalf("Check() errors = %d, diagnostics = %#v", count, diagnostics)
 	}
 	want := fmt.Sprintf("devcontainer build --workspace-folder %s", root)
+	wantCompose := fmt.Sprintf("docker compose -f %s config", filepath.Join(root, ".devcontainer", "compose.yaml"))
 	if !contains(runner.commands, want) {
 		t.Fatalf("commands = %q, want %q", runner.commands, want)
+	}
+	if !contains(runner.commands, wantCompose) {
+		t.Fatalf("commands = %q, want %q", runner.commands, wantCompose)
 	}
 
 	if err := os.Remove(filepath.Join(root, ".devcontainer", "Dockerfile")); err != nil {

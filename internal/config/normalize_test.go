@@ -26,11 +26,11 @@ func TestNormalize(t *testing.T) {
 				PackageManager: PackageManagerNPM, LanguageVersion: "24",
 				Ports: []int{1024, 3000}, SystemPackages: []string{"curl", "libpq-dev"},
 				Workspace: Workspace{HostPath: "/tmp/My Project", ContainerPath: "/workspaces/my-project"},
-				Container: Container{User: "vscode", Home: "/home/vscode", Name: "my-project-app", ComposeProjectName: "my-project", ServiceName: "app"},
+				Container: Container{User: "vscode", Home: "/home/vscode", ComposeProjectName: "my-project", ServiceName: "app"},
 			},
 		},
 		{
-			name: "postgres enables compose",
+			name: "postgres configuration",
 			input: Input{Root: "/tmp/api", Preset: PresetPython, Database: DatabasePostgres,
 				AITools: []AITool{}, PackageManager: PackageManagerUV},
 			want: Config{
@@ -39,7 +39,7 @@ func TestNormalize(t *testing.T) {
 				PackageManager: PackageManagerUV, LanguageVersion: "3.13",
 				Ports: []int{}, SystemPackages: []string{},
 				Workspace: Workspace{HostPath: "/tmp/api", ContainerPath: "/workspaces/api"},
-				Container: Container{User: "vscode", Home: "/home/vscode", Name: "api-app", ComposeProjectName: "api", ServiceName: "app", UseCompose: true},
+				Container: Container{User: "vscode", Home: "/home/vscode", ComposeProjectName: "api", ServiceName: "app"},
 			},
 		},
 		{name: "rejects incompatible manager", input: Input{Root: "/tmp/api", Preset: PresetPython, PackageManager: PackageManagerNPM}, wantErr: true},

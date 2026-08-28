@@ -124,9 +124,9 @@ func TestGoldenComposeConfigurations(t *testing.T) {
 		t.Skipf("docker compose is not available: %v: %s", err, output)
 	}
 
-	for _, name := range []string{"node-claude-postgres", "rails-claude-postgres", "python-uv-claude-postgres"} {
-		t.Run(name, func(t *testing.T) {
-			compose := filepath.Join("testdata", "golden", name, "compose.yaml")
+	for _, tt := range goldenCases {
+		t.Run(tt.name, func(t *testing.T) {
+			compose := filepath.Join("testdata", "golden", tt.name, "compose.yaml")
 			command := exec.Command(docker, "compose", "-f", compose, "config")
 			if output, err := command.CombinedOutput(); err != nil {
 				t.Fatalf("docker compose config: %v\n%s", err, output)

@@ -24,7 +24,7 @@ Read `HANDOFF.md` before making architectural or implementation decisions. It de
 - Ensure the final effective image user is `vscode`.
 - Put environment needed by `dworm exec` in `containerEnv` or the image, not only in `remoteEnv`.
 - Do not mount host `.ssh` directories or `.gitconfig`; `dworm` forwards those credentials.
-- Use a direct Dockerfile configuration without sidecars and Compose when PostgreSQL is selected.
+- Use Docker Compose for every generated Dev Container; add the PostgreSQL sidecar only when selected.
 - Do not automatically start application servers.
 - Keep AI installation behavior shared across all presets rather than copying scripts.
 

@@ -48,15 +48,10 @@ func (commandRunner) Run(name string, args ...string) ([]byte, error) {
 }
 
 type devcontainerDocument struct {
-	Name  string `json:"name"`
-	Build struct {
-		Dockerfile string `json:"dockerfile"`
-		Context    string `json:"context"`
-	} `json:"build"`
+	Name              string            `json:"name"`
 	DockerComposeFile string            `json:"dockerComposeFile"`
 	Service           string            `json:"service"`
 	WorkspaceFolder   string            `json:"workspaceFolder"`
-	WorkspaceMount    string            `json:"workspaceMount"`
 	ContainerUser     string            `json:"containerUser"`
 	RemoteUser        string            `json:"remoteUser"`
 	ContainerEnv      map[string]string `json:"containerEnv"`
@@ -65,7 +60,6 @@ type devcontainerDocument struct {
 	} `json:"features"`
 	Mounts            []string `json:"mounts"`
 	ForwardPorts      []int    `json:"forwardPorts"`
-	RunArgs           []string `json:"runArgs"`
 	PostCreateCommand string   `json:"postCreateCommand"`
 }
 
@@ -103,10 +97,7 @@ func Check(root string, options Options) []Diagnostic {
 		}
 	}
 
-	required := []string{"Dockerfile", "devcontainer.json", "scripts/install-ai-tools.sh", "scripts/post-create.sh"}
-	if manifestValid && manifest.Database == config.DatabasePostgres {
-		required = append(required, "compose.yaml")
-	}
+	required := []string{"Dockerfile", "compose.yaml", "devcontainer.json", "scripts/install-ai-tools.sh", "scripts/post-create.sh"}
 	for _, name := range required {
 		path := filepath.Join(devDir, filepath.FromSlash(name))
 		info, err := os.Stat(path)
@@ -139,13 +130,11 @@ func Check(root string, options Options) []Diagnostic {
 	if manifestValid {
 		validateDockerfile(root, devDir, manifest, add)
 		validateProjectConventions(root, manifest, add)
-		if manifest.Database == config.DatabasePostgres {
-			validateCompose(root, devDir, manifest, document, add)
-		}
+		validateCompose(root, devDir, manifest, document, add)
 	}
 	if options.External {
 		build := options.Build && ErrorCount(diagnostics) == 0
-		validateExternal(root, devDir, manifestValid && manifest.Database == config.DatabasePostgres, build, options, add)
+		validateExternal(root, devDir, manifestValid, build, options, add)
 	}
 
 	sort.SliceStable(diagnostics, func(i, j int) bool {
@@ -223,8 +212,6 @@ func validateManifest(root string, manifest config.Manifest, add func(Severity, 
 func validateDevcontainer(root, devDir string, manifest config.Manifest, document devcontainerDocument, checkHost bool, add func(Severity, string, string, ...any)) {
 	path := relative(root, filepath.Join(devDir, "devcontainer.json"))
 	wantWorkspace := "/workspaces/" + manifest.ProjectName
-	wantRuntimeProject := config.RuntimeProjectName(manifest.ProjectName)
-	wantContainerName := wantRuntimeProject + "-app"
 	if document.Name != manifest.ProjectName {
 		add(Error, path, "name is %q; expected project name %q", document.Name, manifest.ProjectName)
 	}
@@ -234,25 +221,14 @@ func validateDevcontainer(root, devDir string, manifest config.Manifest, documen
 	if document.ContainerUser != "vscode" || document.RemoteUser != "vscode" {
 		add(Error, path, "containerUser and remoteUser must both be %q", "vscode")
 	}
+	if document.DockerComposeFile != "compose.yaml" || document.Service != "app" {
+		add(Error, path, "configuration must use compose.yaml service app")
+	}
 	if manifest.Database == config.DatabasePostgres {
-		if document.DockerComposeFile != "compose.yaml" || document.Service != "app" {
-			add(Error, path, "PostgreSQL setup must use compose.yaml service app")
-		}
 		for key, value := range map[string]string{"DB_HOST": "postgres", "PGHOST": "postgres", "PGUSER": "projectsetup", "PGPASSWORD": "projectsetup", "PGDATABASE": manifest.ProjectName} {
 			if document.ContainerEnv[key] != value {
 				add(Error, path, "containerEnv.%s is %q; expected %q", key, document.ContainerEnv[key], value)
 			}
-		}
-	} else {
-		wantMount := "source=${localWorkspaceFolder},target=" + wantWorkspace + ",type=bind"
-		if document.WorkspaceMount != wantMount {
-			add(Error, path, "workspaceMount does not target workspaceFolder %q", wantWorkspace)
-		}
-		if document.Build.Dockerfile != "Dockerfile" || document.Build.Context != ".." {
-			add(Error, path, "direct build must use Dockerfile with context ..")
-		}
-		if len(document.RunArgs) != 2 || document.RunArgs[0] != "--name" || document.RunArgs[1] != wantContainerName {
-			add(Error, path, "direct build runArgs must name the container %q", wantContainerName)
 		}
 	}
 	if document.PostCreateCommand != ".devcontainer/scripts/post-create.sh" {
@@ -372,7 +348,12 @@ func validateCompose(root, devDir string, manifest config.Manifest, document dev
 	if !containsString(strings.Split(text, "\n"), wantName) {
 		add(Error, relative(root, path), "missing expected Compose configuration %q", wantName)
 	}
-	checks := []string{"services:", "  " + document.Service + ":", "  postgres:", "- ..:/workspaces/" + manifest.ProjectName, "POSTGRES_USER: projectsetup", "POSTGRES_PASSWORD: projectsetup", "POSTGRES_DB: '" + manifest.ProjectName + "'", "condition: service_healthy", "postgres-data:/var/lib/postgresql/data"}
+	checks := []string{"services:", "  " + document.Service + ":", "context: ..", "dockerfile: .devcontainer/Dockerfile", "- ..:/workspaces/" + manifest.ProjectName}
+	if manifest.Database == config.DatabasePostgres {
+		checks = append(checks, "  postgres:", "POSTGRES_USER: projectsetup", "POSTGRES_PASSWORD: projectsetup", "POSTGRES_DB: '"+manifest.ProjectName+"'", "condition: service_healthy", "postgres-data:/var/lib/postgresql/data")
+	} else if strings.Contains(text, "  postgres:") {
+		add(Error, relative(root, path), "PostgreSQL service is configured but database is %q", manifest.Database)
+	}
 	for _, expected := range checks {
 		if !strings.Contains(text, expected) {
 			add(Error, relative(root, path), "missing expected Compose configuration %q", expected)

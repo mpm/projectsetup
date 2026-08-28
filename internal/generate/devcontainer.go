@@ -1,7 +1,6 @@
 package generate
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/mpm/projectsetup/internal/config"
@@ -9,54 +8,42 @@ import (
 
 type devcontainerConfig struct {
 	Name              string                    `json:"name"`
-	Build             *devcontainerBuild        `json:"build,omitempty"`
 	DockerComposeFile string                    `json:"dockerComposeFile,omitempty"`
 	Service           string                    `json:"service,omitempty"`
 	WorkspaceFolder   string                    `json:"workspaceFolder"`
-	WorkspaceMount    string                    `json:"workspaceMount,omitempty"`
 	ContainerUser     string                    `json:"containerUser"`
 	RemoteUser        string                    `json:"remoteUser"`
 	Features          map[string]map[string]any `json:"features"`
 	ContainerEnv      map[string]string         `json:"containerEnv"`
 	Mounts            []string                  `json:"mounts,omitempty"`
 	ForwardPorts      []int                     `json:"forwardPorts,omitempty"`
-	RunArgs           []string                  `json:"runArgs,omitempty"`
 	PostCreateCommand string                    `json:"postCreateCommand"`
 	ShutdownAction    string                    `json:"shutdownAction,omitempty"`
 }
 
-type devcontainerBuild struct {
-	Dockerfile string `json:"dockerfile"`
-	Context    string `json:"context"`
-}
-
 func renderDevcontainer(cfg config.Config) ([]byte, error) {
 	document := devcontainerConfig{
-		Name:            cfg.ProjectName,
-		WorkspaceFolder: cfg.Workspace.ContainerPath,
-		ContainerUser:   cfg.Container.User,
-		RemoteUser:      cfg.Container.User,
-		Features:        features(cfg),
+		Name:              cfg.ProjectName,
+		DockerComposeFile: "compose.yaml",
+		Service:           cfg.Container.ServiceName,
+		WorkspaceFolder:   cfg.Workspace.ContainerPath,
+		ContainerUser:     cfg.Container.User,
+		RemoteUser:        cfg.Container.User,
+		Features:          features(cfg),
 		ContainerEnv: map[string]string{
 			"PATH": containerPath(cfg),
 		},
 		Mounts:            aiMounts(cfg),
 		ForwardPorts:      append([]int(nil), cfg.Ports...),
 		PostCreateCommand: ".devcontainer/scripts/post-create.sh",
+		ShutdownAction:    "stopCompose",
 	}
-	if cfg.Container.UseCompose {
-		document.DockerComposeFile = "compose.yaml"
-		document.Service = cfg.Container.ServiceName
-		document.ShutdownAction = "stopCompose"
+	if cfg.Database == config.DatabasePostgres {
 		document.ContainerEnv["DB_HOST"] = "postgres"
 		document.ContainerEnv["PGHOST"] = "postgres"
 		document.ContainerEnv["PGUSER"] = "projectsetup"
 		document.ContainerEnv["PGPASSWORD"] = "projectsetup"
 		document.ContainerEnv["PGDATABASE"] = cfg.ProjectName
-	} else {
-		document.Build = &devcontainerBuild{Dockerfile: "Dockerfile", Context: ".."}
-		document.WorkspaceMount = fmt.Sprintf("source=${localWorkspaceFolder},target=%s,type=bind", cfg.Workspace.ContainerPath)
-		document.RunArgs = []string{"--name", cfg.Container.Name}
 	}
 	for _, tool := range cfg.AITools {
 		if tool == config.AIToolClaude {

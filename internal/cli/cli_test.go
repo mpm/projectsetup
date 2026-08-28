@@ -8,7 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mpm/projectsetup/internal/config"
 	"github.com/mpm/projectsetup/internal/doctor"
+	"github.com/mpm/projectsetup/internal/generate"
 )
 
 func TestRunHelp(t *testing.T) {
@@ -49,6 +51,86 @@ func TestRunInitRejectsAmbiguousDetection(t *testing.T) {
 	err := runInit(root, []string{"--non-interactive"}, &bytes.Buffer{}, &bytes.Buffer{}, &bytes.Buffer{})
 	if err == nil || !strings.Contains(err.Error(), "multiple project presets detected") {
 		t.Fatalf("runInit() error = %v", err)
+	}
+}
+
+func TestRunUpgradeConvertsLegacyGeneratedConfigurationToCompose(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	cfg, err := config.Normalize(config.Input{
+		Root: root, ProjectName: "legacy", Preset: config.PresetNode,
+		PackageManager: config.PackageManagerNPM, Ports: []int{3000}, AITools: []config.AITool{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := generate.Write(root, cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	devDir := filepath.Join(root, ".devcontainer")
+	if err := os.Remove(filepath.Join(devDir, "compose.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	legacy := `{"name":"legacy","build":{"dockerfile":"Dockerfile","context":".."},"workspaceFolder":"/workspaces/legacy","containerUser":"vscode","remoteUser":"vscode"}`
+	if err := os.WriteFile(filepath.Join(devDir, "devcontainer.json"), []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	if err := runUpgrade(root, nil, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runUpgrade() error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Upgraded .devcontainer") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	devcontainer, err := os.ReadFile(filepath.Join(devDir, "devcontainer.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(devcontainer), `"dockerComposeFile": "compose.yaml"`) || strings.Contains(string(devcontainer), `"build"`) {
+		t.Fatalf("upgraded devcontainer.json does not use Compose:\n%s", devcontainer)
+	}
+	if _, err := os.Stat(filepath.Join(devDir, "compose.yaml")); err != nil {
+		t.Fatalf("upgraded compose.yaml: %v", err)
+	}
+	manifest, err := os.ReadFile(filepath.Join(devDir, "projectsetup.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(manifest), `"ports": [`) || !strings.Contains(string(manifest), "3000") {
+		t.Fatalf("upgrade did not preserve manifest options:\n%s", manifest)
+	}
+}
+
+func TestRunUpgradeRejectsHandWrittenConfiguration(t *testing.T) {
+	root := t.TempDir()
+	devDir := filepath.Join(root, ".devcontainer")
+	if err := os.Mkdir(devDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"schemaVersion":1,"generatedBy":"someone-else"}`
+	if err := os.WriteFile(filepath.Join(devDir, "projectsetup.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := runUpgrade(root, nil, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "not recognized") {
+		t.Fatalf("runUpgrade() error = %v, want ownership refusal", err)
+	}
+}
+
+func TestRunUpgradeRejectsMalformedGeneratedManifest(t *testing.T) {
+	root := t.TempDir()
+	devDir := filepath.Join(root, ".devcontainer")
+	if err := os.Mkdir(devDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"schemaVersion":1,"projectName":"legacy","preset":"node","database":"none","packageManager":"npm","languageVersion":"24","generatedBy":"projectsetup"}`
+	if err := os.WriteFile(filepath.Join(devDir, "projectsetup.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := runUpgrade(root, nil, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "not normalized") {
+		t.Fatalf("runUpgrade() error = %v, want malformed-manifest refusal", err)
 	}
 }
 

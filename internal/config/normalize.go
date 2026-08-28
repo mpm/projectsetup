@@ -115,10 +115,8 @@ func Normalize(input Input) (Config, error) {
 		Container: Container{
 			User:               "vscode",
 			Home:               "/home/vscode",
-			Name:               composeProjectName + "-" + serviceName,
 			ComposeProjectName: composeProjectName,
 			ServiceName:        serviceName,
-			UseCompose:         database == DatabasePostgres,
 		},
 	}, nil
 }

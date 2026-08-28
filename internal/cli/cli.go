@@ -10,11 +10,13 @@ import (
 
 const usage = `Usage:
   projectsetup init [flags]
+  projectsetup upgrade
   projectsetup check [--build]
   projectsetup doctor
 
 Commands:
   init    Generate a Dev Container configuration
+  upgrade Regenerate an existing projectsetup configuration
   check   Validate a generated configuration
   doctor  Diagnose host dependencies and dworm compatibility
 `
@@ -41,6 +43,12 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			return fmt.Errorf("determine current directory: %w", err)
 		}
 		return runCheck(root, args[1:], stdout, stderr)
+	case "upgrade":
+		root, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("determine current directory: %w", err)
+		}
+		return runUpgrade(root, args[1:], stdout, stderr)
 	case "doctor":
 		root, err := os.Getwd()
 		if err != nil {

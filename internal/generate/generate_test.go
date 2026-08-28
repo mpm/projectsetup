@@ -76,11 +76,13 @@ func TestWriteGeneratesSupportedPresets(t *testing.T) {
 					t.Errorf("bash -n %s: %v\n%s", script, err, output)
 				}
 			}
+			compose := readGenerated(t, root, "compose.yaml")
 			if tt.database == config.DatabasePostgres {
-				compose := readGenerated(t, root, "compose.yaml")
 				if !strings.Contains(string(compose), "condition: service_healthy") || !strings.Contains(string(compose), "postgres:17-bookworm") {
 					t.Fatalf("compose.yaml lacks PostgreSQL health dependency:\n%s", compose)
 				}
+			} else if strings.Contains(string(compose), "postgres:") || strings.Contains(string(compose), "postgres-data") {
+				t.Fatalf("compose.yaml contains an unselected PostgreSQL service:\n%s", compose)
 			}
 			for _, relative := range hostMountDirectories(cfg.AITools) {
 				if info, err := os.Stat(filepath.Join(home, relative)); err != nil || !info.IsDir() {

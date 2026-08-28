@@ -118,19 +118,17 @@ func render(cfg config.Config) ([]file, error) {
 		return nil, fmt.Errorf("read embedded AI installer: %w", err)
 	}
 
+	compose, err := executeTemplate("compose.yaml.tmpl", templateData(cfg))
+	if err != nil {
+		return nil, err
+	}
 	files := []file{
 		{name: "Dockerfile", data: dockerfile, mode: 0o644},
+		{name: "compose.yaml", data: compose, mode: 0o644},
 		{name: "devcontainer.json", data: devcontainer, mode: 0o644},
 		{name: "projectsetup.json", data: manifest, mode: 0o644},
 		{name: "scripts/install-ai-tools.sh", data: aiInstaller, mode: 0o755},
 		{name: "scripts/post-create.sh", data: postCreate, mode: 0o755},
-	}
-	if cfg.Container.UseCompose {
-		compose, err := executeTemplate("compose.yaml.tmpl", templateData(cfg))
-		if err != nil {
-			return nil, err
-		}
-		files = append(files, file{name: "compose.yaml", data: compose, mode: 0o644})
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].name < files[j].name })
 	return files, nil
