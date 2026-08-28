@@ -119,6 +119,32 @@ func TestRunUpgradeConvertsLegacyGeneratedConfigurationToCompose(t *testing.T) {
 	}
 }
 
+func TestRunUpgradeAcceptsDetectedPatchVersionForConfiguredReleaseLine(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	cfg, err := config.Normalize(config.Input{
+		Root: root, ProjectName: "example", Preset: config.PresetRails, AITools: []config.AITool{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := generate.Write(root, cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	for name, contents := range map[string]string{
+		"Gemfile":       `gem "rails"`,
+		".ruby-version": "3.3.12\n",
+	} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(contents), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := runUpgrade(root, nil, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runUpgrade() error = %v", err)
+	}
+}
+
 func TestRunUpgradeRejectsHandWrittenConfiguration(t *testing.T) {
 	root := t.TempDir()
 	devDir := filepath.Join(root, ".devcontainer")

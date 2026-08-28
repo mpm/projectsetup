@@ -325,7 +325,7 @@ func validateProjectConventions(root string, manifest config.Manifest, add func(
 	if !found {
 		return
 	}
-	if detail.LanguageVersion != "" && detail.LanguageVersion != manifest.LanguageVersion {
+	if detail.LanguageVersion != "" && !languageVersionsAgree(manifest.LanguageVersion, detail.LanguageVersion) {
 		add(Error, ".devcontainer/projectsetup.json", "languageVersion %q disagrees with detected project version %q", manifest.LanguageVersion, detail.LanguageVersion)
 	}
 	if len(detail.PackageManagerCandidates) > 1 {
@@ -343,6 +343,12 @@ func validateProjectConventions(root string, manifest config.Manifest, add func(
 	for _, warning := range detected.Warnings {
 		add(Warning, ".", "%s", warning)
 	}
+}
+
+func languageVersionsAgree(configured, detected string) bool {
+	return configured == detected ||
+		strings.HasPrefix(configured, detected+".") ||
+		strings.HasPrefix(detected, configured+".")
 }
 
 func validateCompose(root, devDir string, manifest config.Manifest, document devcontainerDocument, add func(Severity, string, string, ...any)) {
