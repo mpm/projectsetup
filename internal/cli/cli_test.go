@@ -23,6 +23,16 @@ func TestRunHelp(t *testing.T) {
 	}
 }
 
+func TestRunVersion(t *testing.T) {
+	var stdout bytes.Buffer
+	if err := Run([]string{"--version"}, &bytes.Buffer{}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !strings.HasPrefix(stdout.String(), "projectsetup ") || !strings.Contains(stdout.String(), "commit:") {
+		t.Fatalf("version output = %q", stdout.String())
+	}
+}
+
 func TestRunInitNonInteractive(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", t.TempDir())

@@ -53,6 +53,14 @@ mkdir -p bin
 go build -o bin/projectsetup ./cmd/projectsetup
 ```
 
+Show the running version and its build metadata with:
+
+```bash
+projectsetup --version
+```
+
+Release builds check GitHub for a newer release in the background while a command runs. If the check completes and an update is available, `projectsetup` prints the release URL after the command. Development builds do not contact GitHub.
+
 ## Initialize a project
 
 Run commands from the project root. Interactive mode detects project files, asks only for unresolved choices, shows the normalized configuration, and requests confirmation before writing:

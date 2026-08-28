@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/mpm/projectsetup/internal/doctor"
+	"github.com/mpm/projectsetup/internal/version"
 )
 
 const usage = `Usage:
@@ -13,12 +14,14 @@ const usage = `Usage:
   projectsetup upgrade
   projectsetup check [--build]
   projectsetup doctor
+  projectsetup version
 
 Commands:
   init    Generate a Dev Container configuration
   upgrade Regenerate an existing projectsetup configuration
   check   Validate a generated configuration
   doctor  Diagnose host dependencies and dworm compatibility
+  version Show version and build information
 `
 
 func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
@@ -30,6 +33,9 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	switch args[0] {
 	case "help", "-h", "--help":
 		_, err := io.WriteString(stdout, usage)
+		return err
+	case "version", "-v", "--version":
+		_, err := fmt.Fprintln(stdout, version.Info())
 		return err
 	case "init":
 		root, err := os.Getwd()
