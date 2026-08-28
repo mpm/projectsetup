@@ -5,10 +5,8 @@ FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 USER root
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        bash ca-certificates curl git gnupg sudo{{if and (eq .Config.Database "postgres") (ne .Config.Preset "rails")}} \
-        libpq-dev postgresql-client{{end}}{{if eq .Config.Database "sqlite"}} \
-        libsqlite3-dev sqlite3{{end}}{{range .Config.SystemPackages}} \
-        {{.}}{{end}} \
+        bash ca-certificates curl git gnupg sudo \
+        libsqlite3-dev sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /home/vscode/.local/bin /home/vscode/.local/state \

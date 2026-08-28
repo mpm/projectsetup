@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "projectName": "rails-sqlite",
+  "preset": "rails",
+  "database": "sqlite",
+  "aiTools": [
+    "opencode"
+  ],
+  "languageVersion": "3.3",
+  "ports": [],
+  "systemPackages": [],
+  "generatedBy": "projectsetup"
+}

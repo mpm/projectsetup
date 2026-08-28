@@ -46,7 +46,7 @@ func runInit(root string, args []string, stdin io.Reader, stdout, stderr io.Writ
 	flags.SetOutput(stderr)
 	presetValue := flags.String("preset", "", "node, rails, or python")
 	name := flags.String("name", "", "project name")
-	databaseValue := flags.String("database", "", "none or postgres")
+	databaseValue := flags.String("database", "", "none, postgres, or sqlite")
 	aiValue := flags.String("ai", "", "opencode, opencode,claude, or none")
 	nodeVersion := flags.String("node-version", "", "Node version")
 	rubyVersion := flags.String("ruby-version", "", "Ruby version")
@@ -257,7 +257,7 @@ func chooseDatabase(value string, wasProvided bool, detail detect.PresetResult, 
 	if detail.SuggestedDatabase == config.DatabasePostgres {
 		defaultValue = string(config.DatabasePostgres)
 	}
-	selected, err := prompt.choice("Database", []string{"none", "postgres"}, defaultValue)
+	selected, err := prompt.choice("Database", []string{"none", "postgres", "sqlite"}, defaultValue)
 	if err != nil {
 		return "", err
 	}

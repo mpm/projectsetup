@@ -57,6 +57,29 @@ func TestCheckAcceptsRailsConfigurationWithoutProjectSignals(t *testing.T) {
 	}
 }
 
+func TestCheckRequiresSQLitePackages(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: config.PresetRails, Database: config.DatabaseSQLite, AITools: []config.AITool{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := generate.Write(root, cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, ".devcontainer", "Dockerfile")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	modified := strings.Replace(string(data), "libsqlite3-dev sqlite3", "sqlite3", 1)
+	if err := os.WriteFile(path, []byte(modified), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	diagnostics := validate.Check(root, validate.Options{})
+	assertDiagnostic(t, diagnostics, validate.Error, `SQLite database requires apt package "libsqlite3-dev"`)
+}
+
 func TestCheckRejectsMismatchedRuntimeNames(t *testing.T) {
 	tests := []struct {
 		name        string

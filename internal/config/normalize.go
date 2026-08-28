@@ -47,7 +47,7 @@ func Normalize(input Input) (Config, error) {
 		database = DatabaseNone
 	}
 	if !database.Valid() {
-		return Config{}, fmt.Errorf("database must be none or postgres")
+		return Config{}, fmt.Errorf("database must be none, postgres, or sqlite")
 	}
 
 	tools, err := normalizeAITools(input.AITools)

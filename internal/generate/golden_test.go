@@ -55,6 +55,13 @@ var goldenCases = []goldenCase{
 		},
 	},
 	{
+		name: "rails-sqlite",
+		input: config.Input{
+			ProjectName: "rails-sqlite", Preset: config.PresetRails,
+			Database: config.DatabaseSQLite,
+		},
+	},
+	{
 		name: "python-pip",
 		input: config.Input{
 			ProjectName: "python-pip", Preset: config.PresetPython,
@@ -150,7 +157,7 @@ func TestGoldenDevcontainerConfigurations(t *testing.T) {
 		t.Skipf("Docker daemon is unavailable: %v: %s", err, output)
 	}
 
-	for _, name := range []string{"node-opencode", "rails-claude-postgres", "python-uv-claude-postgres"} {
+	for _, name := range []string{"node-opencode", "rails-claude-postgres", "rails-sqlite", "python-uv-claude-postgres"} {
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()

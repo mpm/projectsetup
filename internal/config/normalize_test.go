@@ -42,6 +42,17 @@ func TestNormalize(t *testing.T) {
 				Container: Container{User: "vscode", Home: "/home/vscode", ComposeProjectName: "api", ServiceName: "app"},
 			},
 		},
+		{
+			name:  "sqlite configuration",
+			input: Input{Root: "/tmp/app", Preset: PresetRails, Database: DatabaseSQLite, AITools: []AITool{}},
+			want: Config{
+				SchemaVersion: 1, ProjectName: "app", Preset: PresetRails,
+				Database: DatabaseSQLite, AITools: []AITool{},
+				LanguageVersion: "3.3", Ports: []int{}, SystemPackages: []string{},
+				Workspace: Workspace{HostPath: "/tmp/app", ContainerPath: "/workspaces/app"},
+				Container: Container{User: "vscode", Home: "/home/vscode", ComposeProjectName: "app", ServiceName: "app"},
+			},
+		},
 		{name: "rejects incompatible manager", input: Input{Root: "/tmp/api", Preset: PresetPython, PackageManager: PackageManagerNPM}, wantErr: true},
 		{name: "rejects invalid port", input: Input{Root: "/tmp/api", Preset: PresetPython, Ports: []int{70000}}, wantErr: true},
 		{name: "rejects unsafe system package", input: Input{Root: "/tmp/api", Preset: PresetPython, SystemPackages: []string{"curl; false"}}, wantErr: true},

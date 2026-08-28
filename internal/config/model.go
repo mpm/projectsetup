@@ -32,18 +32,19 @@ type Database string
 const (
 	DatabaseNone     Database = "none"
 	DatabasePostgres Database = "postgres"
+	DatabaseSQLite   Database = "sqlite"
 )
 
 func ParseDatabase(value string) (Database, error) {
 	database := Database(value)
 	if !database.Valid() {
-		return "", fmt.Errorf("unsupported database %q (expected none or postgres)", value)
+		return "", fmt.Errorf("unsupported database %q (expected none, postgres, or sqlite)", value)
 	}
 	return database, nil
 }
 
 func (d Database) Valid() bool {
-	return d == DatabaseNone || d == DatabasePostgres
+	return d == DatabaseNone || d == DatabasePostgres || d == DatabaseSQLite
 }
 
 type AITool string

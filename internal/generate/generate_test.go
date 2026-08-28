@@ -21,6 +21,7 @@ func TestWriteGeneratesSupportedPresets(t *testing.T) {
 	}{
 		{name: "node", preset: config.PresetNode, manager: config.PackageManagerPNPM, wantText: "pnpm install --frozen-lockfile"},
 		{name: "rails postgres", preset: config.PresetRails, database: config.DatabasePostgres, wantText: "bin/setup --skip-server"},
+		{name: "rails sqlite", preset: config.PresetRails, database: config.DatabaseSQLite, wantText: "bin/setup --skip-server"},
 		{name: "python", preset: config.PresetPython, manager: config.PackageManagerUV, wantText: "uv sync --frozen"},
 	}
 
@@ -54,9 +55,11 @@ func TestWriteGeneratesSupportedPresets(t *testing.T) {
 					!strings.Contains(string(devcontainer), `"ghcr.io/rails/devcontainer/features/ruby:2"`) ||
 					!strings.Contains(string(devcontainer), `"version": "3.3"`) ||
 					!strings.Contains(string(devcontainer), "/home/vscode/.local/share/mise/shims") ||
-					!strings.Contains(string(devcontainer), "ghcr.io/rails/devcontainer/features/activestorage") ||
-					!strings.Contains(string(devcontainer), "ghcr.io/rails/devcontainer/features/postgres-client") {
+					!strings.Contains(string(devcontainer), "ghcr.io/rails/devcontainer/features/activestorage") {
 					t.Fatalf("Rails output lacks the official Ruby feature or required settings:\n%s\n%s", dockerfile, devcontainer)
+				}
+				if tt.database == config.DatabasePostgres && !strings.Contains(string(devcontainer), "ghcr.io/rails/devcontainer/features/postgres-client") {
+					t.Fatalf("Rails PostgreSQL output lacks the PostgreSQL client feature:\n%s", devcontainer)
 				}
 			}
 			postCreate := readGenerated(t, root, "scripts/post-create.sh")
@@ -83,6 +86,14 @@ func TestWriteGeneratesSupportedPresets(t *testing.T) {
 				}
 			} else if strings.Contains(string(compose), "postgres:") || strings.Contains(string(compose), "postgres-data") {
 				t.Fatalf("compose.yaml contains an unselected PostgreSQL service:\n%s", compose)
+			}
+			if tt.database == config.DatabaseSQLite {
+				if !strings.Contains(string(dockerfile), "libsqlite3-dev sqlite3") {
+					t.Fatalf("Dockerfile lacks SQLite packages:\n%s", dockerfile)
+				}
+				if strings.Contains(string(devcontainer), `"DB_HOST"`) || strings.Contains(string(compose), "sqlite:") {
+					t.Fatalf("SQLite output contains sidecar configuration:\n%s\n%s", devcontainer, compose)
+				}
 			}
 			for _, relative := range hostMountDirectories(cfg.AITools) {
 				if info, err := os.Stat(filepath.Join(home, relative)); err != nil || !info.IsDir() {

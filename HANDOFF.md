@@ -19,7 +19,7 @@ The first version supports:
 - Node projects
 - Ruby on Rails projects
 - Python projects
-- Optional PostgreSQL sidecar
+- Optional SQLite in the primary container or PostgreSQL sidecar
 - OpenCode, enabled by default
 - Optional Claude Code
 - GitHub CLI
@@ -36,7 +36,7 @@ Explicitly out of scope for the first version:
 - Arbitrary YAML or JSON fragments
 - Automatic migration of hand-written Dev Containers
 - Automatic or schema-changing migrations of previously generated configurations; an explicit same-schema `upgrade` command is supported
-- Databases other than PostgreSQL
+- Databases other than SQLite and PostgreSQL
 - Alpine or other musl-based images
 - Windows containers
 - Full application generators such as `rails new`
@@ -79,7 +79,7 @@ Initial flags:
 ```text
 --preset node|rails|python
 --name NAME
---database none|postgres
+--database none|postgres|sqlite
 --ai opencode|opencode,claude|none
 --node-version VERSION
 --ruby-version VERSION
@@ -322,7 +322,7 @@ All setups:
     └── post-create.sh
 ```
 
-Use Compose for every generated setup. A project without a database has only the primary `app` service; selecting PostgreSQL adds the `postgres` service and its data volume. The project-scoped user-defined network is intentional so Docker's embedded DNS behavior is consistent across presets.
+Use Compose for every generated setup. A project without a database or with SQLite has only the primary `app` service; selecting PostgreSQL adds the `postgres` service and its data volume. SQLite is installed in the app image. The project-scoped user-defined network is intentional so Docker's embedded DNS behavior is consistent across presets.
 
 ## Presets
 
@@ -413,6 +413,10 @@ Keep service name, hostname, credentials, and generated environment consistent f
 Do not forward the PostgreSQL sidecar port merely for `dworm`: `dworm` scans only the primary service. Add a host Compose port only when explicitly desired because publishing a database port can conflict with local services. `forwardPorts` does not expose sidecar ports through `dworm`.
 
 Application-specific database names and framework configuration are not rewritten in v1. `check` should warn when a detected application configuration appears incompatible.
+
+## SQLite Capability
+
+When selected, install `sqlite3` and `libsqlite3-dev` in the primary application image. Do not add a SQLite Compose service, dependency, volume, or database environment variables. Application-specific database paths and framework configuration are not rewritten.
 
 ## AI Tool Persistence
 

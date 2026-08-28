@@ -40,7 +40,7 @@ func TestRunInitNonInteractive(t *testing.T) {
 		t.Fatal(err)
 	}
 	var stdout bytes.Buffer
-	if err := runInit(root, []string{"--non-interactive", "--ai", "none", "--port", "3000"}, &bytes.Buffer{}, &stdout, &bytes.Buffer{}); err != nil {
+	if err := runInit(root, []string{"--non-interactive", "--database", "sqlite", "--ai", "none", "--port", "3000"}, &bytes.Buffer{}, &stdout, &bytes.Buffer{}); err != nil {
 		t.Fatalf("runInit() error = %v", err)
 	}
 	if !strings.Contains(stdout.String(), "Generated .devcontainer") {
@@ -48,6 +48,13 @@ func TestRunInitNonInteractive(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, ".devcontainer", "devcontainer.json")); err != nil {
 		t.Fatalf("generated devcontainer.json: %v", err)
+	}
+	dockerfile, err := os.ReadFile(filepath.Join(root, ".devcontainer", "Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(dockerfile), "libsqlite3-dev sqlite3") {
+		t.Fatalf("generated Dockerfile lacks SQLite packages:\n%s", dockerfile)
 	}
 }
 

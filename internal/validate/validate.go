@@ -305,6 +305,14 @@ func validateDockerfile(root, devDir string, manifest config.Manifest, add func(
 	if !strings.Contains(text, "bash") {
 		add(Error, relative(root, path), "image must provide /bin/bash")
 	}
+	if manifest.Database == config.DatabaseSQLite {
+		packages := strings.Fields(text)
+		for _, pkg := range []string{"libsqlite3-dev", "sqlite3"} {
+			if !containsString(packages, pkg) {
+				add(Error, relative(root, path), "SQLite database requires apt package %q", pkg)
+			}
+		}
+	}
 }
 
 func validateProjectConventions(root string, manifest config.Manifest, add func(Severity, string, string, ...any)) {
