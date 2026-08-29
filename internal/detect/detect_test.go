@@ -30,6 +30,16 @@ func TestDetect(t *testing.T) {
 			wantManagers: map[config.Preset][]config.PackageManager{config.PresetNode: {config.PackageManagerNPM, config.PackageManagerPNPM}},
 		},
 		{
+			name: "ruby gem",
+			files: map[string]string{
+				"example.gemspec": "Gem::Specification.new do |spec|\nend\n",
+				"Gemfile":         `source "https://rubygems.org"`,
+				".ruby-version":   "ruby-3.2.6\n",
+			},
+			wantPresets: []config.Preset{config.PresetRuby},
+			wantVersion: map[config.Preset]string{config.PresetRuby: "3.2.6"},
+		},
+		{
 			name: "rails with postgres",
 			files: map[string]string{
 				"Gemfile":             `source "https://rubygems.org"` + "\n" + `gem "rails"`,
@@ -85,15 +95,33 @@ func TestDetect(t *testing.T) {
 	}
 }
 
-func TestDetectRailsRequiresRailsSpecificSignal(t *testing.T) {
+func TestDetectGenericRubyWithoutRailsSignal(t *testing.T) {
 	root := t.TempDir()
 	writeFiles(t, root, map[string]string{"Gemfile": `gem "sinatra"`, ".ruby-version": "3.3"})
 	got, err := Detect(root)
 	if err != nil {
 		t.Fatalf("Detect() error = %v", err)
 	}
-	if len(got.Presets) != 0 {
-		t.Fatalf("presets = %v, want none", got.Presets)
+	want := []config.Preset{config.PresetRuby}
+	if !reflect.DeepEqual(got.Presets, want) {
+		t.Fatalf("presets = %v, want %v", got.Presets, want)
+	}
+}
+
+func TestDetectRailsTakesPrecedenceOverRuby(t *testing.T) {
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		"example.gemspec":       "Gem::Specification.new do |spec|\nend\n",
+		"Gemfile":               `gem "rails"`,
+		"config/application.rb": "class Application < Rails::Application; end\n",
+	})
+	got, err := Detect(root)
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+	want := []config.Preset{config.PresetRails}
+	if !reflect.DeepEqual(got.Presets, want) {
+		t.Fatalf("presets = %v, want %v", got.Presets, want)
 	}
 }
 

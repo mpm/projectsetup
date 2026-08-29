@@ -58,6 +58,36 @@ func TestRunInitNonInteractive(t *testing.T) {
 	}
 }
 
+func TestRunInitDetectsRubyGem(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	if err := os.WriteFile(filepath.Join(root, "example.gemspec"), []byte("Gem::Specification.new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".ruby-version"), []byte("3.2.6\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := runInit(root, []string{"--non-interactive", "--ai", "none"}, &bytes.Buffer{}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runInit() error = %v", err)
+	}
+	manifest, err := os.ReadFile(filepath.Join(root, ".devcontainer", "projectsetup.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(manifest), `"preset": "ruby"`) || !strings.Contains(string(manifest), `"languageVersion": "3.2.6"`) {
+		t.Fatalf("Ruby manifest does not contain detected settings:\n%s", manifest)
+	}
+}
+
+func TestRunInitAcceptsRubyVersionForRubyPreset(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	err := runInit(root, []string{"--non-interactive", "--preset", "ruby", "--ruby-version", "3.3.7", "--ai", "none"}, &bytes.Buffer{}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("runInit() error = %v", err)
+	}
+}
+
 func TestRunInitRejectsAmbiguousDetection(t *testing.T) {
 	root := t.TempDir()
 	for _, name := range []string{"package.json", "pyproject.toml"} {

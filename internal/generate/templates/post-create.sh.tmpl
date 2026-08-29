@@ -26,6 +26,9 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
       ;;
   esac
 fi
+{{else if eq .Config.Preset "ruby"}}if [[ -f Gemfile ]]; then
+  bundle install
+fi
 {{else if eq .Config.Preset "rails"}}if [[ -x bin/setup ]]; then
   bin/setup --skip-server
 elif [[ -f Gemfile ]]; then

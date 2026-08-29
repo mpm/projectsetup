@@ -2,7 +2,7 @@
 
 ## Project
 
-This repository contains `projectsetup`, an opinionated Go CLI for generating deterministic Dev Container configurations for Node, Rails, and Python projects.
+This repository contains `projectsetup`, an opinionated Go CLI for generating deterministic Dev Container configurations for Node, Ruby, Rails, and Python projects.
 
 Read `HANDOFF.md` before making architectural or implementation decisions. It defines the MVP scope, CLI contract, generation rules, `dworm` compatibility requirements, validation behavior, test strategy, and implementation order.
 
@@ -63,4 +63,4 @@ When generated fixtures or integration behavior changes, run the relevant `docke
 
 ## Scope Discipline
 
-The first version supports Node, Rails, Python, optional PostgreSQL, OpenCode, optional Claude Code, GitHub CLI, initialization, checking, and diagnostics. If a requested implementation detail conflicts with `HANDOFF.md`, call out the conflict and choose the user's latest explicit instruction.
+The first version supports Node, Ruby, Rails, Python, optional PostgreSQL, OpenCode, optional Claude Code, GitHub CLI, initialization, checking, and diagnostics. If a requested implementation detail conflicts with `HANDOFF.md`, call out the conflict and choose the user's latest explicit instruction.

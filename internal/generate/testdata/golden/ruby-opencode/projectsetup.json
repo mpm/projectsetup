@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "projectName": "ruby-gem",
+  "preset": "ruby",
+  "database": "none",
+  "aiTools": [
+    "opencode"
+  ],
+  "languageVersion": "3.3",
+  "ports": [],
+  "systemPackages": [],
+  "generatedBy": "projectsetup"
+}

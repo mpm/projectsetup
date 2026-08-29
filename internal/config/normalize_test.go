@@ -43,6 +43,17 @@ func TestNormalize(t *testing.T) {
 			},
 		},
 		{
+			name:  "ruby defaults",
+			input: Input{Root: "/tmp/gem", Preset: PresetRuby, AITools: []AITool{}},
+			want: Config{
+				SchemaVersion: 1, ProjectName: "gem", Preset: PresetRuby,
+				Database: DatabaseNone, AITools: []AITool{},
+				LanguageVersion: "3.3", Ports: []int{}, SystemPackages: []string{},
+				Workspace: Workspace{HostPath: "/tmp/gem", ContainerPath: "/workspaces/gem"},
+				Container: Container{User: "vscode", Home: "/home/vscode", ComposeProjectName: "gem", ServiceName: "app"},
+			},
+		},
+		{
 			name:  "sqlite configuration",
 			input: Input{Root: "/tmp/app", Preset: PresetRails, Database: DatabaseSQLite, AITools: []AITool{}},
 			want: Config{
@@ -54,6 +65,7 @@ func TestNormalize(t *testing.T) {
 			},
 		},
 		{name: "rejects incompatible manager", input: Input{Root: "/tmp/api", Preset: PresetPython, PackageManager: PackageManagerNPM}, wantErr: true},
+		{name: "rejects manager for ruby", input: Input{Root: "/tmp/gem", Preset: PresetRuby, PackageManager: PackageManagerNPM}, wantErr: true},
 		{name: "rejects invalid port", input: Input{Root: "/tmp/api", Preset: PresetPython, Ports: []int{70000}}, wantErr: true},
 		{name: "rejects unsafe system package", input: Input{Root: "/tmp/api", Preset: PresetPython, SystemPackages: []string{"curl; false"}}, wantErr: true},
 		{name: "rejects unsafe language version", input: Input{Root: "/tmp/api", Preset: PresetRails, LanguageVersion: "3.3\nRUN false"}, wantErr: true},

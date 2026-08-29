@@ -44,7 +44,7 @@ func (ports *repeatedPorts) Set(value string) error {
 func runInit(root string, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("projectsetup init", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	presetValue := flags.String("preset", "", "node, rails, or python")
+	presetValue := flags.String("preset", "", "node, ruby, rails, or python")
 	name := flags.String("name", "", "project name")
 	databaseValue := flags.String("database", "", "none, postgres, or sqlite")
 	aiValue := flags.String("ai", "", "opencode, opencode,claude, or none")
@@ -214,7 +214,7 @@ func choosePreset(value string, detected detect.Result, prompt *prompter) (confi
 		return detected.Presets[0], nil
 	}
 	defaultValue := ""
-	choices := []string{"node", "rails", "python"}
+	choices := []string{"node", "ruby", "rails", "python"}
 	selected, err := prompt.choice("Preset", choices, defaultValue)
 	if err != nil {
 		return "", err
@@ -223,7 +223,7 @@ func choosePreset(value string, detected detect.Result, prompt *prompter) (confi
 }
 
 func choosePackageManager(value string, preset config.Preset, detail detect.PresetResult, prompt *prompter) (config.PackageManager, error) {
-	if value != "" || prompt == nil || preset == config.PresetRails {
+	if value != "" || prompt == nil || preset == config.PresetRuby || preset == config.PresetRails {
 		return resolvePackageManager(value, preset, detail)
 	}
 	if len(detail.PackageManagerCandidates) == 1 {
@@ -297,7 +297,7 @@ func resolvePreset(value string, detected detect.Result) (config.Preset, error) 
 	}
 	switch len(detected.Presets) {
 	case 0:
-		return "", fmt.Errorf("could not infer a preset; pass --preset node, rails, or python")
+		return "", fmt.Errorf("could not infer a preset; pass --preset node, ruby, rails, or python")
 	case 1:
 		return detected.Presets[0], nil
 	default:
@@ -319,7 +319,7 @@ func resolvePackageManager(value string, preset config.Preset, detail detect.Pre
 	if len(detail.PackageManagerCandidates) == 1 {
 		return detail.PackageManagerCandidates[0], nil
 	}
-	if preset == config.PresetRails {
+	if preset == config.PresetRuby || preset == config.PresetRails {
 		return "", nil
 	}
 	return "", nil
@@ -362,8 +362,8 @@ func resolveLanguageVersion(preset config.Preset, node, ruby, python, detected s
 	if preset != config.PresetNode && node != "" {
 		return "", fmt.Errorf("--node-version requires --preset node")
 	}
-	if preset != config.PresetRails && ruby != "" {
-		return "", fmt.Errorf("--ruby-version requires --preset rails")
+	if preset != config.PresetRuby && preset != config.PresetRails && ruby != "" {
+		return "", fmt.Errorf("--ruby-version requires --preset ruby or rails")
 	}
 	if preset != config.PresetPython && python != "" {
 		return "", fmt.Errorf("--python-version requires --preset python")
@@ -373,7 +373,7 @@ func resolveLanguageVersion(preset config.Preset, node, ruby, python, detected s
 		if node != "" {
 			return node, nil
 		}
-	case config.PresetRails:
+	case config.PresetRuby, config.PresetRails:
 		if ruby != "" {
 			return ruby, nil
 		}

@@ -1,12 +1,13 @@
 # projectsetup
 
-`projectsetup` is an opinionated Go CLI that generates deterministic Dev Container configurations for existing Node, Rails, and Python projects, designed for use with `dworm`.
+`projectsetup` is an opinionated Go CLI that generates deterministic Dev Container configurations for existing Node, Ruby, Rails, and Python projects, designed for use with `dworm`.
 
 ## Status and scope
 
 The current implementation provides interactive and flag-driven `init`, static `check`, host diagnostics with `doctor`, and optional Dev Container build validation. It supports:
 
 - Node with npm, pnpm, or Yarn
+- Ruby with Bundler
 - Rails
 - Python with pip, Poetry, or uv
 - Optional SQLite in the app container or PostgreSQL 17 sidecar
@@ -73,6 +74,7 @@ For automation, add `--non-interactive`; unresolved or ambiguous required choice
 
 ```bash
 projectsetup init --non-interactive --preset node
+projectsetup init --non-interactive --preset ruby --ruby-version 3.3
 projectsetup init --non-interactive --preset python --python-version 3.13 --package-manager uv
 projectsetup init --non-interactive --preset rails --database postgres --ai opencode,claude
 projectsetup init --non-interactive --preset rails --database sqlite
@@ -82,7 +84,7 @@ projectsetup init --non-interactive --preset node --port 3000 --port 5173 --syst
 Available `init` flags:
 
 ```text
---preset node|rails|python
+--preset node|ruby|rails|python
 --name NAME
 --database none|postgres|sqlite
 --ai opencode|opencode,claude|none
@@ -97,6 +99,8 @@ Available `init` flags:
 ```
 
 Defaults are detected from version files, manifests, and lockfiles. Without a detected language version, the defaults are Node 24, Ruby 3.3, and Python 3.13. OpenCode is enabled by default; the database defaults to none.
+
+Ruby projects are detected from a root-level `Gemfile`, `Gemfile.lock`, `.ruby-version`, or `*.gemspec`. Rails-specific signals take precedence over generic Ruby detection. The Ruby preset installs the selected Ruby version and runs `bundle install` when a `Gemfile` exists; it does not add Node, Active Storage, Rails setup, or a default port.
 
 The normalized project name also becomes the Compose project name, producing resource names such as `<project>-app-1` and, when selected, `<project>-postgres-1`. Use `--name` to select a different prefix. Docker names are host-global, so separate checkouts that need to run simultaneously must use different project names.
 

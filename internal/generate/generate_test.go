@@ -20,6 +20,7 @@ func TestWriteGeneratesSupportedPresets(t *testing.T) {
 		wantText string
 	}{
 		{name: "node", preset: config.PresetNode, manager: config.PackageManagerPNPM, wantText: "pnpm install --frozen-lockfile"},
+		{name: "ruby", preset: config.PresetRuby, wantText: "bundle install"},
 		{name: "rails postgres", preset: config.PresetRails, database: config.DatabasePostgres, wantText: "bin/setup --skip-server"},
 		{name: "rails sqlite", preset: config.PresetRails, database: config.DatabaseSQLite, wantText: "bin/setup --skip-server"},
 		{name: "python", preset: config.PresetPython, manager: config.PackageManagerUV, wantText: "uv sync --frozen"},
@@ -60,6 +61,15 @@ func TestWriteGeneratesSupportedPresets(t *testing.T) {
 				}
 				if tt.database == config.DatabasePostgres && !strings.Contains(string(devcontainer), "ghcr.io/rails/devcontainer/features/postgres-client") {
 					t.Fatalf("Rails PostgreSQL output lacks the PostgreSQL client feature:\n%s", devcontainer)
+				}
+			}
+			if tt.preset == config.PresetRuby {
+				if !strings.Contains(string(devcontainer), `"ghcr.io/rails/devcontainer/features/ruby:2"`) ||
+					!strings.Contains(string(devcontainer), `"version": "3.3"`) ||
+					!strings.Contains(string(devcontainer), "/home/vscode/.local/share/mise/shims") ||
+					strings.Contains(string(devcontainer), "features/activestorage") ||
+					strings.Contains(string(devcontainer), "features/node:1") {
+					t.Fatalf("Ruby output has missing runtime settings or Rails extras:\n%s", devcontainer)
 				}
 			}
 			postCreate := readGenerated(t, root, "scripts/post-create.sh")
@@ -177,6 +187,7 @@ func TestPostCreateSkipsMissingDependencyFiles(t *testing.T) {
 		manager config.PackageManager
 	}{
 		{preset: config.PresetNode, manager: config.PackageManagerNPM},
+		{preset: config.PresetRuby},
 		{preset: config.PresetPython, manager: config.PackageManagerPip},
 	}
 	for _, tt := range tests {

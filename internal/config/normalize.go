@@ -26,7 +26,7 @@ type Input struct {
 
 func Normalize(input Input) (Config, error) {
 	if !input.Preset.Valid() {
-		return Config{}, fmt.Errorf("preset is required and must be node, rails, or python")
+		return Config{}, fmt.Errorf("preset is required and must be node, ruby, rails, or python")
 	}
 
 	name := strings.TrimSpace(input.ProjectName)
@@ -136,7 +136,7 @@ func DefaultLanguageVersion(preset Preset) string {
 	switch preset {
 	case PresetNode:
 		return "24"
-	case PresetRails:
+	case PresetRuby, PresetRails:
 		return "3.3"
 	case PresetPython:
 		return "3.13"

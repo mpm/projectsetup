@@ -17,6 +17,7 @@ The tool must produce deterministic, validated files. It is a constrained config
 The first version supports:
 
 - Node projects
+- Ruby projects, including gems
 - Ruby on Rails projects
 - Python projects
 - Optional SQLite in the primary container or PostgreSQL sidecar
@@ -70,6 +71,7 @@ Non-interactive examples:
 
 ```bash
 projectsetup init --preset node
+projectsetup init --preset ruby --ruby-version 3.3
 projectsetup init --preset python --python-version 3.13
 projectsetup init --preset rails --database postgres --ai opencode,claude
 ```
@@ -77,7 +79,7 @@ projectsetup init --preset rails --database postgres --ai opencode,claude
 Initial flags:
 
 ```text
---preset node|rails|python
+--preset node|ruby|rails|python
 --name NAME
 --database none|postgres|sqlite
 --ai opencode|opencode,claude|none
@@ -257,11 +259,27 @@ Signals:
 
 Rules:
 
-- Infer Node when `package.json` exists and stronger Rails or Python signals do not make the root ambiguous.
+- Infer Node when `package.json` exists. Report it alongside strong Ruby, Rails, or Python signals so ambiguity can be resolved explicitly.
 - Prefer `.node-version`, then `.nvmrc`, then `package.json` engines for the version.
 - Infer `npm`, `pnpm`, or `yarn` from a single lockfile.
 - Multiple lockfiles are ambiguous and require a prompt or explicit flag.
 - Default to a documented current Node version only when no project version is available.
+
+### Ruby
+
+Signals:
+
+- `Gemfile`
+- `Gemfile.lock`
+- `.ruby-version`
+- A root-level `*.gemspec`
+
+Rules:
+
+- Read `.ruby-version` when available.
+- Treat Bundler as part of the Ruby runtime rather than a selectable package manager.
+- Prefer Rails over generic Ruby when Rails-specific evidence exists, so Rails projects are not reported as ambiguous Ruby and Rails roots.
+- The post-create dependency setup should run `bundle install` only when `Gemfile` exists.
 
 ### Rails
 
@@ -303,7 +321,7 @@ Rules:
 
 ### Mixed Repositories
 
-If strong signals for multiple presets exist at the same root, interactive mode asks the user to choose. Non-interactive mode requires `--preset`.
+If strong signals for multiple presets exist at the same root, interactive mode asks the user to choose. Non-interactive mode requires `--preset`. Rails is the one specificity exception: Rails-specific evidence suppresses generic Ruby detection at that root.
 
 The MVP operates on one project root and does not attempt monorepo workspace selection.
 
@@ -354,6 +372,17 @@ Post-create dependency setup:
 - Skip dependency installation when no package manifest exists
 
 Do not automatically start a development server.
+
+### Ruby Preset
+
+Use the same proven versioned Ruby feature as Rails, without Rails-specific features. Include its mise shim directory in `containerEnv.PATH` so Ruby and Bundler work through `dworm exec`.
+
+Post-create dependency setup:
+
+- Run AI tool setup first.
+- Run `bundle install` when a `Gemfile` exists.
+- Skip dependency setup when no `Gemfile` exists.
+- Do not add Node, Active Storage support, a database, a forwarded port, or an application server by default.
 
 ### Rails Preset
 
@@ -521,6 +550,7 @@ internal/config/
 internal/detect/
     detect.go
     node.go
+    ruby.go
     rails.go
     python.go
 internal/generate/
@@ -569,6 +599,7 @@ Render representative configurations and compare the full directory tree against
 
 - Node, OpenCode, no database
 - Node, OpenCode and Claude, PostgreSQL
+- Ruby, OpenCode, no database
 - Rails, OpenCode and Claude, PostgreSQL
 - Rails without PostgreSQL
 - Python with pip, OpenCode, no database
@@ -630,16 +661,18 @@ Known inconsistencies to avoid:
 
 - [x] Initialize the Go module and CLI command dispatch.
 - [x] Define enums, the normalized configuration model, manifest schema, and validation.
-- [x] Implement project detection for Node, Rails, and Python with table-driven tests.
+- [x] Implement project detection for Node, Ruby, Rails, and Python with table-driven tests.
 - [x] Implement non-interactive `init` flags first so generation is easy to test.
 - [x] Implement shared rendering, AI mounts, and the canonical AI installer.
-- [x] Add Compose-based Node, Rails, and Python presets.
+- [x] Add Compose-based Node, Ruby, Rails, and Python presets.
 - [x] Add the PostgreSQL Compose capability.
 - [x] Add golden fixtures and external configuration validation.
 - [x] Add interactive prompting on top of the same normalization path.
 - [x] Implement `check` and aggregate diagnostics.
 - [x] Implement `doctor`.
-- [x] Run real builds for all three presets and correct first-run permission or lifecycle problems.
+- [x] Run real builds for the original three presets and correct first-run permission or lifecycle problems.
+- [x] Build the Ruby preset from a clean workspace.
+- [x] Smoke-test the Ruby preset from a clean host-directory state.
 - [x] Add installation and usage documentation.
 - [x] Add explicit same-schema upgrades for previously generated configurations.
 
@@ -647,7 +680,7 @@ Known inconsistencies to avoid:
 
 The first version is complete when:
 
-- A user can initialize an existing Node, Rails, or Python project interactively.
+- A user can initialize an existing Node, Ruby, Rails, or Python project interactively.
 - The same setup can be generated non-interactively with stable output.
 - OpenCode works after first container creation and persists its state on the host.
 - Claude Code does the same when selected.

@@ -242,6 +242,10 @@ func validateDevcontainer(root, devDir string, manifest config.Manifest, documen
 		if document.Features["ghcr.io/devcontainers/features/node:1"].Version != manifest.LanguageVersion {
 			add(Error, path, "Node feature version does not match manifest languageVersion %q", manifest.LanguageVersion)
 		}
+	case config.PresetRuby:
+		if document.Features["ghcr.io/rails/devcontainer/features/ruby:2"].Version != manifest.LanguageVersion {
+			add(Error, path, "Ruby feature version does not match manifest languageVersion %q", manifest.LanguageVersion)
+		}
 	case config.PresetRails:
 		if document.Features["ghcr.io/rails/devcontainer/features/ruby:2"].Version != manifest.LanguageVersion {
 			add(Error, path, "Rails Ruby feature version does not match manifest languageVersion %q", manifest.LanguageVersion)
@@ -271,8 +275,8 @@ func validateDevcontainer(root, devDir string, manifest config.Manifest, documen
 			add(Error, path, "containerEnv.PATH must include %s", required)
 		}
 	}
-	if manifest.Preset == config.PresetRails && !containsString(containerPath, "/home/vscode/.local/share/mise/shims") {
-		add(Error, path, "containerEnv.PATH must include /home/vscode/.local/share/mise/shims for Rails")
+	if (manifest.Preset == config.PresetRuby || manifest.Preset == config.PresetRails) && !containsString(containerPath, "/home/vscode/.local/share/mise/shims") {
+		add(Error, path, "containerEnv.PATH must include /home/vscode/.local/share/mise/shims for Ruby")
 	}
 	if checkHost {
 		home, err := os.UserHomeDir()

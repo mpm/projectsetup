@@ -52,6 +52,7 @@ func Detect(root string) (Result, error) {
 	}{
 		{config.PresetNode, detectNode},
 		{config.PresetRails, detectRails},
+		{config.PresetRuby, detectRuby},
 		{config.PresetPython, detectPython},
 	}
 	for _, detector := range detectors {
@@ -63,6 +64,16 @@ func Detect(root string) (Result, error) {
 		if found {
 			result.Presets = append(result.Presets, detector.preset)
 			result.Details[detector.preset] = detail
+		}
+	}
+	// Rails projects also contain generic Ruby signals. Prefer the more specific preset.
+	if _, rails := result.Details[config.PresetRails]; rails {
+		delete(result.Details, config.PresetRuby)
+		for i, preset := range result.Presets {
+			if preset == config.PresetRuby {
+				result.Presets = append(result.Presets[:i], result.Presets[i+1:]...)
+				break
+			}
 		}
 	}
 	sort.Slice(result.Presets, func(i, j int) bool { return result.Presets[i] < result.Presets[j] })

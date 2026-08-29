@@ -57,6 +57,47 @@ func TestCheckAcceptsRailsConfigurationWithoutProjectSignals(t *testing.T) {
 	}
 }
 
+func TestCheckAcceptsRubyConfiguration(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	if err := os.WriteFile(filepath.Join(root, ".ruby-version"), []byte("3.3.7\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: config.PresetRuby, LanguageVersion: "3.3.7", AITools: []config.AITool{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := generate.Write(root, cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	diagnostics := validate.Check(root, validate.Options{})
+	if len(diagnostics) != 0 {
+		t.Fatalf("Check() diagnostics = %#v, want none", diagnostics)
+	}
+}
+
+func TestCheckRejectsMismatchedRubyFeature(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: config.PresetRuby, AITools: []config.AITool{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := generate.Write(root, cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, ".devcontainer", "devcontainer.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(strings.Replace(string(data), `"version": "3.3"`, `"version": "3.2"`, 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	diagnostics := validate.Check(root, validate.Options{})
+	assertDiagnostic(t, diagnostics, validate.Error, "Ruby feature version does not match")
+}
+
 func TestCheckRequiresSQLitePackages(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", t.TempDir())

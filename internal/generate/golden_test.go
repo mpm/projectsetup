@@ -40,6 +40,12 @@ var goldenCases = []goldenCase{
 		},
 	},
 	{
+		name: "ruby-opencode",
+		input: config.Input{
+			ProjectName: "ruby-gem", Preset: config.PresetRuby,
+		},
+	},
+	{
 		name: "rails-claude-postgres",
 		input: config.Input{
 			ProjectName: "rails-postgres", Preset: config.PresetRails,
@@ -157,7 +163,7 @@ func TestGoldenDevcontainerConfigurations(t *testing.T) {
 		t.Skipf("Docker daemon is unavailable: %v: %s", err, output)
 	}
 
-	for _, name := range []string{"node-opencode", "rails-claude-postgres", "rails-sqlite", "python-uv-claude-postgres"} {
+	for _, name := range []string{"node-opencode", "ruby-opencode", "rails-claude-postgres", "rails-sqlite", "python-uv-claude-postgres"} {
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
@@ -186,7 +192,7 @@ func TestBuildPresetFixtures(t *testing.T) {
 		t.Fatal("docker is not installed")
 	}
 
-	for _, name := range []string{"node-opencode", "rails-opencode", "python-pip"} {
+	for _, name := range []string{"node-opencode", "ruby-opencode", "rails-opencode", "python-pip"} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
 			if err := replaceTree(filepath.Join(root, directoryName), filepath.Join("testdata", "golden", name)); err != nil {
@@ -213,7 +219,7 @@ func TestSmokePresetFixtures(t *testing.T) {
 		t.Fatal("docker is not installed")
 	}
 
-	for _, name := range []string{"node-opencode", "rails-opencode", "python-pip"} {
+	for _, name := range []string{"node-opencode", "ruby-opencode", "rails-opencode", "python-pip"} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
 			home := t.TempDir()

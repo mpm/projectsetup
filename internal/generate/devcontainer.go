@@ -60,6 +60,11 @@ func features(cfg config.Config) map[string]map[string]any {
 	switch cfg.Preset {
 	case config.PresetNode:
 		result["ghcr.io/devcontainers/features/node:1"] = map[string]any{"version": cfg.LanguageVersion}
+	case config.PresetRuby:
+		result["ghcr.io/rails/devcontainer/features/ruby:2"] = map[string]any{
+			"version":              cfg.LanguageVersion,
+			"usePrecompiledRubies": true,
+		}
 	case config.PresetRails:
 		result["ghcr.io/rails/devcontainer/features/ruby:2"] = map[string]any{
 			"version":              cfg.LanguageVersion,
@@ -81,7 +86,7 @@ func containerPath(cfg config.Config) string {
 		cfg.Container.Home + "/.local/bin",
 		cfg.Container.Home + "/.opencode/bin",
 	}
-	if cfg.Preset == config.PresetRails {
+	if cfg.Preset == config.PresetRuby || cfg.Preset == config.PresetRails {
 		paths = append(paths, cfg.Container.Home+"/.local/share/mise/shims")
 	}
 	paths = append(paths, "/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin")

@@ -11,6 +11,7 @@ type Preset string
 
 const (
 	PresetNode   Preset = "node"
+	PresetRuby   Preset = "ruby"
 	PresetRails  Preset = "rails"
 	PresetPython Preset = "python"
 )
@@ -18,13 +19,13 @@ const (
 func ParsePreset(value string) (Preset, error) {
 	preset := Preset(value)
 	if !preset.Valid() {
-		return "", fmt.Errorf("unsupported preset %q (expected node, rails, or python)", value)
+		return "", fmt.Errorf("unsupported preset %q (expected node, ruby, rails, or python)", value)
 	}
 	return preset, nil
 }
 
 func (p Preset) Valid() bool {
-	return p == PresetNode || p == PresetRails || p == PresetPython
+	return p == PresetNode || p == PresetRuby || p == PresetRails || p == PresetPython
 }
 
 type Database string
@@ -115,7 +116,7 @@ func (p PackageManager) Supports(preset Preset) bool {
 		return p == PackageManagerNPM || p == PackageManagerPNPM || p == PackageManagerYarn
 	case PresetPython:
 		return p == PackageManagerPip || p == PackageManagerPoetry || p == PackageManagerUV
-	case PresetRails:
+	case PresetRuby, PresetRails:
 		return p == ""
 	default:
 		return false
