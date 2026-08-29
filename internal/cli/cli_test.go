@@ -79,6 +79,25 @@ func TestRunInitDetectsRubyGem(t *testing.T) {
 	}
 }
 
+func TestRunInitDetectsRubyVersionFromGemfile(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	gemfile := "source 'https://rubygems.org'\n\nruby '3.3.0'\ngemspec\n"
+	if err := os.WriteFile(filepath.Join(root, "Gemfile"), []byte(gemfile), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := runInit(root, []string{"--non-interactive", "--ai", "none"}, &bytes.Buffer{}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runInit() error = %v", err)
+	}
+	devcontainer, err := os.ReadFile(filepath.Join(root, ".devcontainer", "devcontainer.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(devcontainer), `"version": "3.3.0"`) {
+		t.Fatalf("Ruby feature does not use the Gemfile version:\n%s", devcontainer)
+	}
+}
+
 func TestRunInitAcceptsRubyVersionForRubyPreset(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", t.TempDir())

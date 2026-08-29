@@ -24,7 +24,7 @@ func detectRails(root string) (PresetResult, []string, bool, error) {
 	}
 
 	result := PresetResult{Signals: signals}
-	if version, found, err := versionFile(root, ".ruby-version"); err != nil {
+	if version, found, err := detectRubyVersion(root); err != nil {
 		return PresetResult{}, nil, false, err
 	} else if found {
 		result.LanguageVersion = version

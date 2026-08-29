@@ -40,6 +40,14 @@ func TestDetect(t *testing.T) {
 			wantVersion: map[config.Preset]string{config.PresetRuby: "3.2.6"},
 		},
 		{
+			name: "ruby version from Gemfile",
+			files: map[string]string{
+				"Gemfile": "source 'https://rubygems.org'\n\nruby '3.3.0'\ngem 'sinatra'\n",
+			},
+			wantPresets: []config.Preset{config.PresetRuby},
+			wantVersion: map[config.Preset]string{config.PresetRuby: "3.3.0"},
+		},
+		{
 			name: "rails with postgres",
 			files: map[string]string{
 				"Gemfile":             `source "https://rubygems.org"` + "\n" + `gem "rails"`,
@@ -48,6 +56,14 @@ func TestDetect(t *testing.T) {
 			},
 			wantPresets: []config.Preset{config.PresetRails},
 			wantVersion: map[config.Preset]string{config.PresetRails: "3.3.5"},
+		},
+		{
+			name: "rails version from Gemfile",
+			files: map[string]string{
+				"Gemfile": "ruby(\"3.3.1\")\ngem \"rails\"\n",
+			},
+			wantPresets: []config.Preset{config.PresetRails},
+			wantVersion: map[config.Preset]string{config.PresetRails: "3.3.1"},
 		},
 		{
 			name: "python pyproject and uv",

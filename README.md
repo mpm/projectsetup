@@ -100,7 +100,7 @@ Available `init` flags:
 
 Defaults are detected from version files, manifests, and lockfiles. Without a detected language version, the defaults are Node 24, Ruby 3.3, and Python 3.13. OpenCode is enabled by default; the database defaults to none.
 
-Ruby projects are detected from a root-level `Gemfile`, `Gemfile.lock`, `.ruby-version`, or `*.gemspec`. Rails-specific signals take precedence over generic Ruby detection. The Ruby preset installs the selected Ruby version and runs `bundle install` when a `Gemfile` exists; it does not add Node, Active Storage, Rails setup, or a default port.
+Ruby projects are detected from a root-level `Gemfile`, `Gemfile.lock`, `.ruby-version`, or `*.gemspec`. The Ruby version comes from `.ruby-version` when present, then from a literal `ruby "VERSION"` declaration in the Gemfile. Rails-specific signals take precedence over generic Ruby detection. The Ruby preset installs the selected Ruby version and runs `bundle install` when a `Gemfile` exists; it does not add Node, Active Storage, Rails setup, or a default port.
 
 The normalized project name also becomes the Compose project name, producing resource names such as `<project>-app-1` and, when selected, `<project>-postgres-1`. Use `--name` to select a different prefix. Docker names are host-global, so separate checkouts that need to run simultaneously must use different project names.
 
