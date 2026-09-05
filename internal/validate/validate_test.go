@@ -274,3 +274,48 @@ func contains(values []string, target string) bool {
 	}
 	return false
 }
+
+func TestCodexMountsAndEnvironment(t *testing.T) {
+	for _, mutation := range []string{"none", "state-mount", "binary-mount", "environment", "host-missing", "relative-home"} {
+		t.Run(mutation, func(t *testing.T) {
+			root, home, state := t.TempDir(), t.TempDir(), t.TempDir()
+			t.Setenv("HOME", home)
+			t.Setenv("CODEX_HOME", state)
+			cfg, err := config.Normalize(config.Input{Root: root, Preset: config.PresetPython, AITools: []config.AITool{config.AIToolCodex}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := generate.Write(root, cfg, false); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(root, ".devcontainer/devcontainer.json")
+			data, _ := os.ReadFile(path)
+			switch mutation {
+			case "state-mount":
+				composePath := filepath.Join(root, ".devcontainer/compose.yaml")
+				compose, err := os.ReadFile(composePath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(composePath, []byte(strings.ReplaceAll(string(compose), config.CodexStateSource, "/wrong")), 0644); err != nil {
+					t.Fatal(err)
+				}
+			case "binary-mount":
+				data = []byte(strings.ReplaceAll(string(data), "source=${localEnv:HOME}/.local/share/codex", "source=/wrong"))
+			case "environment":
+				data = []byte(strings.ReplaceAll(string(data), `"CODEX_HOME": "/home/vscode/.codex"`, `"CODEX_HOME": "/wrong"`))
+			case "host-missing":
+				t.Setenv("CODEX_HOME", filepath.Join(state, "missing"))
+			case "relative-home":
+				t.Setenv("CODEX_HOME", "relative")
+			}
+			if err := os.WriteFile(path, data, 0644); err != nil {
+				t.Fatal(err)
+			}
+			diagnostics := validate.Check(root, validate.Options{CheckHostMounts: true})
+			if (validate.ErrorCount(diagnostics) > 0) != (mutation != "none") {
+				t.Fatalf("%#v", diagnostics)
+			}
+		})
+	}
+}

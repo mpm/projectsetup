@@ -13,12 +13,20 @@ import (
 var templateFiles embed.FS
 
 type data struct {
-	Config  config.Config
-	AITools string
+	Config           config.Config
+	AITools          string
+	Codex            bool
+	CodexStateSource string
 }
 
 func templateData(cfg config.Config) data {
-	return data{Config: cfg, AITools: shellWords(cfg.AITools)}
+	result := data{Config: cfg, AITools: shellWords(cfg.AITools), CodexStateSource: config.CodexStateSource}
+	for _, tool := range cfg.AITools {
+		if tool == config.AIToolCodex {
+			result.Codex = true
+		}
+	}
+	return result
 }
 
 func executeTemplate(name string, value data) ([]byte, error) {

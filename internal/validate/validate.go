@@ -263,6 +263,9 @@ func validateDevcontainer(root, devDir string, manifest config.Manifest, documen
 	if containsTool(manifest.AITools, config.AIToolClaude) && document.ContainerEnv["CLAUDE_CONFIG_DIR"] != "/home/vscode/.claude" {
 		add(Error, path, "CLAUDE_CONFIG_DIR must be /home/vscode/.claude when Claude is selected")
 	}
+	if containsTool(manifest.AITools, config.AIToolCodex) && document.ContainerEnv["CODEX_HOME"] != "/home/vscode/.codex" {
+		add(Error, path, "CODEX_HOME must be /home/vscode/.codex when Codex is selected")
+	}
 	for _, mount := range document.Mounts {
 		lower := strings.ToLower(mount)
 		if strings.Contains(lower, "/.ssh") || strings.Contains(lower, "/.gitconfig") {
@@ -283,6 +286,14 @@ func validateDevcontainer(root, devDir string, manifest config.Manifest, documen
 		if err != nil {
 			add(Error, path, "locate host home directory for bind mounts: %v", err)
 		} else {
+			if containsTool(manifest.AITools, config.AIToolCodex) {
+				hostPath, err := config.AIHostDirectory(".codex", home, os.Getenv)
+				if err != nil {
+					add(Error, path, "resolve Codex host mount: %v", err)
+				} else if info, err := os.Stat(hostPath); err != nil || !info.IsDir() {
+					add(Error, path, "host bind-mount source %q is not an existing directory", hostPath)
+				}
+			}
 			for _, mount := range document.Mounts {
 				source := mountField(mount, "source")
 				if strings.HasPrefix(source, "${localEnv:HOME}/") {
@@ -371,6 +382,9 @@ func validateCompose(root, devDir string, manifest config.Manifest, document dev
 		checks = append(checks, "  postgres:", "POSTGRES_USER: projectsetup", "POSTGRES_PASSWORD: projectsetup", "POSTGRES_DB: '"+manifest.ProjectName+"'", "condition: service_healthy", "postgres-data:/var/lib/postgresql/data")
 	} else if strings.Contains(text, "  postgres:") {
 		add(Error, relative(root, path), "PostgreSQL service is configured but database is %q", manifest.Database)
+	}
+	if containsTool(manifest.AITools, config.AIToolCodex) {
+		checks = append(checks, "      - type: bind\n        source: \""+config.CodexStateSource+"\"\n        target: /home/vscode/.codex")
 	}
 	for _, expected := range checks {
 		if !strings.Contains(text, expected) {
@@ -462,6 +476,9 @@ func expectedAIMounts(tools []config.AITool) []string {
 				"source=${localEnv:HOME}/.opencode,target=/home/vscode/.opencode,type=bind",
 				"source=${localEnv:HOME}/.cache/opencode,target=/home/vscode/.cache/opencode,type=bind",
 			)
+		case config.AIToolCodex:
+			mounts = append(mounts,
+				"source=${localEnv:HOME}/.local/share/codex,target=/home/vscode/.local/share/codex,type=bind")
 		case config.AIToolClaude:
 			mounts = append(mounts,
 				"source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind",

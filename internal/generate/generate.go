@@ -198,7 +198,10 @@ func createHostMountDirectories(cfg config.Config) error {
 		return fmt.Errorf("locate host home directory for AI mounts: %w", err)
 	}
 	for _, relative := range config.AIHostDirectories(cfg.AITools) {
-		path := filepath.Join(home, filepath.FromSlash(relative))
+		path, err := config.AIHostDirectory(relative, home, os.Getenv)
+		if err != nil {
+			return fmt.Errorf("resolve host mount source: %w", err)
+		}
 		if err := os.MkdirAll(path, 0o755); err != nil {
 			return fmt.Errorf("create host mount source %q: %w", path, err)
 		}

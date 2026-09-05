@@ -31,9 +31,10 @@ func TestWriteGeneratesSupportedPresets(t *testing.T) {
 			root := t.TempDir()
 			home := t.TempDir()
 			t.Setenv("HOME", home)
+			t.Setenv("CODEX_HOME", "")
 			cfg, err := config.Normalize(config.Input{
 				Root: root, Preset: tt.preset, PackageManager: tt.manager,
-				Database: tt.database, AITools: []config.AITool{config.AIToolOpenCode, config.AIToolClaude},
+				Database: tt.database, AITools: []config.AITool{config.AIToolOpenCode, config.AIToolClaude, config.AIToolCodex},
 			})
 			if err != nil {
 				t.Fatalf("Normalize() error = %v", err)
@@ -195,6 +196,7 @@ func TestPostCreateSkipsMissingDependencyFiles(t *testing.T) {
 			root := t.TempDir()
 			home := t.TempDir()
 			t.Setenv("HOME", home)
+			t.Setenv("CODEX_HOME", "")
 			cfg, err := config.Normalize(config.Input{Root: root, Preset: tt.preset, PackageManager: tt.manager, AITools: []config.AITool{}})
 			if err != nil {
 				t.Fatal(err)

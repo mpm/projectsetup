@@ -15,6 +15,7 @@ import (
 func runUpgrade(root string, args []string, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("projectsetup upgrade", flag.ContinueOnError)
 	flags.SetOutput(stderr)
+	aiValue := flags.String("ai", "", "replace AI selection with comma-separated opencode, claude, codex; or none")
 	if err := flags.Parse(args); err != nil {
 		if err == flag.ErrHelp {
 			return nil
@@ -23,6 +24,11 @@ func runUpgrade(root string, args []string, stdout, stderr io.Writer) error {
 	}
 	if flags.NArg() != 0 {
 		return fmt.Errorf("upgrade does not accept positional arguments")
+	}
+
+	tools, err := resolveAITools(*aiValue, flags)
+	if err != nil {
+		return err
 	}
 
 	path := filepath.Join(root, ".devcontainer", "projectsetup.json")
@@ -45,7 +51,7 @@ func runUpgrade(root string, args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("cannot upgrade schemaVersion %d; this version supports schemaVersion %d", manifest.SchemaVersion, config.SchemaVersion)
 	}
 
-	cfg, err := config.Normalize(config.Input{
+	input := config.Input{
 		Root:            root,
 		ProjectName:     manifest.ProjectName,
 		Preset:          manifest.Preset,
@@ -55,16 +61,24 @@ func runUpgrade(root string, args []string, stdout, stderr io.Writer) error {
 		LanguageVersion: manifest.LanguageVersion,
 		Ports:           manifest.Ports,
 		SystemPackages:  manifest.SystemPackages,
-	})
+	}
+	cfg, err := config.Normalize(input)
 	if err != nil {
 		return fmt.Errorf("normalize generated manifest %q: %w", path, err)
 	}
 	if !reflect.DeepEqual(config.NewManifest(cfg), manifest) {
 		return fmt.Errorf("refusing to upgrade %q because its manifest values are not normalized", filepath.Dir(path))
 	}
+	if tools != nil {
+		input.AITools = tools
+		cfg, err = config.Normalize(input)
+		if err != nil {
+			return fmt.Errorf("normalize requested AI selection: %w", err)
+		}
+	}
 	if err := generate.Write(root, cfg, true); err != nil {
 		return fmt.Errorf("upgrade generated configuration: %w", err)
 	}
-	_, err = fmt.Fprintf(stdout, "Upgraded .devcontainer for %s (%s).\n", cfg.ProjectName, cfg.Preset)
+	_, err = fmt.Fprintf(stdout, "Upgraded .devcontainer for %s (%s). Recreate the container to apply mount or environment changes.\n", cfg.ProjectName, cfg.Preset)
 	return err
 }

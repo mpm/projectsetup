@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 )
 
@@ -53,18 +54,19 @@ type AITool string
 const (
 	AIToolOpenCode AITool = "opencode"
 	AIToolClaude   AITool = "claude"
+	AIToolCodex    AITool = "codex"
 )
 
 func ParseAITool(value string) (AITool, error) {
 	tool := AITool(value)
 	if !tool.Valid() {
-		return "", fmt.Errorf("unsupported AI tool %q (expected opencode or claude)", value)
+		return "", fmt.Errorf("unsupported AI tool %q (expected opencode, claude, or codex)", value)
 	}
 	return tool, nil
 }
 
 func (a AITool) Valid() bool {
-	return a == AIToolOpenCode || a == AIToolClaude
+	return a == AIToolOpenCode || a == AIToolClaude || a == AIToolCodex
 }
 
 func AIHostDirectories(tools []AITool) []string {
@@ -75,6 +77,8 @@ func AIHostDirectories(tools []AITool) []string {
 			directories = append(directories, ".config/opencode", ".local/share/opencode", ".opencode", ".cache/opencode")
 		case AIToolClaude:
 			directories = append(directories, ".claude", ".local/share/claude")
+		case AIToolCodex:
+			directories = append(directories, ".codex", ".local/share/codex")
 		}
 	}
 	sort.Strings(directories)
@@ -147,4 +151,19 @@ type Container struct {
 	Home               string
 	ComposeProjectName string
 	ServiceName        string
+}
+
+// CodexStateSource uses Compose interpolation, which supports nested defaults.
+const CodexStateSource = "${CODEX_HOME:-${HOME}/.codex}"
+
+func AIHostDirectory(relative, home string, getenv func(string) string) (string, error) {
+	if relative == ".codex" {
+		if path := getenv("CODEX_HOME"); path != "" {
+			if !filepath.IsAbs(path) {
+				return "", fmt.Errorf("CODEX_HOME must be an absolute host directory, got %q", path)
+			}
+			return path, nil
+		}
+	}
+	return filepath.Join(home, filepath.FromSlash(relative)), nil
 }

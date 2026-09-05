@@ -47,7 +47,7 @@ func runInit(root string, args []string, stdin io.Reader, stdout, stderr io.Writ
 	presetValue := flags.String("preset", "", "node, ruby, rails, or python")
 	name := flags.String("name", "", "project name")
 	databaseValue := flags.String("database", "", "none, postgres, or sqlite")
-	aiValue := flags.String("ai", "", "opencode, opencode,claude, or none")
+	aiValue := flags.String("ai", "", "comma-separated opencode, claude, codex; or none")
 	nodeVersion := flags.String("node-version", "", "Node version")
 	rubyVersion := flags.String("ruby-version", "", "Ruby version")
 	pythonVersion := flags.String("python-version", "", "Python version")
@@ -268,7 +268,7 @@ func chooseAITools(value string, wasProvided bool, prompt *prompter) ([]config.A
 	if wasProvided || prompt == nil {
 		return parseAITools(value, wasProvided)
 	}
-	selected, err := prompt.choice("AI tools", []string{"opencode", "opencode,claude", "none"}, "opencode")
+	selected, err := prompt.choice("AI tools", []string{"opencode", "opencode,claude", "opencode,codex", "opencode,claude,codex", "claude", "codex", "claude,codex", "none"}, "opencode")
 	if err != nil {
 		return nil, err
 	}
@@ -349,13 +349,15 @@ func parseAITools(value string, provided bool) ([]config.AITool, error) {
 	if value == "none" {
 		return []config.AITool{}, nil
 	}
-	if value == "opencode" {
-		return []config.AITool{config.AIToolOpenCode}, nil
+	var tools []config.AITool
+	for _, part := range strings.Split(value, ",") {
+		tool, err := config.ParseAITool(strings.TrimSpace(part))
+		if err != nil {
+			return nil, fmt.Errorf("--ai: %w; use comma-separated opencode, claude, codex, or none alone", err)
+		}
+		tools = append(tools, tool)
 	}
-	if value == "opencode,claude" {
-		return []config.AITool{config.AIToolOpenCode, config.AIToolClaude}, nil
-	}
-	return nil, fmt.Errorf("--ai must be opencode, opencode,claude, or none")
+	return tools, nil
 }
 
 func resolveLanguageVersion(preset config.Preset, node, ruby, python, detected string) (string, error) {

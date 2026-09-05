@@ -10,7 +10,10 @@ services:
     user: vscode
     volumes:
       - ..:{{.Config.Workspace.ContainerPath}}
-{{if eq .Config.Database "postgres"}}    depends_on:
+{{if .Codex}}      - type: bind
+        source: "{{.CodexStateSource}}"
+        target: /home/vscode/.codex
+{{end}}{{if eq .Config.Database "postgres"}}    depends_on:
       postgres:
         condition: service_healthy
 

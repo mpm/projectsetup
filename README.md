@@ -11,7 +11,7 @@ The current implementation provides interactive and flag-driven `init`, static `
 - Rails
 - Python with pip, Poetry, or uv
 - Optional SQLite in the app container or PostgreSQL 17 sidecar
-- OpenCode by default, optional Claude Code, and GitHub CLI
+- OpenCode by default, optional Claude Code and Codex, and GitHub CLI
 
 User templates, plugins, migration of hand-written configurations, databases other than SQLite and PostgreSQL, Alpine/musl images, Windows containers, and application generation are out of scope.
 
@@ -87,7 +87,7 @@ Available `init` flags:
 --preset node|ruby|rails|python
 --name NAME
 --database none|postgres|sqlite
---ai opencode|opencode,claude|none
+--ai TOOL[,TOOL...]          opencode, claude, codex; or none
 --node-version VERSION
 --ruby-version VERSION
 --python-version VERSION
@@ -114,6 +114,14 @@ projectsetup upgrade
 
 The command regenerates from `.devcontainer/projectsetup.json`, preserving its preset, versions, tools, ports, packages, and database selection. It only replaces recognized projectsetup output containing known generated files; hand-written configurations and unsupported manifest schemas are refused.
 
+To change only the selected agents while upgrading:
+
+```bash
+projectsetup upgrade --ai opencode,codex
+```
+
+The list replaces the previous selection; use `--ai none` to disable all agents. Plain `upgrade` preserves the selection. Agent lists accept any combination and are deduplicated and sorted. Recreate the container after adding or removing mounts or changing its environment; regenerating files alone does not change an existing container. Upgrading configuration does not update working agent binaries.
+
 ## Validate a configuration
 
 ```bash
@@ -132,6 +140,12 @@ devcontainer build --workspace-folder <project-root>
 It builds the configuration but does not start the Dev Container or application.
 
 Maintainers can run the opt-in preset integration checks with `PROJECTSETUP_BUILD_TESTS=1 go test ./internal/generate -run TestBuildPresetFixtures` and the first-run lifecycle smoke tests with `PROJECTSETUP_SMOKE_TESTS=1 go test ./internal/generate -run TestSmokePresetFixtures`.
+
+The Codex-specific smoke test uses isolated temporary directories to verify official installation, explicit update, custom state sharing, and host execution of the container-installed binary:
+
+```bash
+PROJECTSETUP_SMOKE_TESTS=1 go test ./internal/generate -run '^TestSmokeCodexSharedInstallation$' -v -timeout 12m
+```
 
 ## Doctor
 
@@ -194,7 +208,57 @@ Claude Code additionally uses:
 ~/.local/share/claude
 ```
 
+Codex uses two separate writable mounts:
+
+| Host directory | Container directory | Purpose |
+| --- | --- | --- |
+| `CODEX_HOME`, default `~/.codex` | `/home/vscode/.codex` | Configuration, authorization, history, and session state |
+| `~/.local/share/codex` | `/home/vscode/.local/share/codex` | Shared standalone installation |
+
+Codex state is mounted through Compose, which supports the host `CODEX_HOME` fallback. Export a custom `CODEX_HOME` as an absolute path consistently when running `projectsetup` and `dworm up`. Compose's `.env` can also affect interpolation; keep it consistent with the exported host setting. Runtime `CODEX_HOME=/home/vscode/.codex` is set in `containerEnv` for direct `dworm exec` access.
+
+The canonical installer installs Codex into the shared installation directory when absent. It keeps links relative so the same files work under different host and container home paths. An existing incompatible or broken Codex binary produces an actionable error instead of being overwritten. Sharing executables requires compatible Linux/CPU architectures.
+
+To use this same installation on the host after the first container setup, put its command first in your host PATH:
+
+```bash
+export PATH="$HOME/.local/share/codex/bin:$PATH"
+codex --version
+```
+
+An existing npm, Homebrew, or default standalone host installation is not moved or replaced automatically. Selecting the shared command on PATH makes subsequent host and container invocations use the same installation.
+
+For shared authorization, set this top-level value in the host's `CODEX_HOME/config.toml` (default `~/.codex/config.toml`), then run `codex login` on the host if no file-based login exists:
+
+```toml
+cli_auth_credentials_store = "file"
+```
+
+Host OS keyring credentials cannot be shared by a directory mount. `doctor` reports the file-based cache's presence and warns about keyring/auto configuration; it does not inspect token contents or alter host configuration. File-based credentials and history remain on the host and are writable from the container. [Codex authentication documentation](https://learn.chatgpt.com/docs/auth)
+
+Sharing the full state directory preserves local history and sessions when persistence is enabled. Host-specific paths in configuration, plugins, and prior sessions may still need adjustment. When the resume picker filters out sessions from a different workspace path, use `codex resume --all`. Avoid resuming the same session simultaneously in two processes. [Codex configuration documentation](https://learn.chatgpt.com/docs/config-file/config-advanced), [session commands](https://learn.chatgpt.com/docs/developer-commands?surface=cli#codex-resume)
+
 These directories preserve configuration, credentials, installations, and caches across container rebuilds. Host `~/.ssh` and `~/.gitconfig` are deliberately not mounted because `dworm` supplies credential forwarding.
+
+## Update agents in an existing container
+
+After `projectsetup upgrade` has refreshed the generated scripts, run from the project root:
+
+```bash
+dworm exec -- .devcontainer/scripts/install-ai-tools.sh --update opencode
+dworm exec -- .devcontainer/scripts/install-ai-tools.sh --update codex
+dworm exec -- .devcontainer/scripts/install-ai-tools.sh --update opencode codex
+```
+
+Use only agents selected for that container, so their installation and state mounts are available. The shared installer also accepts `--update claude`. It reports versions and validates the resulting executable, propagating download or update failures. Normal post-create setup installs missing tools and leaves working versions alone.
+
+For an older container without the updated script, OpenCode can already update itself:
+
+```bash
+dworm exec -- opencode upgrade --method curl
+```
+
+Updates persist in shared host installation directories and affect every container using them; restart running agent processes to use the updated version. No container rebuild is needed for a binary update. For Codex, use the generated update script on the Linux host or in the container so installation placement and relative links are preserved.
 
 ## PostgreSQL
 

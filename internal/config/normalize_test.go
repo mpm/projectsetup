@@ -102,3 +102,39 @@ func TestRuntimeProjectName(t *testing.T) {
 		t.Errorf("RuntimeProjectName() = %q, want %q", got, want)
 	}
 }
+
+func TestNormalizeAITools(t *testing.T) {
+	for _, tt := range []struct {
+		input, want []AITool
+		fail        bool
+	}{
+		{nil, []AITool{AIToolOpenCode}, false},
+		{[]AITool{}, []AITool{}, false},
+		{[]AITool{AIToolOpenCode, AIToolCodex, AIToolClaude, AIToolCodex}, []AITool{AIToolClaude, AIToolCodex, AIToolOpenCode}, false},
+		{[]AITool{AIToolCodex}, []AITool{AIToolCodex}, false},
+		{[]AITool{"bogus"}, nil, true},
+	} {
+		got, err := normalizeAITools(tt.input)
+		if (err != nil) != tt.fail || !reflect.DeepEqual(got, tt.want) {
+			t.Errorf("%v: got %v, %v", tt.input, got, err)
+		}
+	}
+}
+
+func TestCodexHostDirectory(t *testing.T) {
+	for _, tt := range []struct {
+		override, want string
+		fail           bool
+	}{
+		{"", "/host/.codex", false}, {"/custom/codex home", "/custom/codex home", false}, {"relative", "", true},
+	} {
+		got, err := AIHostDirectory(".codex", "/host", func(string) string { return tt.override })
+		if (err != nil) != tt.fail || got != tt.want {
+			t.Errorf("%q: %q, %v", tt.override, got, err)
+		}
+	}
+	got, err := AIHostDirectory(".local/share/codex", "/host", func(string) string { return "/custom/state" })
+	if err != nil || got != "/host/.local/share/codex" {
+		t.Fatalf("installation directory = %q, %v", got, err)
+	}
+}

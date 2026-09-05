@@ -159,3 +159,46 @@ func assertDiagnostic(t *testing.T, diagnostics []doctor.Diagnostic, severity do
 	}
 	t.Errorf("missing %s diagnostic for %s containing %q in %#v", severity, subject, message, diagnostics)
 }
+
+func TestCodexAuthorizationDiagnostics(t *testing.T) {
+	for _, tt := range []struct {
+		name, config string
+		auth         bool
+		severity     doctor.Severity
+		message      string
+	}{
+		{"missing", "", false, doctor.Warning, "Host keyring credentials are not shared"},
+		{"file", "cli_auth_credentials_store = \"file\"\n", true, doctor.Info, "file-based login cache exists"},
+		{"keyring", "cli_auth_credentials_store = 'keyring'\n", true, doctor.Warning, "not explicitly file-based"},
+		{"auto", "cli_auth_credentials_store = \"auto\"\n", true, doctor.Warning, "not explicitly file-based"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root, home, state := t.TempDir(), t.TempDir(), t.TempDir()
+			writeManifest(t, root, `["codex"]`)
+			if err := os.WriteFile(filepath.Join(state, "config.toml"), []byte(tt.config), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if tt.auth {
+				if err := os.WriteFile(filepath.Join(state, "auth.json"), []byte("never-display-credentials"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			env := commandEnvironment(map[string]string{}, func(string, ...string) ([]byte, error) { return nil, errors.New("unexpected command") })
+			env.Getenv = func(name string) string {
+				if name == "CODEX_HOME" {
+					return state
+				}
+				return ""
+			}
+			env.UserHomeDir = func() (string, error) { return home, nil }
+			diagnostics := doctor.Check(root, env)
+			assertDiagnostic(t, diagnostics, tt.severity, "Codex authorization", tt.message)
+			assertDiagnostic(t, diagnostics, doctor.Info, "AI host directory", state)
+			for _, d := range diagnostics {
+				if strings.Contains(d.Message, "never-display-credentials") {
+					t.Fatal("credential leak")
+				}
+			}
+		})
+	}
+}

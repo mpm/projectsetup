@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "projectName": "node-all-agents",
+  "preset": "node",
+  "database": "none",
+  "aiTools": [
+    "claude",
+    "codex",
+    "opencode"
+  ],
+  "packageManager": "npm",
+  "languageVersion": "24",
+  "ports": [],
+  "systemPackages": [],
+  "generatedBy": "projectsetup"
+}

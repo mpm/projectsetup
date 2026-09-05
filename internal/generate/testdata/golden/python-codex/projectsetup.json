@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "projectName": "python-codex",
+  "preset": "python",
+  "database": "none",
+  "aiTools": [
+    "codex"
+  ],
+  "packageManager": "pip",
+  "languageVersion": "3.13",
+  "ports": [],
+  "systemPackages": [],
+  "generatedBy": "projectsetup"
+}

@@ -169,7 +169,11 @@ func checkAIDirectories(root string, environment Environment, add func(Severity,
 		return
 	}
 	for _, relative := range directories {
-		path := filepath.Join(home, filepath.FromSlash(relative))
+		path, err := config.AIHostDirectory(relative, home, environment.Getenv)
+		if err != nil {
+			add(Error, "AI host directory", "%v", err)
+			continue
+		}
 		info, err := environment.Stat(path)
 		if errors.Is(err, os.ErrNotExist) {
 			add(Warning, "AI host directory", "%s is missing", path)
@@ -188,6 +192,48 @@ func checkAIDirectories(root string, environment Environment, add func(Severity,
 			continue
 		}
 		add(Info, "AI host directory", "%s exists and is writable", path)
+	}
+	for _, tool := range manifest.AITools {
+		if tool == config.AIToolCodex {
+			checkCodex(home, environment, add)
+		}
+	}
+}
+
+func checkCodex(home string, environment Environment, add func(Severity, string, string, ...any)) {
+	state, err := config.AIHostDirectory(".codex", home, environment.Getenv)
+	if err != nil {
+		return
+	} // Already reported by directory checks.
+	auth := filepath.Join(state, "auth.json")
+	if info, err := environment.Stat(auth); err != nil || !info.Mode().IsRegular() {
+		add(Warning, "Codex authorization", "shared auth.json is unavailable at %s; on the host set cli_auth_credentials_store = \"file\" in CODEX_HOME/config.toml and run codex login. Host keyring credentials are not shared", auth)
+	} else {
+		add(Info, "Codex authorization", "file-based login cache exists at %s; shared login requires cli_auth_credentials_store = \"file\" (token validity not checked)", auth)
+	}
+	data, err := environment.ReadFile(filepath.Join(state, "config.toml"))
+	if err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "[") {
+				break
+			}
+			key, value, ok := strings.Cut(line, "=")
+			if ok && strings.Trim(strings.TrimSpace(key), "\"'") == "cli_auth_credentials_store" {
+				value = strings.TrimSpace(strings.SplitN(value, "#", 2)[0])
+				if value != "\"file\"" && value != "'file'" {
+					add(Warning, "Codex authorization", "host credential storage is not explicitly file-based; set cli_auth_credentials_store = \"file\" and run codex login on the host to share authorization")
+				}
+			}
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		add(Warning, "Codex authorization", "cannot read Codex config.toml: %v", err)
+	}
+	binary := filepath.Join(home, ".local/share/codex/bin/codex")
+	if _, err := environment.Stat(binary); err != nil {
+		add(Warning, "Codex installation", "shared command %s is missing or inaccessible; container setup installs it when absent. Add its bin directory to the host PATH to use the same installation", binary)
+	} else {
+		add(Info, "Codex installation", "shared command at %s; container setup checks --version for Linux/CPU compatibility", binary)
 	}
 }
 

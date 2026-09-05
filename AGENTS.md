@@ -63,4 +63,4 @@ When generated fixtures or integration behavior changes, run the relevant `docke
 
 ## Scope Discipline
 
-The first version supports Node, Ruby, Rails, Python, optional PostgreSQL, OpenCode, optional Claude Code, GitHub CLI, initialization, checking, and diagnostics. If a requested implementation detail conflicts with `HANDOFF.md`, call out the conflict and choose the user's latest explicit instruction.
+The first version supports Node, Ruby, Rails, Python, optional PostgreSQL, OpenCode, optional Claude Code and Codex, GitHub CLI, initialization, checking, and diagnostics. If a requested implementation detail conflicts with `HANDOFF.md`, call out the conflict and choose the user's latest explicit instruction.

@@ -46,6 +46,9 @@ func renderDevcontainer(cfg config.Config) ([]byte, error) {
 		document.ContainerEnv["PGDATABASE"] = cfg.ProjectName
 	}
 	for _, tool := range cfg.AITools {
+		if tool == config.AIToolCodex {
+			document.ContainerEnv["CODEX_HOME"] = cfg.Container.Home + "/.codex"
+		}
 		if tool == config.AIToolClaude {
 			document.ContainerEnv["CLAUDE_CONFIG_DIR"] = cfg.Container.Home + "/.claude"
 		}
@@ -104,6 +107,9 @@ func aiMounts(cfg config.Config) []string {
 				"source=${localEnv:HOME}/.opencode,target=/home/vscode/.opencode,type=bind",
 				"source=${localEnv:HOME}/.cache/opencode,target=/home/vscode/.cache/opencode,type=bind",
 			)
+		case config.AIToolCodex:
+			mounts = append(mounts,
+				"source=${localEnv:HOME}/.local/share/codex,target=/home/vscode/.local/share/codex,type=bind")
 		case config.AIToolClaude:
 			mounts = append(mounts,
 				"source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind",

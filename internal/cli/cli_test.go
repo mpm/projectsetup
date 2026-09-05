@@ -5,6 +5,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -295,14 +296,21 @@ func TestRunInitInteractiveCancellationWritesNothing(t *testing.T) {
 	}
 }
 
-func TestResolveAIToolsRejectsUnsupportedCombination(t *testing.T) {
-	flags := flag.NewFlagSet("test", flag.ContinueOnError)
-	flags.String("ai", "", "")
-	if err := flags.Parse([]string{"--ai", "claude"}); err != nil {
-		t.Fatal(err)
+func TestResolveAITools(t *testing.T) {
+	for _, value := range []string{"codex", "claude", "codex,opencode", "opencode,claude,codex", "codex,codex", "none"} {
+		flags := flag.NewFlagSet("test", flag.ContinueOnError)
+		flags.String("ai", "", "")
+		if err := flags.Parse([]string{"--ai", value}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := resolveAITools(value, flags); err != nil {
+			t.Errorf("%q: %v", value, err)
+		}
 	}
-	if _, err := resolveAITools("claude", flags); err == nil {
-		t.Fatal("resolveAITools() accepted Claude without OpenCode")
+	for _, value := range []string{"", "none,codex", "codex,", ",codex", "unknown", "Codex"} {
+		if _, err := parseAITools(value, true); err == nil {
+			t.Errorf("accepted %q", value)
+		}
 	}
 }
 
@@ -353,5 +361,56 @@ func TestRunDoctorRendersDistinctSeverities(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "ERROR: docker: not found") || !strings.Contains(stderr.String(), "WARNING: SSH_AUTH_SOCK:") {
 		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestUpgradeReplacesOnlyAISelection(t *testing.T) {
+	for _, value := range []string{"codex,opencode,codex", "none"} {
+		t.Run(value, func(t *testing.T) {
+			root := t.TempDir()
+			t.Setenv("HOME", t.TempDir())
+			t.Setenv("CODEX_HOME", "")
+			cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "keep-me", Preset: config.PresetPython, Database: config.DatabasePostgres, LanguageVersion: "3.12", PackageManager: config.PackageManagerUV, Ports: []int{8000}, SystemPackages: []string{"make"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := generate.Write(root, cfg, false); err != nil {
+				t.Fatal(err)
+			}
+			if err := runUpgrade(root, []string{"--ai", value}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(filepath.Join(root, ".devcontainer/projectsetup.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := config.ReadManifest(bytes.NewReader(data))
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := config.NewManifest(cfg)
+			want.AITools = []config.AITool{config.AIToolCodex, config.AIToolOpenCode}
+			if value == "none" {
+				want.AITools = []config.AITool{}
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("manifest = %#v, want %#v", got, want)
+			}
+			// Plain upgrades must preserve the new selection, including none.
+			if err := runUpgrade(root, nil, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+				t.Fatal(err)
+			}
+			after, _ := os.ReadFile(filepath.Join(root, ".devcontainer/projectsetup.json"))
+			if !bytes.Equal(data, after) {
+				t.Fatal("plain upgrade changed manifest")
+			}
+			if err := runUpgrade(root, []string{"--ai", "codex,none"}, &bytes.Buffer{}, &bytes.Buffer{}); err == nil {
+				t.Fatal("accepted invalid selection")
+			}
+			after, _ = os.ReadFile(filepath.Join(root, ".devcontainer/projectsetup.json"))
+			if !bytes.Equal(data, after) {
+				t.Fatal("invalid upgrade changed manifest")
+			}
+		})
 	}
 }
