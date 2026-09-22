@@ -17,7 +17,7 @@ User templates, plugins, migration of hand-written configurations, databases oth
 
 ## Prerequisites
 
-- Go 1.23 or newer when installing from source
+- Go 1.27.1 or newer when installing from source (prebuilt binaries do not require Go)
 - Docker with Docker Compose for external configuration checks and build validation
 - [Dev Container CLI](https://github.com/devcontainers/cli) (`devcontainer`) for external configuration checks and `check --build`
 - `dworm` for the intended container workflow
@@ -60,7 +60,23 @@ Show the running version and its build metadata with:
 projectsetup --version
 ```
 
-Release builds check GitHub for a newer release in the background while a command runs. If the check completes and an update is available, `projectsetup` prints the release URL after the command. Development builds do not contact GitHub.
+Release builds check GitHub for a newer release in the background while a command runs. If the check completes and an update is available, `projectsetup` suggests `projectsetup self-update` and prints the release URL on stderr. Checks are best-effort, quiet on failure, and skipped for development builds and the explicit self-update command.
+
+## Update projectsetup
+
+```bash
+projectsetup self-update
+```
+
+This command updates the running application executable to the latest stable GitHub release for Linux or macOS (`amd64` or `arm64`). It works from any directory without Docker or a generated project. It makes a fresh release lookup, requires the archive's SHA-256 entry in `checksums.txt`, and verifies it before replacing the executable. Current or newer versions are left in place; prereleases are not selected.
+
+Supported installations are the installer, manually extracted release archives, and versioned `go install` builds. Keep the actual executable named `projectsetup`. Symlinked commands update the resolved target and preserve the symlink; another executable on `PATH` is never selected. Unversioned local builds and dirty builds refuse self-replacement. Valid `go install` module version metadata is recognized even without release linker flags.
+
+The executable's directory must be writable so the updater can stage and rename files. The command does not invoke `sudo`; if permissions prevent updating, fix the installation's ownership or reinstall into a user-writable directory such as `~/.local/bin`. The library creates the new executable with mode `0755` (subject to umask), attempts to restore the old executable if replacement fails, and reports rollback failures with a recovery path. Successful output includes the installed version and resolved destination. The next invocation uses the update; the command does not restart itself.
+
+Discovery has a five-second deadline; downloads and checksum retrieval have a five-minute deadline. Ctrl-C cancels network operations. Missing or mismatched checksums fail without changing the existing executable.
+
+**Older binaries, including v0.5.0, need the installer or manual installation once to gain this command.** `projectsetup upgrade` continues to regenerate a project's Dev Container configuration; use `self-update` to update the application itself.
 
 ## Initialize a project
 

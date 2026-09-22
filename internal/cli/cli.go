@@ -12,6 +12,7 @@ import (
 const usage = `Usage:
   projectsetup init [flags]
   projectsetup upgrade
+  projectsetup self-update
   projectsetup check [--build]
   projectsetup doctor
   projectsetup version
@@ -19,6 +20,7 @@ const usage = `Usage:
 Commands:
   init    Generate a Dev Container configuration
   upgrade Regenerate an existing projectsetup configuration
+  self-update Update the projectsetup executable
   check   Validate a generated configuration
   doctor  Diagnose host dependencies and dworm compatibility
   version Show version and build information
@@ -31,6 +33,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	}
 
 	switch args[0] {
+	case "self-update":
+		return runSelfUpdate(args[1:], stdout, stderr)
 	case "help", "-h", "--help":
 		_, err := io.WriteString(stdout, usage)
 		return err

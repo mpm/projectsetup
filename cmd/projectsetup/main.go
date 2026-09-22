@@ -10,16 +10,18 @@ import (
 
 func main() {
 	updateCh := make(chan *version.CheckResult, 1)
-	go func() {
-		updateCh <- version.CheckForUpdate()
-	}()
+	if len(os.Args) < 2 || os.Args[1] != "self-update" {
+		go func() {
+			updateCh <- version.CheckForUpdate()
+		}()
+	}
 
 	err := cli.Run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr)
 	select {
 	case result := <-updateCh:
 		if result != nil && result.UpdateAvailable {
 			fmt.Fprintf(os.Stderr, "\nA new version of projectsetup is available: %s (current: %s)\n", result.Latest, result.Current)
-			fmt.Fprintf(os.Stderr, "Download: %s\n", result.ReleaseURL)
+			fmt.Fprintf(os.Stderr, "Run projectsetup self-update to install it. Release: %s\n", result.ReleaseURL)
 		}
 	default:
 	}
