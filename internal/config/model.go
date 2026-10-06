@@ -3,7 +3,9 @@ package config
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
+	"strings"
 )
 
 const SchemaVersion = 1
@@ -17,16 +19,21 @@ const (
 	PresetPython Preset = "python"
 )
 
+// Presets returns every supported preset in display order.
+func Presets() []Preset {
+	return []Preset{PresetNode, PresetRuby, PresetRails, PresetPython}
+}
+
 func ParsePreset(value string) (Preset, error) {
 	preset := Preset(value)
 	if !preset.Valid() {
-		return "", fmt.Errorf("unsupported preset %q (expected node, ruby, rails, or python)", value)
+		return "", fmt.Errorf("unsupported preset %q (expected %s)", value, DescribeChoices(Presets()))
 	}
 	return preset, nil
 }
 
 func (p Preset) Valid() bool {
-	return p == PresetNode || p == PresetRuby || p == PresetRails || p == PresetPython
+	return slices.Contains(Presets(), p)
 }
 
 type Database string
@@ -37,16 +44,25 @@ const (
 	DatabaseSQLite   Database = "sqlite"
 )
 
+// DefaultDatabase is used when no database is selected.
+const DefaultDatabase = DatabaseNone
+
+// Databases returns every supported database option in display order. The
+// options do not depend on the preset.
+func Databases() []Database {
+	return []Database{DatabaseNone, DatabasePostgres, DatabaseSQLite}
+}
+
 func ParseDatabase(value string) (Database, error) {
 	database := Database(value)
 	if !database.Valid() {
-		return "", fmt.Errorf("unsupported database %q (expected none, postgres, or sqlite)", value)
+		return "", fmt.Errorf("unsupported database %q (expected %s)", value, DescribeChoices(Databases()))
 	}
 	return database, nil
 }
 
 func (d Database) Valid() bool {
-	return d == DatabaseNone || d == DatabasePostgres || d == DatabaseSQLite
+	return slices.Contains(Databases(), d)
 }
 
 type AITool string
@@ -57,16 +73,27 @@ const (
 	AIToolCodex    AITool = "codex"
 )
 
+// AITools returns every supported AI tool in display order. Any combination,
+// including none, may be selected.
+func AITools() []AITool {
+	return []AITool{AIToolOpenCode, AIToolClaude, AIToolCodex}
+}
+
+// DefaultAITools returns the AI tools used when no selection is made.
+func DefaultAITools() []AITool {
+	return []AITool{AIToolOpenCode}
+}
+
 func ParseAITool(value string) (AITool, error) {
 	tool := AITool(value)
 	if !tool.Valid() {
-		return "", fmt.Errorf("unsupported AI tool %q (expected opencode, claude, or codex)", value)
+		return "", fmt.Errorf("unsupported AI tool %q (expected %s)", value, DescribeChoices(AITools()))
 	}
 	return tool, nil
 }
 
 func (a AITool) Valid() bool {
-	return a == AIToolOpenCode || a == AIToolClaude || a == AIToolCodex
+	return slices.Contains(AITools(), a)
 }
 
 func AIHostDirectories(tools []AITool) []string {
@@ -104,26 +131,66 @@ func ParsePackageManager(value string) (PackageManager, error) {
 	return manager, nil
 }
 
-func (p PackageManager) Valid() bool {
-	switch p {
-	case PackageManagerNPM, PackageManagerPNPM, PackageManagerYarn,
-		PackageManagerPip, PackageManagerPoetry, PackageManagerUV:
-		return true
+// PackageManagers returns the package managers a preset accepts in display
+// order. Presets without a package-manager choice return an empty slice.
+func PackageManagers(preset Preset) []PackageManager {
+	switch preset {
+	case PresetNode:
+		return []PackageManager{PackageManagerNPM, PackageManagerPNPM, PackageManagerYarn}
+	case PresetPython:
+		return []PackageManager{PackageManagerPip, PackageManagerPoetry, PackageManagerUV}
 	default:
-		return false
+		return []PackageManager{}
 	}
 }
 
-func (p PackageManager) Supports(preset Preset) bool {
+// DefaultPackageManager returns the package manager used for preset when none
+// is selected or detected, or "" when the preset has no package-manager choice.
+func DefaultPackageManager(preset Preset) PackageManager {
 	switch preset {
 	case PresetNode:
-		return p == PackageManagerNPM || p == PackageManagerPNPM || p == PackageManagerYarn
+		return PackageManagerNPM
 	case PresetPython:
-		return p == PackageManagerPip || p == PackageManagerPoetry || p == PackageManagerUV
-	case PresetRuby, PresetRails:
-		return p == ""
+		return PackageManagerPip
 	default:
-		return false
+		return ""
+	}
+}
+
+func (p PackageManager) Valid() bool {
+	for _, preset := range Presets() {
+		if slices.Contains(PackageManagers(preset), p) {
+			return true
+		}
+	}
+	return false
+}
+
+// Supports reports whether p is acceptable for preset. The empty value is
+// supported only by valid presets without a package-manager choice.
+func (p PackageManager) Supports(preset Preset) bool {
+	managers := PackageManagers(preset)
+	if p == "" {
+		return preset.Valid() && len(managers) == 0
+	}
+	return slices.Contains(managers, p)
+}
+
+// DescribeChoices formats values as "a, b, or c" for messages and help text.
+func DescribeChoices[T ~string](values []T) string {
+	items := make([]string, len(values))
+	for i, value := range values {
+		items[i] = string(value)
+	}
+	switch len(items) {
+	case 0:
+		return ""
+	case 1:
+		return items[0]
+	case 2:
+		return items[0] + " or " + items[1]
+	default:
+		return strings.Join(items[:len(items)-1], ", ") + ", or " + items[len(items)-1]
 	}
 }
 

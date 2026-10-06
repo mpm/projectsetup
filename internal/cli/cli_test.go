@@ -704,3 +704,183 @@ func TestRunInitForceRegeneratesLegacyInvalidProjectName(t *testing.T) {
 	}
 	assertConsistentProjectName(t, root, "a-b")
 }
+
+const wantListOptionsJSON = `{
+  "schemaVersion": 1,
+  "presets": [
+    "node",
+    "ruby",
+    "rails",
+    "python"
+  ],
+  "packageManagers": {
+    "node": [
+      "npm",
+      "pnpm",
+      "yarn"
+    ],
+    "python": [
+      "pip",
+      "poetry",
+      "uv"
+    ],
+    "rails": [],
+    "ruby": []
+  },
+  "databases": [
+    "none",
+    "postgres",
+    "sqlite"
+  ],
+  "aiTools": [
+    "opencode",
+    "claude",
+    "codex"
+  ],
+  "projectNamePattern": "^[a-z0-9][a-z0-9_-]*$",
+  "defaults": {
+    "node": {
+      "packageManager": "npm",
+      "languageVersion": "24",
+      "database": "none",
+      "aiTools": [
+        "opencode"
+      ]
+    },
+    "python": {
+      "packageManager": "pip",
+      "languageVersion": "3.13",
+      "database": "none",
+      "aiTools": [
+        "opencode"
+      ]
+    },
+    "rails": {
+      "packageManager": null,
+      "languageVersion": "3.3",
+      "database": "none",
+      "aiTools": [
+        "opencode"
+      ]
+    },
+    "ruby": {
+      "packageManager": null,
+      "languageVersion": "3.3",
+      "database": "none",
+      "aiTools": [
+        "opencode"
+      ]
+    }
+  }
+}
+`
+
+func TestRunInitListOptionsJSON(t *testing.T) {
+	// Ambiguous detection must not matter: listing neither detects nor prompts.
+	root := t.TempDir()
+	for _, name := range []string{"package.json", "pyproject.toml"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte("{}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, args := range [][]string{
+		{"--list-options", "--json"},
+		{"--json", "--list-options", "--non-interactive"},
+	} {
+		var stdout, stderr bytes.Buffer
+		if err := runInit(root, args, strings.NewReader(""), &stdout, &stderr); err != nil {
+			t.Fatalf("runInit(%v) error = %v", args, err)
+		}
+		if stdout.String() != wantListOptionsJSON {
+			t.Fatalf("runInit(%v) stdout =\n%s\nwant\n%s", args, stdout.String(), wantListOptionsJSON)
+		}
+		if stderr.Len() != 0 {
+			t.Fatalf("runInit(%v) stderr = %q", args, stderr.String())
+		}
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("listing options changed the project directory: %v", entries)
+	}
+}
+
+func TestRunInitListOptionsText(t *testing.T) {
+	root := t.TempDir()
+	var stdout bytes.Buffer
+	if err := runInit(root, []string{"--list-options"}, strings.NewReader(""), &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runInit() error = %v", err)
+	}
+	for _, want := range []string{
+		"Presets: node, ruby, rails, python\n",
+		"  node: npm (default), pnpm, yarn\n",
+		"  ruby: none\n",
+		"  python: pip (default), poetry, uv\n",
+		"Databases (--database): none (default), postgres, sqlite\n",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout lacks %q:\n%s", want, stdout.String())
+		}
+	}
+	if entries, err := os.ReadDir(root); err != nil || len(entries) != 0 {
+		t.Fatalf("listing options wrote files: %v %v", entries, err)
+	}
+}
+
+func TestRunInitListOptionsRejectsMisuse(t *testing.T) {
+	tests := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"--list-options", "--preset", "node"}, "--list-options cannot be combined with --preset"},
+		{[]string{"--list-options", "--json", "--force", "--ai", "none"}, "--list-options cannot be combined with --ai, --force"},
+		{[]string{"--json", "--non-interactive", "--preset", "node"}, "--json requires --list-options"},
+	}
+	for _, tt := range tests {
+		root := t.TempDir()
+		var stdout bytes.Buffer
+		err := runInit(root, tt.args, strings.NewReader(""), &stdout, &bytes.Buffer{})
+		if err == nil || !strings.Contains(err.Error(), tt.want) {
+			t.Fatalf("runInit(%v) error = %v, want %q", tt.args, err, tt.want)
+		}
+		if entries, readErr := os.ReadDir(root); readErr != nil || len(entries) != 0 {
+			t.Fatalf("runInit(%v) wrote files: %v %v", tt.args, entries, readErr)
+		}
+	}
+}
+
+func TestListOptionsJSONRoundTripsWithInit(t *testing.T) {
+	var options config.Options
+	if err := json.Unmarshal([]byte(wantListOptionsJSON), &options); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(options, config.ListOptions()) {
+		t.Fatalf("golden JSON does not match config.ListOptions()")
+	}
+	t.Setenv("HOME", t.TempDir())
+	for _, preset := range options.Presets {
+		managers := options.PackageManagers[preset]
+		if len(managers) == 0 {
+			managers = []config.PackageManager{""}
+		}
+		for _, manager := range managers {
+			for _, database := range options.Databases {
+				root := t.TempDir()
+				args := []string{"--non-interactive", "--preset", string(preset), "--database", string(database), "--ai", joinChoices(options.AITools, ",")}
+				if manager != "" {
+					args = append(args, "--package-manager", string(manager))
+				}
+				if err := runInit(root, args, strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+					t.Errorf("runInit(%v) error = %v", args, err)
+				}
+			}
+		}
+	}
+	root := t.TempDir()
+	err := runInit(root, []string{"--non-interactive", "--preset", "node", "--package-manager", "bun"}, strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil {
+		t.Fatal("runInit accepted unlisted package manager bun")
+	}
+}

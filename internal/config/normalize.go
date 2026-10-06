@@ -32,7 +32,7 @@ type Input struct {
 
 func Normalize(input Input) (Config, error) {
 	if !input.Preset.Valid() {
-		return Config{}, fmt.Errorf("preset is required and must be node, ruby, rails, or python")
+		return Config{}, fmt.Errorf("preset is required and must be %s", DescribeChoices(Presets()))
 	}
 
 	name := input.ProjectName
@@ -48,10 +48,10 @@ func Normalize(input Input) (Config, error) {
 
 	database := input.Database
 	if database == "" {
-		database = DatabaseNone
+		database = DefaultDatabase
 	}
 	if !database.Valid() {
-		return Config{}, fmt.Errorf("database must be none, postgres, or sqlite")
+		return Config{}, fmt.Errorf("database must be %s", DescribeChoices(Databases()))
 	}
 
 	tools, err := normalizeAITools(input.AITools)
@@ -61,12 +61,7 @@ func Normalize(input Input) (Config, error) {
 
 	manager := input.PackageManager
 	if manager == "" {
-		switch input.Preset {
-		case PresetNode:
-			manager = PackageManagerNPM
-		case PresetPython:
-			manager = PackageManagerPip
-		}
+		manager = DefaultPackageManager(input.Preset)
 	}
 	if !manager.Supports(input.Preset) {
 		return Config{}, fmt.Errorf("package manager %q is not supported for preset %q", manager, input.Preset)
@@ -186,7 +181,7 @@ func DefaultLanguageVersion(preset Preset) string {
 
 func normalizeAITools(values []AITool) ([]AITool, error) {
 	if values == nil {
-		return []AITool{AIToolOpenCode}, nil
+		return DefaultAITools(), nil
 	}
 	seen := make(map[AITool]bool, len(values))
 	for _, value := range values {

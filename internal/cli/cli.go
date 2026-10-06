@@ -11,6 +11,7 @@ import (
 
 const usage = `Usage:
   projectsetup init [flags]
+  projectsetup init --list-options [--json]
   projectsetup upgrade
   projectsetup self-update
   projectsetup check [--build]
@@ -19,6 +20,7 @@ const usage = `Usage:
 
 Commands:
   init    Generate a Dev Container configuration
+          (--list-options prints accepted values; add --json for JSON)
   upgrade Regenerate an existing projectsetup configuration
   self-update Update the projectsetup executable
   check   Validate a generated configuration

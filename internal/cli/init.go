@@ -45,10 +45,10 @@ func (ports *repeatedPorts) Set(value string) error {
 func runInit(root string, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("projectsetup init", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	presetValue := flags.String("preset", "", "node, ruby, rails, or python")
+	presetValue := flags.String("preset", "", config.DescribeChoices(config.Presets()))
 	name := flags.String("name", "", "project name")
-	databaseValue := flags.String("database", "", "none, postgres, or sqlite")
-	aiValue := flags.String("ai", "", "comma-separated opencode, claude, codex; or none")
+	databaseValue := flags.String("database", "", config.DescribeChoices(config.Databases()))
+	aiValue := flags.String("ai", "", "comma-separated "+joinChoices(config.AITools(), ", ")+"; or none")
 	nodeVersion := flags.String("node-version", "", "Node version")
 	rubyVersion := flags.String("ruby-version", "", "Ruby version")
 	pythonVersion := flags.String("python-version", "", "Python version")
@@ -59,6 +59,8 @@ func runInit(root string, args []string, stdin io.Reader, stdout, stderr io.Writ
 	flags.Var(&systemPackages, "system-package", "additional apt package (repeatable)")
 	nonInteractive := flags.Bool("non-interactive", false, "fail instead of prompting for missing values")
 	force := flags.Bool("force", false, "replace an existing projectsetup-generated directory")
+	listOptions := flags.Bool("list-options", false, "list accepted presets, package managers, databases, and AI tools without generating files")
+	jsonOutput := flags.Bool("json", false, "with --list-options, print the listing as JSON")
 	if err := flags.Parse(args); err != nil {
 		if err == flag.ErrHelp {
 			return nil
@@ -70,9 +72,24 @@ func runInit(root string, args []string, stdin io.Reader, stdout, stderr io.Writ
 	}
 
 	provided := make(map[string]bool)
+	var generationFlags []string
 	flags.Visit(func(value *flag.Flag) {
 		provided[value.Name] = true
+		switch value.Name {
+		case "list-options", "json", "non-interactive":
+		default:
+			generationFlags = append(generationFlags, "--"+value.Name)
+		}
 	})
+	if *listOptions {
+		if len(generationFlags) > 0 {
+			return fmt.Errorf("--list-options cannot be combined with %s", strings.Join(generationFlags, ", "))
+		}
+		return writeOptions(stdout, config.ListOptions(), *jsonOutput)
+	}
+	if *jsonOutput {
+		return fmt.Errorf("--json requires --list-options")
+	}
 
 	detected, err := detect.Detect(root)
 	if err != nil {
@@ -268,9 +285,7 @@ func choosePreset(value string, detected detect.Result, prompt *prompter) (confi
 	if len(detected.Presets) == 1 {
 		return detected.Presets[0], nil
 	}
-	defaultValue := ""
-	choices := []string{"node", "ruby", "rails", "python"}
-	selected, err := prompt.choice("Preset", choices, defaultValue)
+	selected, err := prompt.choice("Preset", choiceStrings(config.Presets()), "")
 	if err != nil {
 		return "", err
 	}
@@ -284,16 +299,8 @@ func choosePackageManager(value string, preset config.Preset, detail detect.Pres
 	if len(detail.PackageManagerCandidates) == 1 {
 		return detail.PackageManagerCandidates[0], nil
 	}
-	var choices []string
-	defaultValue := ""
-	switch preset {
-	case config.PresetNode:
-		choices = []string{"npm", "pnpm", "yarn"}
-		defaultValue = "npm"
-	case config.PresetPython:
-		choices = []string{"pip", "poetry", "uv"}
-		defaultValue = "pip"
-	}
+	choices := choiceStrings(config.PackageManagers(preset))
+	defaultValue := string(config.DefaultPackageManager(preset))
 	if len(detail.PackageManagerCandidates) > 1 {
 		defaultValue = ""
 	}
@@ -308,11 +315,11 @@ func chooseDatabase(value string, wasProvided bool, detail detect.PresetResult, 
 	if wasProvided || prompt == nil {
 		return resolveDatabase(value)
 	}
-	defaultValue := string(config.DatabaseNone)
+	defaultValue := string(config.DefaultDatabase)
 	if detail.SuggestedDatabase == config.DatabasePostgres {
 		defaultValue = string(config.DatabasePostgres)
 	}
-	selected, err := prompt.choice("Database", []string{"none", "postgres", "sqlite"}, defaultValue)
+	selected, err := prompt.choice("Database", choiceStrings(config.Databases()), defaultValue)
 	if err != nil {
 		return "", err
 	}
@@ -352,11 +359,11 @@ func resolvePreset(value string, detected detect.Result) (config.Preset, error) 
 	}
 	switch len(detected.Presets) {
 	case 0:
-		return "", fmt.Errorf("could not infer a preset; pass --preset node, ruby, rails, or python")
+		return "", fmt.Errorf("could not infer a preset; pass --preset %s", config.DescribeChoices(config.Presets()))
 	case 1:
 		return detected.Presets[0], nil
 	default:
-		return "", fmt.Errorf("multiple project presets detected (%s); pass --preset explicitly", joinPresets(detected.Presets))
+		return "", fmt.Errorf("multiple project presets detected (%s); pass --preset explicitly", joinChoices(detected.Presets, ", "))
 	}
 }
 
@@ -408,7 +415,7 @@ func parseAITools(value string, provided bool) ([]config.AITool, error) {
 	for _, part := range strings.Split(value, ",") {
 		tool, err := config.ParseAITool(strings.TrimSpace(part))
 		if err != nil {
-			return nil, fmt.Errorf("--ai: %w; use comma-separated opencode, claude, codex, or none alone", err)
+			return nil, fmt.Errorf("--ai: %w; use comma-separated %s, or none alone", err, joinChoices(config.AITools(), ", "))
 		}
 		tools = append(tools, tool)
 	}
@@ -440,12 +447,4 @@ func resolveLanguageVersion(preset config.Preset, node, ruby, python, detected s
 		}
 	}
 	return detected, nil
-}
-
-func joinPresets(presets []config.Preset) string {
-	values := make([]string, len(presets))
-	for i, preset := range presets {
-		values[i] = string(preset)
-	}
-	return strings.Join(values, ", ")
 }

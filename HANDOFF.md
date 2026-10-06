@@ -91,7 +91,11 @@ Initial flags:
 --system-package PACKAGE     repeatable
 --non-interactive
 --force
+--list-options               print accepted values and exit
+--json                       with --list-options, print JSON
 ```
+
+`init --list-options [--json]` lists the accepted presets, per-preset package managers, databases, AI tools, project-name pattern, and per-preset defaults, derived from the same typed tables used for validation. It does not detect, prompt, or touch the project directory, and rejects generation flags.
 
 Behavior:
 
