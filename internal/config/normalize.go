@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -8,7 +9,12 @@ import (
 	"strings"
 )
 
-var invalidNameCharacters = regexp.MustCompile(`[^a-z0-9._-]+`)
+// ProjectNamePattern matches project names that are used as-is for the Compose
+// project, the Dev Container name, the manifest, and the workspace folder.
+const ProjectNamePattern = `^[a-z0-9][a-z0-9_-]*$`
+
+var validProjectName = regexp.MustCompile(ProjectNamePattern)
+var invalidNameCharacters = regexp.MustCompile(`[^a-z0-9_-]+`)
 var validSystemPackage = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9+.-]*$`)
 var validLanguageVersion = regexp.MustCompile(`^[0-9]+(?:\.[0-9]+){0,2}(?:[-+][a-zA-Z0-9.-]+)?$`)
 
@@ -29,17 +35,15 @@ func Normalize(input Input) (Config, error) {
 		return Config{}, fmt.Errorf("preset is required and must be node, ruby, rails, or python")
 	}
 
-	name := strings.TrimSpace(input.ProjectName)
+	name := input.ProjectName
 	if name == "" {
-		root, err := filepath.Abs(input.Root)
+		derived, err := DefaultProjectName(input.Root)
 		if err != nil {
-			return Config{}, fmt.Errorf("resolve project root: %w", err)
+			return Config{}, err
 		}
-		name = filepath.Base(root)
-	}
-	name = SanitizeName(name)
-	if name == "" {
-		return Config{}, fmt.Errorf("project name must contain at least one letter or number")
+		name = derived
+	} else if err := ValidateProjectName(name); err != nil {
+		return Config{}, err
 	}
 
 	database := input.Database
@@ -97,7 +101,6 @@ func Normalize(input Input) (Config, error) {
 	}
 
 	serviceName := "app"
-	composeProjectName := RuntimeProjectName(name)
 	return Config{
 		SchemaVersion:   SchemaVersion,
 		ProjectName:     name,
@@ -115,21 +118,57 @@ func Normalize(input Input) (Config, error) {
 		Container: Container{
 			User:               "vscode",
 			Home:               "/home/vscode",
-			ComposeProjectName: composeProjectName,
+			ComposeProjectName: name,
 			ServiceName:        serviceName,
 		},
 	}, nil
 }
 
-func SanitizeName(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	value = invalidNameCharacters.ReplaceAllString(value, "-")
-	return strings.Trim(value, ".-_")
+// ValidProjectName reports whether name can be used unchanged as the project name.
+func ValidProjectName(name string) bool {
+	return validProjectName.MatchString(name)
 }
 
-// RuntimeProjectName returns a project prefix accepted by Docker Compose.
-func RuntimeProjectName(projectName string) string {
-	return strings.ReplaceAll(projectName, ".", "-")
+// ValidateProjectName returns an actionable error when name cannot be used
+// unchanged, suggesting the normalized alternative when one exists.
+func ValidateProjectName(name string) error {
+	if ValidProjectName(name) {
+		return nil
+	}
+	rule := fmt.Sprintf("it must match %s (lowercase letters, digits, '-' and '_', starting with a letter or digit)", ProjectNamePattern)
+	if name == "" {
+		return errors.New("project name is required; " + rule)
+	}
+	message := fmt.Sprintf("project name %q is invalid; %s", name, rule)
+	if suggestion := SanitizeName(name); suggestion != "" {
+		message += fmt.Sprintf("; use %q instead", suggestion)
+	}
+	return errors.New(message)
+}
+
+// SanitizeName converts value into a valid project name, or returns "" when
+// nothing usable remains. Valid names are returned unchanged.
+func SanitizeName(value string) string {
+	if ValidProjectName(value) {
+		return value
+	}
+	value = strings.ToLower(strings.TrimSpace(value))
+	value = invalidNameCharacters.ReplaceAllString(value, "-")
+	return strings.Trim(value, "-_")
+}
+
+// DefaultProjectName derives a valid project name from the project directory.
+func DefaultProjectName(root string) (string, error) {
+	absolute, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("resolve project root: %w", err)
+	}
+	base := filepath.Base(absolute)
+	name := SanitizeName(base)
+	if name == "" {
+		return "", fmt.Errorf("cannot derive a project name from directory %q; provide a name matching %s", base, ProjectNamePattern)
+	}
+	return name, nil
 }
 
 func DefaultLanguageVersion(preset Preset) string {

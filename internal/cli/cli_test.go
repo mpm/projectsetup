@@ -2,7 +2,9 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -12,6 +14,7 @@ import (
 	"github.com/mpm/projectsetup/internal/config"
 	"github.com/mpm/projectsetup/internal/doctor"
 	"github.com/mpm/projectsetup/internal/generate"
+	"github.com/mpm/projectsetup/internal/validate"
 )
 
 func TestRunHelp(t *testing.T) {
@@ -413,4 +416,291 @@ func TestUpgradeReplacesOnlyAISelection(t *testing.T) {
 			}
 		})
 	}
+}
+
+func writeNodeProject(t *testing.T, root string) {
+	t.Helper()
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"engines":{"node":"22"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// assertConsistentProjectName verifies that every generated file uses want as
+// the project name.
+func assertConsistentProjectName(t *testing.T, root, want string) {
+	t.Helper()
+	devDir := filepath.Join(root, ".devcontainer")
+	var devcontainer struct {
+		Name            string `json:"name"`
+		WorkspaceFolder string `json:"workspaceFolder"`
+	}
+	data, err := os.ReadFile(filepath.Join(devDir, "devcontainer.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &devcontainer); err != nil {
+		t.Fatalf("parse devcontainer.json: %v", err)
+	}
+	if devcontainer.Name != want || devcontainer.WorkspaceFolder != "/workspaces/"+want {
+		t.Errorf("devcontainer.json name = %q, workspaceFolder = %q; want %q", devcontainer.Name, devcontainer.WorkspaceFolder, want)
+	}
+	file, err := os.Open(filepath.Join(devDir, "projectsetup.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	manifest, err := config.ReadManifest(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.ProjectName != want {
+		t.Errorf("projectsetup.json projectName = %q, want %q", manifest.ProjectName, want)
+	}
+	compose, err := os.ReadFile(filepath.Join(devDir, "compose.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(string(compose), "\n")
+	var composeNames []string
+	for _, line := range lines {
+		if strings.HasPrefix(line, "name: ") {
+			composeNames = append(composeNames, strings.TrimPrefix(line, "name: "))
+		}
+	}
+	if !reflect.DeepEqual(composeNames, []string{want}) {
+		t.Errorf("compose.yaml project names = %q, want [%q]", composeNames, want)
+	}
+	if !strings.Contains(string(compose), "- ..:/workspaces/"+want+"\n") {
+		t.Errorf("compose.yaml does not mount the workspace at /workspaces/%s:\n%s", want, compose)
+	}
+}
+
+func TestRunInitUsesValidExplicitNameEverywhere(t *testing.T) {
+	for _, name := range []string{"my-app", "my_app", "app2", "9lives"} {
+		t.Run(name, func(t *testing.T) {
+			root := filepath.Join(t.TempDir(), "Some.Directory")
+			t.Setenv("HOME", t.TempDir())
+			writeNodeProject(t, root)
+			var stdout bytes.Buffer
+			if err := runInit(root, []string{"--non-interactive", "--preset", "node", "--ai", "none", "--database", "postgres", "--name", name}, &bytes.Buffer{}, &stdout, &bytes.Buffer{}); err != nil {
+				t.Fatalf("runInit() error = %v", err)
+			}
+			if !strings.Contains(stdout.String(), "Generated .devcontainer for "+name+" ") {
+				t.Errorf("stdout = %q", stdout.String())
+			}
+			assertConsistentProjectName(t, root, name)
+		})
+	}
+}
+
+func TestRunInitNonInteractiveRejectsInvalidName(t *testing.T) {
+	tests := []struct {
+		name       string
+		suggestion string
+	}{
+		{name: "My App", suggestion: "my-app"},
+		{name: "a.b", suggestion: "a-b"},
+		{name: "über", suggestion: "ber"},
+		{name: "-dash", suggestion: "dash"},
+		{name: "x/y", suggestion: "x-y"},
+		{name: "_x", suggestion: "x"},
+		{name: "ü"},
+		{name: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			t.Setenv("HOME", t.TempDir())
+			writeNodeProject(t, root)
+			err := runInit(root, []string{"--non-interactive", "--preset", "node", "--ai", "none", "--name", tt.name}, &bytes.Buffer{}, &bytes.Buffer{}, &bytes.Buffer{})
+			if err == nil {
+				t.Fatal("runInit() succeeded, want invalid name error")
+			}
+			message := err.Error()
+			if !strings.HasPrefix(message, "--name: ") || !strings.Contains(message, config.ProjectNamePattern) {
+				t.Errorf("error %q does not identify --name and the allowed pattern", message)
+			}
+			if tt.name != "" && !strings.Contains(message, fmt.Sprintf("%q", tt.name)) {
+				t.Errorf("error %q does not name the invalid value", message)
+			}
+			if tt.suggestion != "" && !strings.Contains(message, fmt.Sprintf("use %q instead", tt.suggestion)) {
+				t.Errorf("error %q does not suggest %q", message, tt.suggestion)
+			}
+			if _, err := os.Stat(filepath.Join(root, ".devcontainer")); !os.IsNotExist(err) {
+				t.Fatalf(".devcontainer exists after rejected name: %v", err)
+			}
+		})
+	}
+}
+
+func TestRunInitNormalizesDirectoryDerivedName(t *testing.T) {
+	tests := []struct {
+		directory string
+		want      string
+		wantErr   bool
+	}{
+		{directory: "plain-app", want: "plain-app"},
+		{directory: "a.b", want: "a-b"},
+		{directory: "My App", want: "my-app"},
+		{directory: "-dash", want: "dash"},
+		{directory: "über", want: "ber"},
+		{directory: "üü", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.directory, func(t *testing.T) {
+			root := filepath.Join(t.TempDir(), tt.directory)
+			t.Setenv("HOME", t.TempDir())
+			writeNodeProject(t, root)
+			err := runInit(root, []string{"--non-interactive", "--preset", "node", "--ai", "none", "--database", "postgres"}, &bytes.Buffer{}, &bytes.Buffer{}, &bytes.Buffer{})
+			if tt.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "--name") || !strings.Contains(err.Error(), config.ProjectNamePattern) {
+					t.Fatalf("runInit() error = %v, want actionable name error", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("runInit() error = %v", err)
+			}
+			assertConsistentProjectName(t, root, tt.want)
+		})
+	}
+}
+
+func TestRunInitInteractiveProposesNormalizedName(t *testing.T) {
+	tests := []struct {
+		name  string
+		args  []string
+		dir   string
+		input string
+		want  string
+	}{
+		{name: "invalid flag accepts proposal", args: []string{"--name", "a.b"}, dir: "project", input: "\ny\n", want: "a-b"},
+		{name: "invalid flag then invalid answer then custom", args: []string{"--name", "My App"}, dir: "project", input: "Not.Valid\ncustom_name\ny\n", want: "custom_name"},
+		{name: "invalid directory accepts proposal", dir: "My.App", input: "\ny\n", want: "my-app"},
+		{name: "unusable directory requires answer", dir: "üü", input: "\nchosen\ny\n", want: "chosen"},
+		{name: "valid flag is not prompted", args: []string{"--name", "direct"}, dir: "Other Dir", input: "y\n", want: "direct"},
+		{name: "valid directory is not prompted", dir: "valid-dir", input: "y\n", want: "valid-dir"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := filepath.Join(t.TempDir(), tt.dir)
+			t.Setenv("HOME", t.TempDir())
+			writeNodeProject(t, root)
+			args := append([]string{"--preset", "node", "--package-manager", "npm", "--database", "none", "--ai", "none", "--node-version", "22"}, tt.args...)
+			var stdout bytes.Buffer
+			if err := runInit(root, args, strings.NewReader(tt.input), &stdout, &bytes.Buffer{}); err != nil {
+				t.Fatalf("runInit() error = %v\nstdout:\n%s", err, stdout.String())
+			}
+			if !strings.Contains(stdout.String(), "Project: "+tt.want+"\n") {
+				t.Errorf("summary does not show project %q:\n%s", tt.want, stdout.String())
+			}
+			assertConsistentProjectName(t, root, tt.want)
+		})
+	}
+}
+
+func TestRunInitInteractiveRepromptsInvalidName(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	writeNodeProject(t, root)
+	args := []string{"--preset", "node", "--package-manager", "npm", "--database", "none", "--ai", "none", "--name", "x/y"}
+	var stdout bytes.Buffer
+	if err := runInit(root, args, strings.NewReader("bad name\n"), &stdout, &bytes.Buffer{}); err == nil {
+		t.Fatal("runInit() succeeded after input ended")
+	}
+	output := stdout.String()
+	for _, want := range []string{`--name: project name "x/y" is invalid`, `Project name [x-y]: `, `project name "bad name" is invalid`, config.ProjectNamePattern} {
+		if !strings.Contains(output, want) {
+			t.Errorf("stdout does not contain %q:\n%s", want, output)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, ".devcontainer")); !os.IsNotExist(err) {
+		t.Fatalf(".devcontainer exists after aborted prompt: %v", err)
+	}
+}
+
+// legacyDottedProject simulates a v0.6.0 configuration generated with
+// --name a.b, whose manifest and devcontainer.json kept the dot.
+func legacyDottedProject(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "a-b", Preset: config.PresetNode, AITools: []config.AITool{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := generate.Write(root, cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	devDir := filepath.Join(root, ".devcontainer")
+	for name, replacements := range map[string][][2]string{
+		"projectsetup.json": {{`"projectName": "a-b"`, `"projectName": "a.b"`}},
+		"devcontainer.json": {{`"name": "a-b"`, `"name": "a.b"`}, {"/workspaces/a-b", "/workspaces/a.b"}},
+		"compose.yaml":      {{"/workspaces/a-b", "/workspaces/a.b"}},
+	} {
+		path := filepath.Join(devDir, name)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(data)
+		for _, replacement := range replacements {
+			if !strings.Contains(text, replacement[0]) {
+				t.Fatalf("%s does not contain %q", name, replacement[0])
+			}
+			text = strings.ReplaceAll(text, replacement[0], replacement[1])
+		}
+		if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
+}
+
+func TestRunUpgradeRejectsLegacyInvalidProjectName(t *testing.T) {
+	root := legacyDottedProject(t)
+	before, err := os.ReadFile(filepath.Join(root, ".devcontainer", "devcontainer.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = runUpgrade(root, nil, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil {
+		t.Fatal("runUpgrade() succeeded, want invalid project name error")
+	}
+	for _, want := range []string{`"a.b"`, `use "a-b" instead`, "init --force --name"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not contain %q", err, want)
+		}
+	}
+	after, err := os.ReadFile(filepath.Join(root, ".devcontainer", "devcontainer.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("upgrade modified files despite rejecting the manifest")
+	}
+}
+
+func TestCheckReportsLegacyInvalidProjectName(t *testing.T) {
+	root := legacyDottedProject(t)
+	diagnostics := validate.Check(root, validate.Options{})
+	var messages []string
+	for _, diagnostic := range diagnostics {
+		messages = append(messages, diagnostic.Path+": "+diagnostic.Message)
+	}
+	joined := strings.Join(messages, "\n")
+	if validate.ErrorCount(diagnostics) == 0 || !strings.Contains(joined, `projectName: project name "a.b" is invalid`) || !strings.Contains(joined, `use "a-b" instead`) {
+		t.Fatalf("check diagnostics do not report the invalid project name:\n%s", joined)
+	}
+}
+
+func TestRunInitForceRegeneratesLegacyInvalidProjectName(t *testing.T) {
+	root := legacyDottedProject(t)
+	if err := runInit(root, []string{"--non-interactive", "--preset", "node", "--ai", "none", "--force", "--name", "a-b"}, &bytes.Buffer{}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runInit() error = %v", err)
+	}
+	assertConsistentProjectName(t, root, "a-b")
 }

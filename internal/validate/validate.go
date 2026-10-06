@@ -165,8 +165,8 @@ func validateManifest(root string, manifest config.Manifest, add func(Severity, 
 	if !manifest.Database.Valid() {
 		fail("unsupported database %q", manifest.Database)
 	}
-	if manifest.ProjectName == "" || config.SanitizeName(manifest.ProjectName) != manifest.ProjectName {
-		fail("projectName %q is not a normalized project name", manifest.ProjectName)
+	if err := config.ValidateProjectName(manifest.ProjectName); err != nil {
+		fail("projectName: %v; regenerate with projectsetup init --force --name NAME", err)
 	}
 	if manifest.LanguageVersion == "" {
 		fail("languageVersion is required")
@@ -373,7 +373,7 @@ func validateCompose(root, devDir string, manifest config.Manifest, document dev
 		return
 	}
 	text := string(data)
-	wantName := "name: " + config.RuntimeProjectName(manifest.ProjectName)
+	wantName := "name: " + manifest.ProjectName
 	if !containsString(strings.Split(text, "\n"), wantName) {
 		add(Error, relative(root, path), "missing expected Compose configuration %q", wantName)
 	}

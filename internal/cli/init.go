@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -86,6 +87,10 @@ func runInit(root string, args []string, stdin io.Reader, stdout, stderr io.Writ
 		prompt = newPrompter(stdin, stdout)
 	}
 
+	projectName, err := chooseProjectName(root, *name, provided["name"], prompt)
+	if err != nil {
+		return err
+	}
 	preset, err := choosePreset(*presetValue, detected, prompt)
 	if err != nil {
 		return err
@@ -116,7 +121,7 @@ func runInit(root string, args []string, stdin io.Reader, stdout, stderr io.Writ
 
 	cfg, err := config.Normalize(config.Input{
 		Root:            root,
-		ProjectName:     *name,
+		ProjectName:     projectName,
 		Preset:          preset,
 		Database:        database,
 		AITools:         tools,
@@ -204,6 +209,56 @@ func (p *prompter) confirm(label string) (bool, error) {
 			fmt.Fprintln(p.output, "Please answer yes or no.")
 		}
 	}
+}
+
+func (p *prompter) projectName(defaultValue string) (string, error) {
+	for {
+		value, err := p.ask("Project name", defaultValue)
+		if err != nil {
+			return "", err
+		}
+		if err := config.ValidateProjectName(value); err != nil {
+			fmt.Fprintf(p.output, "%v.\n", err)
+			continue
+		}
+		return value, nil
+	}
+}
+
+// chooseProjectName returns the single project name used for every generated
+// file. An explicit --name must be valid as-is; non-interactive mode rejects
+// invalid values, and interactive mode proposes the normalized name instead.
+// Directory-derived names are normalized, and interactive mode asks for
+// confirmation when normalization changed them.
+func chooseProjectName(root, value string, wasProvided bool, prompt *prompter) (string, error) {
+	if wasProvided {
+		err := config.ValidateProjectName(value)
+		if err == nil {
+			return value, nil
+		}
+		if prompt == nil {
+			return "", fmt.Errorf("--name: %w", err)
+		}
+		fmt.Fprintf(prompt.output, "--name: %v.\n", err)
+		return prompt.projectName(config.SanitizeName(value))
+	}
+	absolute, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("resolve project root: %w", err)
+	}
+	base := filepath.Base(absolute)
+	if config.ValidProjectName(base) {
+		return base, nil
+	}
+	if prompt == nil {
+		name, err := config.DefaultProjectName(root)
+		if err != nil {
+			return "", fmt.Errorf("%w; pass --name NAME", err)
+		}
+		return name, nil
+	}
+	fmt.Fprintf(prompt.output, "Directory name %q is not a valid project name; it must match %s.\n", base, config.ProjectNamePattern)
+	return prompt.projectName(config.SanitizeName(base))
 }
 
 func choosePreset(value string, detected detect.Result, prompt *prompter) (config.Preset, error) {

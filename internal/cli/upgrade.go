@@ -51,6 +51,10 @@ func runUpgrade(root string, args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("cannot upgrade schemaVersion %d; this version supports schemaVersion %d", manifest.SchemaVersion, config.SchemaVersion)
 	}
 
+	if err := config.ValidateProjectName(manifest.ProjectName); err != nil {
+		return fmt.Errorf("refusing to upgrade %q: manifest projectName: %w; upgrade does not rename projects, regenerate with projectsetup init --force --name NAME", filepath.Dir(path), err)
+	}
+
 	input := config.Input{
 		Root:            root,
 		ProjectName:     manifest.ProjectName,
