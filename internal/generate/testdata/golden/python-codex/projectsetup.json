@@ -7,7 +7,7 @@
     "codex"
   ],
   "packageManager": "pip",
-  "languageVersion": "3.13",
+  "languageVersion": "3.14",
   "ports": [],
   "systemPackages": [],
   "generatedBy": "projectsetup"

@@ -25,7 +25,7 @@ func (runner *fakeRunner) Run(name string, args ...string) ([]byte, error) {
 func TestCheckAcceptsGeneratedConfiguration(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", t.TempDir())
-	if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"engines":{"node":"24"}}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"engines":{"node":"26"}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: config.PresetNode, AITools: []config.AITool{}})
@@ -91,7 +91,7 @@ func TestCheckRejectsMismatchedRubyFeature(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(strings.Replace(string(data), `"version": "3.3"`, `"version": "3.2"`, 1)), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(strings.Replace(string(data), `"version": "4.0"`, `"version": "3.2"`, 1)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	diagnostics := validate.Check(root, validate.Options{})

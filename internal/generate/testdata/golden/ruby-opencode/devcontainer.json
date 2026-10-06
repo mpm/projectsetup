@@ -9,7 +9,7 @@
     "ghcr.io/devcontainers/features/github-cli:1": {},
     "ghcr.io/rails/devcontainer/features/ruby:2": {
       "usePrecompiledRubies": true,
-      "version": "3.3"
+      "version": "4.0"
     }
   },
   "containerEnv": {

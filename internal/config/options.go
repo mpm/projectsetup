@@ -22,6 +22,7 @@ type PresetDefaults struct {
 	PackageManager  *PackageManager `json:"packageManager"`
 	LanguageVersion string          `json:"languageVersion"`
 	Database        Database        `json:"database"`
+	PostgresVersion string          `json:"postgresVersion"`
 	AITools         []AITool        `json:"aiTools"`
 }
 
@@ -41,6 +42,7 @@ func ListOptions() Options {
 		defaults := PresetDefaults{
 			LanguageVersion: DefaultLanguageVersion(preset),
 			Database:        DefaultDatabase,
+			PostgresVersion: DefaultPostgresVersion,
 			AITools:         DefaultAITools(),
 		}
 		if manager := DefaultPackageManager(preset); manager != "" {

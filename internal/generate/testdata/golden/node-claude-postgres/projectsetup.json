@@ -9,6 +9,7 @@
   ],
   "packageManager": "pnpm",
   "languageVersion": "20",
+  "postgresVersion": "18",
   "ports": [
     5173
   ],

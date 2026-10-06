@@ -201,7 +201,7 @@ func validateManifest(root string, manifest config.Manifest, add func(Severity, 
 		}
 	}
 	if valid {
-		_, err := config.Normalize(config.Input{Root: root, ProjectName: manifest.ProjectName, Preset: manifest.Preset, Database: manifest.Database, AITools: manifest.AITools, PackageManager: manifest.PackageManager, LanguageVersion: manifest.LanguageVersion, Ports: manifest.Ports, SystemPackages: manifest.SystemPackages})
+		_, err := config.Normalize(config.Input{Root: root, ProjectName: manifest.ProjectName, Preset: manifest.Preset, Database: manifest.Database, AITools: manifest.AITools, PackageManager: manifest.PackageManager, LanguageVersion: manifest.LanguageVersion, PostgresVersion: manifest.PostgresVersion, Ports: manifest.Ports, SystemPackages: manifest.SystemPackages})
 		if err != nil {
 			fail("manifest values are invalid: %v", err)
 		}
@@ -379,7 +379,7 @@ func validateCompose(root, devDir string, manifest config.Manifest, document dev
 	}
 	checks := []string{"services:", "  " + document.Service + ":", "context: ..", "dockerfile: .devcontainer/Dockerfile", "- ..:/workspaces/" + manifest.ProjectName}
 	if manifest.Database == config.DatabasePostgres {
-		checks = append(checks, "  postgres:", "POSTGRES_USER: projectsetup", "POSTGRES_PASSWORD: projectsetup", "POSTGRES_DB: '"+manifest.ProjectName+"'", "condition: service_healthy", "postgres-data:/var/lib/postgresql/data")
+		checks = append(checks, "  postgres:", "POSTGRES_USER: projectsetup", "POSTGRES_PASSWORD: projectsetup", "POSTGRES_DB: '"+manifest.ProjectName+"'", "condition: service_healthy", "image: "+config.PostgresImage(manifest.PostgresVersion), "postgres-data:"+config.PostgresDataPath(manifest.PostgresVersion)+"\n")
 	} else if strings.Contains(text, "  postgres:") {
 		add(Error, relative(root, path), "PostgreSQL service is configured but database is %q", manifest.Database)
 	}

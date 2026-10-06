@@ -8,6 +8,7 @@
     "opencode"
   ],
   "languageVersion": "3.3.6",
+  "postgresVersion": "18",
   "ports": [
     3000
   ],

@@ -186,7 +186,7 @@ func TestRunUpgradeAcceptsDetectedPatchVersionForConfiguredReleaseLine(t *testin
 	}
 	for name, contents := range map[string]string{
 		"Gemfile":       `gem "rails"`,
-		".ruby-version": "3.3.12\n",
+		".ruby-version": "4.0.7\n",
 	} {
 		if err := os.WriteFile(filepath.Join(root, name), []byte(contents), 0o644); err != nil {
 			t.Fatal(err)
@@ -741,32 +741,36 @@ const wantListOptionsJSON = `{
   "defaults": {
     "node": {
       "packageManager": "npm",
-      "languageVersion": "24",
+      "languageVersion": "26",
       "database": "none",
+      "postgresVersion": "18",
       "aiTools": [
         "opencode"
       ]
     },
     "python": {
       "packageManager": "pip",
-      "languageVersion": "3.13",
+      "languageVersion": "3.14",
       "database": "none",
+      "postgresVersion": "18",
       "aiTools": [
         "opencode"
       ]
     },
     "rails": {
       "packageManager": null,
-      "languageVersion": "3.3",
+      "languageVersion": "4.0",
       "database": "none",
+      "postgresVersion": "18",
       "aiTools": [
         "opencode"
       ]
     },
     "ruby": {
       "packageManager": null,
-      "languageVersion": "3.3",
+      "languageVersion": "4.0",
       "database": "none",
+      "postgresVersion": "18",
       "aiTools": [
         "opencode"
       ]
@@ -882,5 +886,106 @@ func TestListOptionsJSONRoundTripsWithInit(t *testing.T) {
 	err := runInit(root, []string{"--non-interactive", "--preset", "node", "--package-manager", "bun"}, strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{})
 	if err == nil {
 		t.Fatal("runInit accepted unlisted package manager bun")
+	}
+}
+
+// writeLegacyPostgresProject generates the PostgreSQL 17 configuration that
+// releases before postgresVersion existed produced, without that manifest field.
+func writeLegacyPostgresProject(t *testing.T, root string) string {
+	t.Helper()
+	cfg, err := config.Normalize(config.Input{
+		Root: root, ProjectName: "legacy-db", Preset: config.PresetNode,
+		Database: config.DatabasePostgres, PostgresVersion: config.LegacyPostgresVersion, AITools: []config.AITool{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := generate.Write(root, cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, ".devcontainer", "projectsetup.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := strings.Replace(string(data), "  \"postgresVersion\": \"17\",\n", "", 1)
+	if legacy == string(data) {
+		t.Fatalf("manifest has no postgresVersion to remove:\n%s", data)
+	}
+	if err := os.WriteFile(path, []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return filepath.Join(root, ".devcontainer")
+}
+
+func assertPostgresCompose(t *testing.T, devDir, image, dataPath string) {
+	t.Helper()
+	compose, err := os.ReadFile(filepath.Join(devDir, "compose.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(compose), "image: "+image+"\n") || !strings.Contains(string(compose), "postgres-data:"+dataPath+"\n") {
+		t.Fatalf("compose.yaml does not use %s with data at %s:\n%s", image, dataPath, compose)
+	}
+}
+
+func TestLegacyPostgresProjectKeepsVersion17(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	devDir := writeLegacyPostgresProject(t, root)
+
+	diagnostics := validate.Check(root, validate.Options{})
+	if count := validate.ErrorCount(diagnostics); count != 0 {
+		t.Fatalf("check on legacy project: errors = %d, diagnostics = %#v", count, diagnostics)
+	}
+	if err := runUpgrade(root, nil, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runUpgrade() error = %v", err)
+	}
+	assertPostgresCompose(t, devDir, "postgres:17-bookworm", "/var/lib/postgresql/data")
+	manifest, err := os.ReadFile(filepath.Join(devDir, "projectsetup.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(manifest), `"postgresVersion": "17"`) {
+		t.Fatalf("upgrade did not record postgresVersion 17:\n%s", manifest)
+	}
+}
+
+func TestRunInitPostgresVersion(t *testing.T) {
+	tests := []struct {
+		name      string
+		legacy    bool
+		args      []string
+		wantImage string
+		wantPath  string
+		wantErr   string
+	}{
+		{name: "new project defaults to 18", args: []string{"--database", "postgres"}, wantImage: "postgres:18-trixie", wantPath: "/var/lib/postgresql"},
+		{name: "explicit version", args: []string{"--database", "postgres", "--postgres-version", "17"}, wantImage: "postgres:17-bookworm", wantPath: "/var/lib/postgresql/data"},
+		{name: "force keeps legacy version", legacy: true, args: []string{"--database", "postgres", "--force"}, wantImage: "postgres:17-bookworm", wantPath: "/var/lib/postgresql/data"},
+		{name: "force with explicit version", legacy: true, args: []string{"--database", "postgres", "--force", "--postgres-version", "18"}, wantImage: "postgres:18-trixie", wantPath: "/var/lib/postgresql"},
+		{name: "version requires postgres", args: []string{"--database", "none", "--postgres-version", "18"}, wantErr: `requires database "postgres"`},
+		{name: "invalid version", args: []string{"--database", "postgres", "--postgres-version", "18.1"}, wantErr: "major version"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			t.Setenv("HOME", t.TempDir())
+			if tt.legacy {
+				writeLegacyPostgresProject(t, root)
+			}
+			args := append([]string{"--non-interactive", "--preset", "node", "--name", "legacy-db", "--ai", "none"}, tt.args...)
+			err := runInit(root, args, &bytes.Buffer{}, &bytes.Buffer{}, &bytes.Buffer{})
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("runInit() error = %v, want containing %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("runInit() error = %v", err)
+			}
+			assertPostgresCompose(t, filepath.Join(root, ".devcontainer"), tt.wantImage, tt.wantPath)
+		})
 	}
 }

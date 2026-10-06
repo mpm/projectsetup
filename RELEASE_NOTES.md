@@ -1,36 +1,33 @@
-# projectsetup v0.7.0
+# projectsetup v0.8.0
 
 ## What changed
 
-- Add `projectsetup init --list-options [--json]`, which lists the values `init` accepts: presets, package managers per preset, databases, AI tools, the project name pattern, and per-preset defaults (package manager, language version, database, AI tools). The listing comes from the same typed tables that parsing, validation, normalization, and the prompts use, so it always matches the installed version. It does not run detection, prompt, or write files. (#1)
-- Project names must now match `^[a-z0-9][a-z0-9_-]*$`. That one name is used for the Compose project `name:`, the devcontainer.json `name`, the manifest `projectName`, the `/workspaces/<name>` folder, and `PGDATABASE`. Previously a name like `a.b` gave the Compose project `a-b` and `a.b` everywhere else. (#2)
-- `--name` is never rewritten. With `--non-interactive`, an invalid name is an error that suggests a valid alternative (for example, `a.b` suggests `a-b`). Interactive mode offers the normalized name and asks again until the name is valid. (#2)
-- A name taken from the directory is still normalized; a directory name that is already valid stays unchanged. (#2)
-
-## Listing accepted values
-
-```bash
-projectsetup init --list-options --json
-```
-
-The JSON includes a `schemaVersion` (currently `1`) for the listing format. Ruby and Rails have no package-manager choice, so their `packageManagers` entry is an empty array and their default package manager is `null`. `--list-options` can be combined only with `--json` and `--non-interactive`; `--json` requires `--list-options`.
+- New projects default to the latest stable runtimes: **Node 26** (was 24), **Ruby 4.0** (was 3.3), and **Python 3.14** (was 3.13). Versions detected from `.node-version`, `.nvmrc`, `.ruby-version`, `Gemfile`, `.python-version`, and similar files still take precedence. Node 26 becomes the active LTS line on 2026-10-28.
+- New PostgreSQL sidecars use **PostgreSQL 18** (`postgres:18-trixie`), replacing `postgres:17-bookworm`. Following the image's layout change in version 18, the `postgres-data` volume is now mounted at `/var/lib/postgresql` instead of `/var/lib/postgresql/data`.
+- The PostgreSQL major version is recorded as `postgresVersion` in `projectsetup.json`. A data volume can only be opened by the major version that created it, so the recorded version is never changed implicitly.
+- Add `init --postgres-version MAJOR` to choose a different major version. Versions before 18 use the `-bookworm` image and the old data path.
+- `init --list-options --json` includes `postgresVersion` in each preset's defaults.
 
 ## Existing projects
 
-Manifests created by v0.6.0 or earlier with a name containing a dot (for example `a.b`) no longer pass `projectsetup check`, and `projectsetup upgrade` refuses to rename them. To regenerate with a valid name, run:
+Existing projects keep the language version recorded in their manifest.
 
-```bash
-projectsetup init --force --name a-b
-```
+Manifests from v0.7.0 and earlier that use PostgreSQL have no `postgresVersion` and are treated as PostgreSQL 17, the version those releases generated. `projectsetup check` passes for them unchanged. `projectsetup upgrade` keeps `postgres:17-bookworm` and the existing volume path, and records `"postgresVersion": "17"`. `init --force` also keeps the version from an existing manifest unless `--postgres-version` is passed.
 
-`init --force` runs detection again, so pass your original preset, database, and AI options along with it. Projects with valid names are not affected.
+To move an existing database to PostgreSQL 18:
+
+1. Dump the database.
+2. Regenerate with `projectsetup init --force --postgres-version 18`, passing the project's original options.
+3. Remove the old `postgres-data` volume.
+4. Recreate the containers and restore the dump.
 
 ## Validation
 
 Passed on Linux amd64:
 
-- `go test ./...` and `go vet ./...` with Go 1.27.1, plus a `gofmt -l` check that reported no files.
-- Table-driven tests for name validation and normalization, rejection of the names from issue #2, consistency of the name across all generated files, interactive re-prompting, and `check`/`upgrade` behavior with old dotted manifests.
-- An exact JSON golden test for `--list-options --json` that also confirms no files are written. Further tests run every listed preset × package manager × database through `init --non-interactive`, check that the listed defaults match normalization, and confirm that `bun` is rejected and not listed.
+- `go test ./...` and `go vet ./...` with Go 1.27.1; `gofmt -l` reported no files.
+- Updated golden fixtures. New tests cover default and explicit PostgreSQL versions, rejection of invalid or misplaced `--postgres-version` values, image and data path selection, legacy manifests in `check` and `upgrade`, and `init --force` keeping the recorded version.
+- A generated Node + PostgreSQL project passed `projectsetup check`, `docker compose config`, and `devcontainer read-configuration`. Its sidecar became healthy as PostgreSQL 18.6, with data in `/var/lib/postgresql/18/docker` inside the mounted volume.
+- Dev Containers generated with the new defaults built and ran with `devcontainer up` for Node, Ruby, and Python, reporting Node v26.10.0, Ruby 4.0.7, and Python 3.14.8.
 
-Generated container fixtures were unchanged.
+Not verified: Rails container builds and arm64/macOS hosts.

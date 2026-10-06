@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -53,6 +54,7 @@ func runInit(root string, args []string, stdin io.Reader, stdout, stderr io.Writ
 	rubyVersion := flags.String("ruby-version", "", "Ruby version")
 	pythonVersion := flags.String("python-version", "", "Python version")
 	managerValue := flags.String("package-manager", "", "project package manager")
+	postgresVersion := flags.String("postgres-version", "", "PostgreSQL major version for --database postgres (default "+config.DefaultPostgresVersion+"; --force keeps the existing version)")
 	var ports repeatedPorts
 	var systemPackages repeatedStrings
 	flags.Var(&ports, "port", "forwarded application port (repeatable)")
@@ -125,6 +127,10 @@ func runInit(root string, args []string, stdin io.Reader, stdout, stderr io.Writ
 	if err != nil {
 		return err
 	}
+	pgVersion := *postgresVersion
+	if !provided["postgres-version"] && *force && database == config.DatabasePostgres {
+		pgVersion = existingPostgresVersion(root)
+	}
 	version, err := resolveLanguageVersion(preset, *nodeVersion, *rubyVersion, *pythonVersion, detail.LanguageVersion)
 	if err != nil {
 		return err
@@ -144,6 +150,7 @@ func runInit(root string, args []string, stdin io.Reader, stdout, stderr io.Writ
 		AITools:         tools,
 		PackageManager:  manager,
 		LanguageVersion: version,
+		PostgresVersion: pgVersion,
 		Ports:           ports,
 		SystemPackages:  systemPackages,
 	})
@@ -337,6 +344,22 @@ func chooseAITools(value string, wasProvided bool, prompt *prompter) ([]config.A
 	return parseAITools(selected, true)
 }
 
+// existingPostgresVersion returns the PostgreSQL version recorded by an
+// existing generated manifest, so regenerating with --force keeps a data
+// volume readable. It returns "" when there is no usable PostgreSQL manifest.
+func existingPostgresVersion(root string) string {
+	file, err := os.Open(filepath.Join(root, ".devcontainer", "projectsetup.json"))
+	if err != nil {
+		return ""
+	}
+	defer file.Close()
+	manifest, err := config.ReadManifest(file)
+	if err != nil || manifest.GeneratedBy != "projectsetup" {
+		return ""
+	}
+	return manifest.PostgresVersion
+}
+
 func printConfigSummary(output io.Writer, cfg config.Config) {
 	manager := string(cfg.PackageManager)
 	if manager == "" {
@@ -349,8 +372,12 @@ func printConfigSummary(output io.Writer, cfg config.Config) {
 	if len(tools) == 0 {
 		tools = []string{"none"}
 	}
+	database := string(cfg.Database)
+	if cfg.PostgresVersion != "" {
+		database += " " + cfg.PostgresVersion
+	}
 	fmt.Fprintf(output, "\nConfiguration:\n  Project: %s\n  Preset: %s\n  Language version: %s\n  Package manager: %s\n  Database: %s\n  AI tools: %s\n  Ports: %v\n  System packages: %s\n\n",
-		cfg.ProjectName, cfg.Preset, cfg.LanguageVersion, manager, cfg.Database, strings.Join(tools, ", "), cfg.Ports, strings.Join(cfg.SystemPackages, ", "))
+		cfg.ProjectName, cfg.Preset, cfg.LanguageVersion, manager, database, strings.Join(tools, ", "), cfg.Ports, strings.Join(cfg.SystemPackages, ", "))
 }
 
 func resolvePreset(value string, detected detect.Result) (config.Preset, error) {

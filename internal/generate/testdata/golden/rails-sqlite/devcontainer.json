@@ -13,7 +13,7 @@
     "ghcr.io/rails/devcontainer/features/activestorage": {},
     "ghcr.io/rails/devcontainer/features/ruby:2": {
       "usePrecompiledRubies": true,
-      "version": "3.3"
+      "version": "4.0"
     }
   },
   "containerEnv": {

@@ -25,7 +25,7 @@ func TestNormalize(t *testing.T) {
 			want: Config{
 				SchemaVersion: 1, ProjectName: "my-project", Preset: PresetNode,
 				Database: DatabaseNone, AITools: []AITool{AIToolOpenCode},
-				PackageManager: PackageManagerNPM, LanguageVersion: "24",
+				PackageManager: PackageManagerNPM, LanguageVersion: "26",
 				Ports: []int{1024, 3000}, SystemPackages: []string{"curl", "libpq-dev"},
 				Workspace: Workspace{HostPath: "/tmp/My Project", ContainerPath: "/workspaces/my-project"},
 				Container: Container{User: "vscode", Home: "/home/vscode", ComposeProjectName: "my-project", ServiceName: "app"},
@@ -38,7 +38,7 @@ func TestNormalize(t *testing.T) {
 			want: Config{
 				SchemaVersion: 1, ProjectName: "api", Preset: PresetPython,
 				Database: DatabasePostgres, AITools: []AITool{},
-				PackageManager: PackageManagerUV, LanguageVersion: "3.13",
+				PackageManager: PackageManagerUV, LanguageVersion: "3.14", PostgresVersion: "18",
 				Ports: []int{}, SystemPackages: []string{},
 				Workspace: Workspace{HostPath: "/tmp/api", ContainerPath: "/workspaces/api"},
 				Container: Container{User: "vscode", Home: "/home/vscode", ComposeProjectName: "api", ServiceName: "app"},
@@ -50,7 +50,7 @@ func TestNormalize(t *testing.T) {
 			want: Config{
 				SchemaVersion: 1, ProjectName: "gem", Preset: PresetRuby,
 				Database: DatabaseNone, AITools: []AITool{},
-				LanguageVersion: "3.3", Ports: []int{}, SystemPackages: []string{},
+				LanguageVersion: "4.0", Ports: []int{}, SystemPackages: []string{},
 				Workspace: Workspace{HostPath: "/tmp/gem", ContainerPath: "/workspaces/gem"},
 				Container: Container{User: "vscode", Home: "/home/vscode", ComposeProjectName: "gem", ServiceName: "app"},
 			},
@@ -61,7 +61,7 @@ func TestNormalize(t *testing.T) {
 			want: Config{
 				SchemaVersion: 1, ProjectName: "app", Preset: PresetRails,
 				Database: DatabaseSQLite, AITools: []AITool{},
-				LanguageVersion: "3.3", Ports: []int{}, SystemPackages: []string{},
+				LanguageVersion: "4.0", Ports: []int{}, SystemPackages: []string{},
 				Workspace: Workspace{HostPath: "/tmp/app", ContainerPath: "/workspaces/app"},
 				Container: Container{User: "vscode", Home: "/home/vscode", ComposeProjectName: "app", ServiceName: "app"},
 			},
@@ -238,5 +238,62 @@ func TestCodexHostDirectory(t *testing.T) {
 	got, err := AIHostDirectory(".local/share/codex", "/host", func(string) string { return "/custom/state" })
 	if err != nil || got != "/host/.local/share/codex" {
 		t.Fatalf("installation directory = %q, %v", got, err)
+	}
+}
+
+func TestNormalizePostgresVersion(t *testing.T) {
+	tests := []struct {
+		name     string
+		database Database
+		version  string
+		want     string
+		wantErr  string
+	}{
+		{name: "default for postgres", database: DatabasePostgres, want: DefaultPostgresVersion},
+		{name: "explicit major kept", database: DatabasePostgres, version: "17", want: "17"},
+		{name: "surrounding space trimmed", database: DatabasePostgres, version: " 18 ", want: "18"},
+		{name: "empty without postgres", database: DatabaseSQLite, want: ""},
+		{name: "minor version rejected", database: DatabasePostgres, version: "18.1", wantErr: "major version"},
+		{name: "tag rejected", database: DatabasePostgres, version: "18-alpine", wantErr: "major version"},
+		{name: "leading zero rejected", database: DatabasePostgres, version: "018", wantErr: "major version"},
+		{name: "version without postgres rejected", database: DatabaseNone, version: "18", wantErr: `requires database "postgres"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := Normalize(Input{Root: "/tmp/app", Preset: PresetNode, Database: tt.database, PostgresVersion: tt.version})
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("Normalize() error = %v, want containing %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.PostgresVersion != tt.want {
+				t.Fatalf("PostgresVersion = %q, want %q", cfg.PostgresVersion, tt.want)
+			}
+		})
+	}
+}
+
+func TestPostgresImageAndDataPath(t *testing.T) {
+	tests := []struct {
+		version   string
+		wantImage string
+		wantPath  string
+	}{
+		{version: "16", wantImage: "postgres:16-bookworm", wantPath: "/var/lib/postgresql/data"},
+		{version: "17", wantImage: "postgres:17-bookworm", wantPath: "/var/lib/postgresql/data"},
+		{version: "18", wantImage: "postgres:18-trixie", wantPath: "/var/lib/postgresql"},
+		{version: "19", wantImage: "postgres:19-trixie", wantPath: "/var/lib/postgresql"},
+	}
+	for _, tt := range tests {
+		if got := PostgresImage(tt.version); got != tt.wantImage {
+			t.Errorf("PostgresImage(%q) = %q, want %q", tt.version, got, tt.wantImage)
+		}
+		if got := PostgresDataPath(tt.version); got != tt.wantPath {
+			t.Errorf("PostgresDataPath(%q) = %q, want %q", tt.version, got, tt.wantPath)
+		}
 	}
 }

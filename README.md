@@ -10,7 +10,7 @@ The current implementation provides interactive and flag-driven `init`, static `
 - Ruby with Bundler
 - Rails
 - Python with pip, Poetry, or uv
-- Optional SQLite in the app container or PostgreSQL 17 sidecar
+- Optional SQLite in the app container or PostgreSQL sidecar (18 by default)
 - OpenCode by default, optional Claude Code and Codex, and GitHub CLI
 
 User templates, plugins, migration of hand-written configurations, databases other than SQLite and PostgreSQL, Alpine/musl images, Windows containers, and application generation are out of scope.
@@ -90,8 +90,8 @@ For automation, add `--non-interactive`; unresolved or ambiguous required choice
 
 ```bash
 projectsetup init --non-interactive --preset node
-projectsetup init --non-interactive --preset ruby --ruby-version 3.3
-projectsetup init --non-interactive --preset python --python-version 3.13 --package-manager uv
+projectsetup init --non-interactive --preset ruby --ruby-version 4.0
+projectsetup init --non-interactive --preset python --python-version 3.14 --package-manager uv
 projectsetup init --non-interactive --preset rails --database postgres --ai opencode,claude
 projectsetup init --non-interactive --preset rails --database sqlite
 projectsetup init --non-interactive --preset node --port 3000 --port 5173 --system-package imagemagick
@@ -103,6 +103,7 @@ Available `init` flags:
 --preset node|ruby|rails|python
 --name NAME
 --database none|postgres|sqlite
+--postgres-version MAJOR     with --database postgres; default 18
 --ai TOOL[,TOOL...]          opencode, claude, codex; or none
 --node-version VERSION
 --ruby-version VERSION
@@ -116,7 +117,7 @@ Available `init` flags:
 --json                       with --list-options, print JSON
 ```
 
-Defaults are detected from version files, manifests, and lockfiles. Without a detected language version, the defaults are Node 24, Ruby 3.3, and Python 3.13. OpenCode is enabled by default; the database defaults to none.
+Defaults are detected from version files, manifests, and lockfiles. Without a detected language version, the defaults are Node 26, Ruby 4.0, and Python 3.14. OpenCode is enabled by default; the database defaults to none.
 
 Ruby projects are detected from a root-level `Gemfile`, `Gemfile.lock`, `.ruby-version`, or `*.gemspec`. The Ruby version comes from `.ruby-version` when present, then from a literal `ruby "VERSION"` declaration in the Gemfile. Rails-specific signals take precedence over generic Ruby detection. The Ruby preset installs the selected Ruby version and runs `bundle install` when a `Gemfile` exists; it does not add Node, Active Storage, Rails setup, or a default port.
 
@@ -153,10 +154,10 @@ The JSON output is indented, ends with a newline, and has this shape:
   "aiTools": ["opencode", "claude", "codex"],
   "projectNamePattern": "^[a-z0-9][a-z0-9_-]*$",
   "defaults": {
-    "node": {"packageManager": "npm", "languageVersion": "24", "database": "none", "aiTools": ["opencode"]},
-    "python": {"packageManager": "pip", "languageVersion": "3.13", "database": "none", "aiTools": ["opencode"]},
-    "rails": {"packageManager": null, "languageVersion": "3.3", "database": "none", "aiTools": ["opencode"]},
-    "ruby": {"packageManager": null, "languageVersion": "3.3", "database": "none", "aiTools": ["opencode"]}
+    "node": {"packageManager": "npm", "languageVersion": "26", "database": "none", "postgresVersion": "18", "aiTools": ["opencode"]},
+    "python": {"packageManager": "pip", "languageVersion": "3.14", "database": "none", "postgresVersion": "18", "aiTools": ["opencode"]},
+    "rails": {"packageManager": null, "languageVersion": "4.0", "database": "none", "postgresVersion": "18", "aiTools": ["opencode"]},
+    "ruby": {"packageManager": null, "languageVersion": "4.0", "database": "none", "postgresVersion": "18", "aiTools": ["opencode"]}
   }
 }
 ```
@@ -166,7 +167,7 @@ The JSON output is indented, ends with a newline, and has this shape:
 - `packageManagers` has a key for every preset. An empty array means the preset accepts no `--package-manager`.
 - `aiTools` values may be combined in a comma-separated `--ai` list; pass `--ai none` to select no tools.
 - `projectNamePattern` is the regular expression an explicit `--name` must match.
-- `defaults` lists what `init` uses when a flag is omitted and nothing is detected. Detected version files and lockfiles take precedence over `packageManager` and `languageVersion`. `packageManager` is `null` for presets without a package-manager choice.
+- `defaults` lists what `init` uses when a flag is omitted and nothing is detected. Detected version files and lockfiles take precedence over `packageManager` and `languageVersion`. `packageManager` is `null` for presets without a package-manager choice. `postgresVersion` is the PostgreSQL major version used when `--database postgres` is selected.
 
 ## Upgrade a generated project
 
@@ -326,7 +327,9 @@ Updates persist in shared host installation directories and affect every contain
 
 ## PostgreSQL
 
-`--database postgres` switches generation to Docker Compose with an `app` service and a healthy `postgres:17-bookworm` sidecar backed by the `postgres-data` named volume. The generated development credentials are `projectsetup`/`projectsetup`; `DB_HOST` and `PGHOST` are `postgres`, and the database name is the normalized project name.
+`--database postgres` switches generation to Docker Compose with an `app` service and a healthy PostgreSQL sidecar backed by the `postgres-data` named volume. New projects use PostgreSQL 18 (`postgres:18-trixie`, volume mounted at `/var/lib/postgresql`); pass `--postgres-version MAJOR` to choose another major version. Versions before 18 use the `-bookworm` image with the volume at `/var/lib/postgresql/data`. The generated development credentials are `projectsetup`/`projectsetup`; `DB_HOST` and `PGHOST` are `postgres`, and the database name is the normalized project name.
+
+The major version is recorded as `postgresVersion` in `projectsetup.json`, because a data volume can only be opened by the major version that created it. `upgrade` and `init --force` keep the recorded version; manifests from v0.7.0 and earlier have no `postgresVersion` and are treated as PostgreSQL 17, which those releases generated. To move an existing project to a newer major version, dump the database, regenerate with `projectsetup init --force --postgres-version 18` and the original options, remove the old `postgres-data` volume, and restore the dump.
 
 The PostgreSQL port is not published to the host. `dworm` scans only the primary `app` container, and adding `forwardPorts` metadata would not expose the sidecar. Application database configuration is not rewritten automatically.
 

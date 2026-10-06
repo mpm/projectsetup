@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -46,6 +47,41 @@ const (
 
 // DefaultDatabase is used when no database is selected.
 const DefaultDatabase = DatabaseNone
+
+// DefaultPostgresVersion is the PostgreSQL major version for new projects.
+// Manifests record the version, so changing it never upgrades existing data.
+const DefaultPostgresVersion = "18"
+
+// LegacyPostgresVersion is the major version generated before manifests
+// recorded postgresVersion.
+const LegacyPostgresVersion = "17"
+
+// PostgresImage returns the sidecar image for a PostgreSQL major version.
+// Versions before 18 keep the Debian bookworm variant earlier releases
+// generated, because changing the image's glibc can change collation order.
+func PostgresImage(version string) string {
+	if postgresMajor(version) < 18 {
+		return "postgres:" + version + "-bookworm"
+	}
+	return "postgres:" + version + "-trixie"
+}
+
+// PostgresDataPath returns where the volume is mounted. Images for 18 and
+// later keep data in a version-specific directory below /var/lib/postgresql.
+func PostgresDataPath(version string) string {
+	if postgresMajor(version) < 18 {
+		return "/var/lib/postgresql/data"
+	}
+	return "/var/lib/postgresql"
+}
+
+func postgresMajor(version string) int {
+	major, err := strconv.Atoi(version)
+	if err != nil {
+		return 0
+	}
+	return major
+}
 
 // Databases returns every supported database option in display order. The
 // options do not depend on the preset.
@@ -202,6 +238,7 @@ type Config struct {
 	AITools         []AITool
 	PackageManager  PackageManager
 	LanguageVersion string
+	PostgresVersion string
 	Ports           []int
 	SystemPackages  []string
 	Workspace       Workspace

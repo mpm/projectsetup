@@ -17,6 +17,7 @@ var validProjectName = regexp.MustCompile(ProjectNamePattern)
 var invalidNameCharacters = regexp.MustCompile(`[^a-z0-9_-]+`)
 var validSystemPackage = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9+.-]*$`)
 var validLanguageVersion = regexp.MustCompile(`^[0-9]+(?:\.[0-9]+){0,2}(?:[-+][a-zA-Z0-9.-]+)?$`)
+var validPostgresVersion = regexp.MustCompile(`^[1-9][0-9]*$`)
 
 type Input struct {
 	Root            string
@@ -26,6 +27,7 @@ type Input struct {
 	AITools         []AITool
 	PackageManager  PackageManager
 	LanguageVersion string
+	PostgresVersion string
 	Ports           []int
 	SystemPackages  []string
 }
@@ -75,6 +77,11 @@ func Normalize(input Input) (Config, error) {
 		return Config{}, fmt.Errorf("language version %q must be a numeric version such as 22 or 3.13.1", version)
 	}
 
+	postgresVersion, err := normalizePostgresVersion(database, input.PostgresVersion)
+	if err != nil {
+		return Config{}, err
+	}
+
 	ports := append(make([]int, 0, len(input.Ports)), input.Ports...)
 	sort.Ints(ports)
 	ports = compact(ports)
@@ -104,6 +111,7 @@ func Normalize(input Input) (Config, error) {
 		AITools:         tools,
 		PackageManager:  manager,
 		LanguageVersion: version,
+		PostgresVersion: postgresVersion,
 		Ports:           ports,
 		SystemPackages:  packages,
 		Workspace: Workspace{
@@ -169,14 +177,33 @@ func DefaultProjectName(root string) (string, error) {
 func DefaultLanguageVersion(preset Preset) string {
 	switch preset {
 	case PresetNode:
-		return "24"
+		return "26"
 	case PresetRuby, PresetRails:
-		return "3.3"
+		return "4.0"
 	case PresetPython:
-		return "3.13"
+		return "3.14"
 	default:
 		return ""
 	}
+}
+
+// normalizePostgresVersion returns the PostgreSQL major version for the
+// sidecar, or "" when PostgreSQL is not selected.
+func normalizePostgresVersion(database Database, value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if database != DatabasePostgres {
+		if value != "" {
+			return "", fmt.Errorf("PostgreSQL version %q requires database %q", value, DatabasePostgres)
+		}
+		return "", nil
+	}
+	if value == "" {
+		return DefaultPostgresVersion, nil
+	}
+	if !validPostgresVersion.MatchString(value) {
+		return "", fmt.Errorf("PostgreSQL version %q must be a major version such as %s", value, DefaultPostgresVersion)
+	}
+	return value, nil
 }
 
 func normalizeAITools(values []AITool) ([]AITool, error) {

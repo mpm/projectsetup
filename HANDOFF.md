@@ -71,8 +71,8 @@ Non-interactive examples:
 
 ```bash
 projectsetup init --preset node
-projectsetup init --preset ruby --ruby-version 3.3
-projectsetup init --preset python --python-version 3.13
+projectsetup init --preset ruby --ruby-version 4.0
+projectsetup init --preset python --python-version 3.14
 projectsetup init --preset rails --database postgres --ai opencode,claude
 ```
 
@@ -82,6 +82,7 @@ Initial flags:
 --preset node|ruby|rails|python
 --name NAME
 --database none|postgres|sqlite
+--postgres-version MAJOR
 --ai TOOL[,TOOL...]          opencode, claude, codex; or none
 --node-version VERSION
 --ruby-version VERSION

@@ -55,7 +55,7 @@ func TestWriteGeneratesSupportedPresets(t *testing.T) {
 			if tt.preset == config.PresetRails {
 				if !strings.Contains(string(dockerfile), "FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04") ||
 					!strings.Contains(string(devcontainer), `"ghcr.io/rails/devcontainer/features/ruby:2"`) ||
-					!strings.Contains(string(devcontainer), `"version": "3.3"`) ||
+					!strings.Contains(string(devcontainer), `"version": "4.0"`) ||
 					!strings.Contains(string(devcontainer), "/home/vscode/.local/share/mise/shims") ||
 					!strings.Contains(string(devcontainer), "ghcr.io/rails/devcontainer/features/activestorage") {
 					t.Fatalf("Rails output lacks the official Ruby feature or required settings:\n%s\n%s", dockerfile, devcontainer)
@@ -66,7 +66,7 @@ func TestWriteGeneratesSupportedPresets(t *testing.T) {
 			}
 			if tt.preset == config.PresetRuby {
 				if !strings.Contains(string(devcontainer), `"ghcr.io/rails/devcontainer/features/ruby:2"`) ||
-					!strings.Contains(string(devcontainer), `"version": "3.3"`) ||
+					!strings.Contains(string(devcontainer), `"version": "4.0"`) ||
 					!strings.Contains(string(devcontainer), "/home/vscode/.local/share/mise/shims") ||
 					strings.Contains(string(devcontainer), "features/activestorage") ||
 					strings.Contains(string(devcontainer), "features/node:1") {
@@ -92,7 +92,7 @@ func TestWriteGeneratesSupportedPresets(t *testing.T) {
 			}
 			compose := readGenerated(t, root, "compose.yaml")
 			if tt.database == config.DatabasePostgres {
-				if !strings.Contains(string(compose), "condition: service_healthy") || !strings.Contains(string(compose), "postgres:17-bookworm") {
+				if !strings.Contains(string(compose), "condition: service_healthy") || !strings.Contains(string(compose), "image: postgres:18-trixie") || !strings.Contains(string(compose), "postgres-data:/var/lib/postgresql\n") {
 					t.Fatalf("compose.yaml lacks PostgreSQL health dependency:\n%s", compose)
 				}
 			} else if strings.Contains(string(compose), "postgres:") || strings.Contains(string(compose), "postgres-data") {

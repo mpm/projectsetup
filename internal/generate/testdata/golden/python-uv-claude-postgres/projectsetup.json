@@ -9,6 +9,7 @@
   ],
   "packageManager": "uv",
   "languageVersion": "3.12",
+  "postgresVersion": "18",
   "ports": [
     8000
   ],

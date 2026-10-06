@@ -44,6 +44,7 @@ func writeOptions(output io.Writer, options config.Options, asJSON bool) error {
 		databases := choiceStrings(options.Databases)
 		markDefault(databases, string(defaults.Database))
 		fmt.Fprintf(&text, "Databases (--database): %s\n", strings.Join(databases, ", "))
+		fmt.Fprintf(&text, "PostgreSQL major version (--postgres-version): default %s\n", defaults.PostgresVersion)
 		fmt.Fprintf(&text, "AI tools (--ai, comma-separated or none): %s; default %s\n", joinChoices(options.AITools, ", "), joinChoices(defaults.AITools, ","))
 	}
 	fmt.Fprintf(&text, "Project name pattern (--name): %s\n", options.ProjectNamePattern)

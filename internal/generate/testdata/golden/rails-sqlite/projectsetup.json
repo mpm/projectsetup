@@ -6,7 +6,7 @@
   "aiTools": [
     "opencode"
   ],
-  "languageVersion": "3.3",
+  "languageVersion": "4.0",
   "ports": [],
   "systemPackages": [],
   "generatedBy": "projectsetup"

@@ -17,10 +17,16 @@ type data struct {
 	AITools          string
 	Codex            bool
 	CodexStateSource string
+	PostgresImage    string
+	PostgresDataPath string
 }
 
 func templateData(cfg config.Config) data {
 	result := data{Config: cfg, AITools: shellWords(cfg.AITools), CodexStateSource: config.CodexStateSource}
+	if cfg.Database == config.DatabasePostgres {
+		result.PostgresImage = config.PostgresImage(cfg.PostgresVersion)
+		result.PostgresDataPath = config.PostgresDataPath(cfg.PostgresVersion)
+	}
 	for _, tool := range cfg.AITools {
 		if tool == config.AIToolCodex {
 			result.Codex = true

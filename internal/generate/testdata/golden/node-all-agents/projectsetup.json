@@ -9,7 +9,7 @@
     "opencode"
   ],
   "packageManager": "npm",
-  "languageVersion": "24",
+  "languageVersion": "26",
   "ports": [],
   "systemPackages": [],
   "generatedBy": "projectsetup"

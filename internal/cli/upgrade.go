@@ -63,6 +63,7 @@ func runUpgrade(root string, args []string, stdout, stderr io.Writer) error {
 		AITools:         manifest.AITools,
 		PackageManager:  manifest.PackageManager,
 		LanguageVersion: manifest.LanguageVersion,
+		PostgresVersion: manifest.PostgresVersion,
 		Ports:           manifest.Ports,
 		SystemPackages:  manifest.SystemPackages,
 	}
