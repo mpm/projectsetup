@@ -1,46 +1,36 @@
-# projectsetup v0.6.0
+# projectsetup v0.7.0
 
 ## What changed
 
-- Add `projectsetup self-update` for Linux and macOS on amd64 and arm64, with stable-release selection, required SHA-256 archive verification, symlink-aware executable replacement, and actionable errors.
-- Preserve current or newer installations and refuse unversioned or dirty development builds. Recognize versioned `go install` build metadata.
-- Suggest the new command in best-effort stderr update notifications, retaining the release URL.
-- Update source builds to Go 1.27.1 and `go-selfupdate` v1.6.0. Prebuilt binaries remain available for all four supported host targets.
+- Add `projectsetup init --list-options [--json]`, which lists the values `init` accepts: presets, package managers per preset, databases, AI tools, the project name pattern, and per-preset defaults (package manager, language version, database, AI tools). The listing comes from the same typed tables that parsing, validation, normalization, and the prompts use, so it always matches the installed version. It does not run detection, prompt, or write files. (#1)
+- Project names must now match `^[a-z0-9][a-z0-9_-]*$`. That one name is used for the Compose project `name:`, the devcontainer.json `name`, the manifest `projectName`, the `/workspaces/<name>` folder, and `PGDATABASE`. Previously a name like `a.b` gave the Compose project `a-b` and `a.b` everywhere else. (#2)
+- `--name` is never rewritten. With `--non-interactive`, an invalid name is an error that suggests a valid alternative (for example, `a.b` suggests `a-b`). Interactive mode offers the normalized name and asks again until the name is valid. (#2)
+- A name taken from the directory is still normalized; a directory name that is already valid stays unchanged. (#2)
 
-## Update an existing installation
-
-Older binaries (including v0.5.0) need the installer or a manual release installation once to gain the command:
+## Listing accepted values
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mpm/projectsetup/main/install.sh | sh
+projectsetup init --list-options --json
 ```
 
-After installing this release:
+The JSON includes a `schemaVersion` (currently `1`) for the listing format. Ruby and Rails have no package-manager choice, so their `packageManagers` entry is an empty array and their default package manager is `null`. `--list-options` can be combined only with `--json` and `--non-interactive`; `--json` requires `--list-options`.
+
+## Existing projects
+
+Manifests created by v0.6.0 or earlier with a name containing a dot (for example `a.b`) no longer pass `projectsetup check`, and `projectsetup upgrade` refuses to rename them. To regenerate with a valid name, run:
 
 ```bash
-projectsetup self-update
+projectsetup init --force --name a-b
 ```
 
-Run it from any directory. The executable's directory must be writable; the command never invokes sudo. The next invocation runs the new version. `projectsetup upgrade` still upgrades generated project configuration.
-
-## Implementation and packaging
-
-- `internal/version`: pinned `go-selfupdate` v1.6.0 integration, shared stable discovery/comparison, build metadata handling, and local HTTP/subprocess tests.
-- `internal/cli` and `cmd/projectsetup`: command dispatch, cancellation, output, and notification wiring.
-- `go.mod` / `go.sum`: current stable Go 1.27.1 and updater dependencies. CI and release builds select Go from `go.mod`; source installations require Go 1.27.1 or newer. Prebuilt binaries do not require a Go installation.
-- `README.md`: usage, supported installations, permissions, and development-build policy.
-- The release workflow retains the four version-bearing nested archives and SHA-256 archive entries in `checksums.txt`. Packaging matches the inspected published v0.5.0 release.
+`init --force` runs detection again, so pass your original preset, database, and AI options along with it. Projects with valid names are not affected.
 
 ## Validation
 
 Passed on Linux amd64:
 
-- `go test ./...` and `go vet ./...` with Go 1.27.1 and `go-selfupdate` v1.6.0.
-- `go test -race ./...` with Go 1.27.1.
-- `CGO_ENABLED=0` cross-builds for Linux/macOS amd64/arm64.
-- Local HTTP fixtures covering all four platform names, stable selection, current/newer no-ops, nested extraction, replacement and executable modes, checksum failures preserving the old executable, network errors/deadlines, missing assets, unwritable directories, and replacement failure.
-- A disposable running executable invoked through a symlink updated successfully outside a workspace, preserved the symlink, and reported the new version in a subsequent subprocess.
+- `go test ./...` and `go vet ./...` with Go 1.27.1, plus a `gofmt -l` check that reported no files.
+- Table-driven tests for name validation and normalization, rejection of the names from issue #2, consistency of the name across all generated files, interactive re-prompting, and `check`/`upgrade` behavior with old dotted manifests.
+- An exact JSON golden test for `--list-options --json` that also confirms no files are written. Further tests run every listed preset × package manager × database through `init --non-interactive`, check that the listed defaults match normalization, and confirm that `bun` is rejected and not listed.
 
-Verification used disposable executables and did not replace an installed projectsetup executable. Generated container fixtures and release packaging were not changed.
-
-Native runtime replacement must be distinguished from cross-build verification: macOS and Linux arm64 require their own runtime smoke tests. Rollback-failure reporting follows the pinned library API; a failed final rename plus failed rollback is not fault-injected by the application tests.
+Generated container fixtures were unchanged.
