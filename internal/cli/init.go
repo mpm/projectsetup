@@ -54,7 +54,7 @@ func runInit(root string, args []string, stdin io.Reader, stdout, stderr io.Writ
 	rubyVersion := flags.String("ruby-version", "", "Ruby version")
 	pythonVersion := flags.String("python-version", "", "Python version")
 	managerValue := flags.String("package-manager", "", "project package manager")
-	postgresVersion := flags.String("postgres-version", "", "PostgreSQL major version for --database postgres (default "+config.DefaultPostgresVersion+"; --force keeps the existing version)")
+	postgresVersion := flags.String("postgres-version", "", "PostgreSQL major version for --database postgres (default "+config.DefaultPostgresVersion()+"; --force keeps the existing version)")
 	var ports repeatedPorts
 	var systemPackages repeatedStrings
 	flags.Var(&ports, "port", "forwarded application port (repeatable)")

@@ -174,19 +174,6 @@ func DefaultProjectName(root string) (string, error) {
 	return name, nil
 }
 
-func DefaultLanguageVersion(preset Preset) string {
-	switch preset {
-	case PresetNode:
-		return "26"
-	case PresetRuby, PresetRails:
-		return "4.0"
-	case PresetPython:
-		return "3.14"
-	default:
-		return ""
-	}
-}
-
 // normalizePostgresVersion returns the PostgreSQL major version for the
 // sidecar, or "" when PostgreSQL is not selected.
 func normalizePostgresVersion(database Database, value string) (string, error) {
@@ -198,10 +185,10 @@ func normalizePostgresVersion(database Database, value string) (string, error) {
 		return "", nil
 	}
 	if value == "" {
-		return DefaultPostgresVersion, nil
+		return DefaultPostgresVersion(), nil
 	}
 	if !validPostgresVersion.MatchString(value) {
-		return "", fmt.Errorf("PostgreSQL version %q must be a major version such as %s", value, DefaultPostgresVersion)
+		return "", fmt.Errorf("PostgreSQL version %q must be a major version such as %s", value, DefaultPostgresVersion())
 	}
 	return value, nil
 }

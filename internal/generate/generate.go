@@ -97,7 +97,11 @@ func Write(root string, cfg config.Config, force bool) error {
 }
 
 func render(cfg config.Config) ([]file, error) {
-	devcontainer, err := renderDevcontainer(cfg)
+	resolved, err := config.Resolve(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("resolve %s preset: %w", cfg.Preset, err)
+	}
+	devcontainer, err := renderDevcontainer(cfg, resolved)
 	if err != nil {
 		return nil, err
 	}
@@ -105,11 +109,11 @@ func render(cfg config.Config) ([]file, error) {
 	if err != nil {
 		return nil, fmt.Errorf("render projectsetup.json: %w", err)
 	}
-	dockerfile, err := executeTemplate("Dockerfile.tmpl", templateData(cfg))
+	dockerfile, err := executeTemplate("Dockerfile.tmpl", templateData(cfg, resolved))
 	if err != nil {
 		return nil, err
 	}
-	postCreate, err := executeTemplate("post-create.sh.tmpl", templateData(cfg))
+	postCreate, err := executeTemplate("post-create.sh.tmpl", templateData(cfg, resolved))
 	if err != nil {
 		return nil, err
 	}
@@ -117,8 +121,7 @@ func render(cfg config.Config) ([]file, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read embedded AI installer: %w", err)
 	}
-
-	compose, err := executeTemplate("compose.yaml.tmpl", templateData(cfg))
+	compose, err := renderCompose(cfg, resolved)
 	if err != nil {
 		return nil, err
 	}

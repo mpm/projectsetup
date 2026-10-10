@@ -7,11 +7,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/mpm/projectsetup/internal/config"
 	"github.com/mpm/projectsetup/internal/detect"
+	"github.com/mpm/projectsetup/internal/presets"
+	yaml "go.yaml.in/yaml/v3"
 )
 
 type Severity string
@@ -48,19 +52,17 @@ func (commandRunner) Run(name string, args ...string) ([]byte, error) {
 }
 
 type devcontainerDocument struct {
-	Name              string            `json:"name"`
-	DockerComposeFile string            `json:"dockerComposeFile"`
-	Service           string            `json:"service"`
-	WorkspaceFolder   string            `json:"workspaceFolder"`
-	ContainerUser     string            `json:"containerUser"`
-	RemoteUser        string            `json:"remoteUser"`
-	ContainerEnv      map[string]string `json:"containerEnv"`
-	Features          map[string]struct {
-		Version string `json:"version"`
-	} `json:"features"`
-	Mounts            []string `json:"mounts"`
-	ForwardPorts      []int    `json:"forwardPorts"`
-	PostCreateCommand string   `json:"postCreateCommand"`
+	Name              string                    `json:"name"`
+	DockerComposeFile string                    `json:"dockerComposeFile"`
+	Service           string                    `json:"service"`
+	WorkspaceFolder   string                    `json:"workspaceFolder"`
+	ContainerUser     string                    `json:"containerUser"`
+	RemoteUser        string                    `json:"remoteUser"`
+	ContainerEnv      map[string]string         `json:"containerEnv"`
+	Features          map[string]map[string]any `json:"features"`
+	Mounts            []string                  `json:"mounts"`
+	ForwardPorts      []int                     `json:"forwardPorts"`
+	PostCreateCommand string                    `json:"postCreateCommand"`
 }
 
 func Check(root string, options Options) []Diagnostic {
@@ -84,6 +86,8 @@ func Check(root string, options Options) []Diagnostic {
 	manifestPath := filepath.Join(devDir, "projectsetup.json")
 	manifestFile, err := os.Open(manifestPath)
 	var manifest config.Manifest
+	var cfg config.Config
+	var resolved presets.Resolved
 	manifestValid := false
 	if err != nil {
 		add(Error, relative(root, manifestPath), "required manifest is not readable: %v", err)
@@ -93,7 +97,13 @@ func Check(root string, options Options) []Diagnostic {
 		if err != nil {
 			add(Error, relative(root, manifestPath), "%v", err)
 		} else {
-			manifestValid = validateManifest(root, manifest, add)
+			cfg, manifestValid = validateManifest(root, manifest, add)
+		}
+	}
+	if manifestValid {
+		if resolved, err = config.Resolve(cfg); err != nil {
+			add(Error, relative(root, manifestPath), "resolve preset definitions: %v", err)
+			manifestValid = false
 		}
 	}
 
@@ -123,14 +133,14 @@ func Check(root string, options Options) []Diagnostic {
 		if err := json.Unmarshal(data, &document); err != nil {
 			add(Error, relative(root, devcontainerPath), "parse JSON: %v", err)
 		} else if manifestValid {
-			validateDevcontainer(root, devDir, manifest, document, options.CheckHostMounts, add)
+			validateDevcontainer(root, devDir, manifest, resolved, document, options.CheckHostMounts, add)
 		}
 	}
 
 	if manifestValid {
-		validateDockerfile(root, devDir, manifest, add)
+		validateDockerfile(root, devDir, resolved, add)
 		validateProjectConventions(root, manifest, add)
-		validateCompose(root, devDir, manifest, document, add)
+		validateCompose(root, devDir, cfg, resolved, add)
 	}
 	if options.External {
 		build := options.Build && ErrorCount(diagnostics) == 0
@@ -149,7 +159,9 @@ func Check(root string, options Options) []Diagnostic {
 	return diagnostics
 }
 
-func validateManifest(root string, manifest config.Manifest, add func(Severity, string, string, ...any)) bool {
+// validateManifest returns the normalized configuration and whether the
+// manifest is valid.
+func validateManifest(root string, manifest config.Manifest, add func(Severity, string, string, ...any)) (config.Config, bool) {
 	path := ".devcontainer/projectsetup.json"
 	valid := true
 	fail := func(format string, args ...any) { valid = false; add(Error, path, format, args...) }
@@ -200,16 +212,18 @@ func validateManifest(root string, manifest config.Manifest, add func(Severity, 
 			add(Warning, path, "port %d is outside dworm's scanned range 1024-20000", port)
 		}
 	}
-	if valid {
-		_, err := config.Normalize(config.Input{Root: root, ProjectName: manifest.ProjectName, Preset: manifest.Preset, Database: manifest.Database, AITools: manifest.AITools, PackageManager: manifest.PackageManager, LanguageVersion: manifest.LanguageVersion, PostgresVersion: manifest.PostgresVersion, Ports: manifest.Ports, SystemPackages: manifest.SystemPackages})
-		if err != nil {
-			fail("manifest values are invalid: %v", err)
-		}
+	if !valid {
+		return config.Config{}, false
 	}
-	return valid
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: manifest.ProjectName, Preset: manifest.Preset, Database: manifest.Database, AITools: manifest.AITools, PackageManager: manifest.PackageManager, LanguageVersion: manifest.LanguageVersion, PostgresVersion: manifest.PostgresVersion, Ports: manifest.Ports, SystemPackages: manifest.SystemPackages})
+	if err != nil {
+		fail("manifest values are invalid: %v", err)
+		return config.Config{}, false
+	}
+	return cfg, true
 }
 
-func validateDevcontainer(root, devDir string, manifest config.Manifest, document devcontainerDocument, checkHost bool, add func(Severity, string, string, ...any)) {
+func validateDevcontainer(root, devDir string, manifest config.Manifest, resolved presets.Resolved, document devcontainerDocument, checkHost bool, add func(Severity, string, string, ...any)) {
 	path := relative(root, filepath.Join(devDir, "devcontainer.json"))
 	wantWorkspace := "/workspaces/" + manifest.ProjectName
 	if document.Name != manifest.ProjectName {
@@ -224,11 +238,9 @@ func validateDevcontainer(root, devDir string, manifest config.Manifest, documen
 	if document.DockerComposeFile != "compose.yaml" || document.Service != "app" {
 		add(Error, path, "configuration must use compose.yaml service app")
 	}
-	if manifest.Database == config.DatabasePostgres {
-		for key, value := range map[string]string{"DB_HOST": "postgres", "PGHOST": "postgres", "PGUSER": "projectsetup", "PGPASSWORD": "projectsetup", "PGDATABASE": manifest.ProjectName} {
-			if document.ContainerEnv[key] != value {
-				add(Error, path, "containerEnv.%s is %q; expected %q", key, document.ContainerEnv[key], value)
-			}
+	for _, key := range sortedKeys(resolved.Env) {
+		if document.ContainerEnv[key] != resolved.Env[key] {
+			add(Error, path, "containerEnv.%s is %q; expected %q", key, document.ContainerEnv[key], resolved.Env[key])
 		}
 	}
 	if document.PostCreateCommand != ".devcontainer/scripts/post-create.sh" {
@@ -237,22 +249,17 @@ func validateDevcontainer(root, devDir string, manifest config.Manifest, documen
 	if !equalInts(document.ForwardPorts, manifest.Ports) {
 		add(Error, path, "forwardPorts %v do not match manifest ports %v", document.ForwardPorts, manifest.Ports)
 	}
-	switch manifest.Preset {
-	case config.PresetNode:
-		if document.Features["ghcr.io/devcontainers/features/node:1"].Version != manifest.LanguageVersion {
-			add(Error, path, "Node feature version does not match manifest languageVersion %q", manifest.LanguageVersion)
+	for _, id := range sortedKeys(resolved.Features) {
+		actual, ok := document.Features[id]
+		if !ok {
+			add(Error, path, "feature %q required by the selected definitions is missing", id)
+			continue
 		}
-	case config.PresetRuby:
-		if document.Features["ghcr.io/rails/devcontainer/features/ruby:2"].Version != manifest.LanguageVersion {
-			add(Error, path, "Ruby feature version does not match manifest languageVersion %q", manifest.LanguageVersion)
-		}
-	case config.PresetRails:
-		if document.Features["ghcr.io/rails/devcontainer/features/ruby:2"].Version != manifest.LanguageVersion {
-			add(Error, path, "Rails Ruby feature version does not match manifest languageVersion %q", manifest.LanguageVersion)
-		}
-	case config.PresetPython:
-		if document.Features["ghcr.io/devcontainers/features/python:1"].Version != manifest.LanguageVersion {
-			add(Error, path, "Python feature version does not match manifest languageVersion %q", manifest.LanguageVersion)
+		for _, key := range sortedKeys(resolved.Features[id]) {
+			want := jsonValue(resolved.Features[id][key])
+			if !reflect.DeepEqual(actual[key], want) {
+				add(Error, path, "feature %q option %s is %s; expected %s", id, key, jsonText(actual[key]), jsonText(want))
+			}
 		}
 	}
 	for _, expected := range expectedAIMounts(manifest.AITools) {
@@ -273,13 +280,10 @@ func validateDevcontainer(root, devDir string, manifest config.Manifest, documen
 		}
 	}
 	containerPath := strings.Split(document.ContainerEnv["PATH"], ":")
-	for _, required := range []string{"/home/vscode/.local/bin", "/usr/bin", "/bin"} {
+	for _, required := range append([]string{"/home/vscode/.local/bin", "/usr/bin", "/bin"}, resolved.Path...) {
 		if !containsString(containerPath, required) {
 			add(Error, path, "containerEnv.PATH must include %s", required)
 		}
-	}
-	if (manifest.Preset == config.PresetRuby || manifest.Preset == config.PresetRails) && !containsString(containerPath, "/home/vscode/.local/share/mise/shims") {
-		add(Error, path, "containerEnv.PATH must include /home/vscode/.local/share/mise/shims for Ruby")
 	}
 	if checkHost {
 		home, err := os.UserHomeDir()
@@ -307,24 +311,30 @@ func validateDevcontainer(root, devDir string, manifest config.Manifest, documen
 	}
 }
 
-func validateDockerfile(root, devDir string, manifest config.Manifest, add func(Severity, string, string, ...any)) {
+func validateDockerfile(root, devDir string, resolved presets.Resolved, add func(Severity, string, string, ...any)) {
 	path := filepath.Join(devDir, "Dockerfile")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return
 	}
 	text := string(data)
-	if !strings.Contains(text, "USER vscode") || !strings.HasSuffix(strings.TrimSpace(text), "USER vscode") {
+	finalUser := ""
+	for _, line := range strings.Split(text, "\n") {
+		if user, ok := strings.CutPrefix(strings.TrimSpace(line), "USER "); ok {
+			finalUser = strings.TrimSpace(user)
+		}
+	}
+	if finalUser != "vscode" {
 		add(Error, relative(root, path), "final effective Dockerfile user must be vscode")
 	}
 	if !strings.Contains(text, "bash") {
 		add(Error, relative(root, path), "image must provide /bin/bash")
 	}
-	if manifest.Database == config.DatabaseSQLite {
-		packages := strings.Fields(text)
-		for _, pkg := range []string{"libsqlite3-dev", "sqlite3"} {
+	packages := strings.Fields(text)
+	for _, group := range resolved.Apt {
+		for _, pkg := range group {
 			if !containsString(packages, pkg) {
-				add(Error, relative(root, path), "SQLite database requires apt package %q", pkg)
+				add(Error, relative(root, path), "apt package %q required by the selected definitions is missing", pkg)
 			}
 		}
 	}
@@ -366,31 +376,148 @@ func languageVersionsAgree(configured, detected string) bool {
 		strings.HasPrefix(detected, configured+".")
 }
 
-func validateCompose(root, devDir string, manifest config.Manifest, document devcontainerDocument, add func(Severity, string, string, ...any)) {
+type composeDocument struct {
+	Name     string                    `yaml:"name"`
+	Services map[string]composeService `yaml:"services"`
+	Volumes  map[string]any            `yaml:"volumes"`
+}
+
+type composeService struct {
+	Image string `yaml:"image"`
+	Build struct {
+		Context    string `yaml:"context"`
+		Dockerfile string `yaml:"dockerfile"`
+	} `yaml:"build"`
+	Environment map[string]string `yaml:"environment"`
+	Healthcheck struct {
+		Test []string `yaml:"test"`
+	} `yaml:"healthcheck"`
+	// Volumes holds short-syntax strings and long-syntax mappings.
+	Volumes   []any `yaml:"volumes"`
+	DependsOn map[string]struct {
+		Condition string `yaml:"condition"`
+	} `yaml:"depends_on"`
+}
+
+// validateCompose parses compose.yaml rather than matching text, so files
+// written by earlier releases with different formatting still pass.
+func validateCompose(root, devDir string, cfg config.Config, resolved presets.Resolved, add func(Severity, string, string, ...any)) {
 	path := filepath.Join(devDir, "compose.yaml")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return
 	}
-	text := string(data)
-	wantName := "name: " + manifest.ProjectName
-	if !containsString(strings.Split(text, "\n"), wantName) {
-		add(Error, relative(root, path), "missing expected Compose configuration %q", wantName)
+	file := relative(root, path)
+	var document composeDocument
+	if err := yaml.Unmarshal(data, &document); err != nil {
+		add(Error, file, "parse YAML: %v", err)
+		return
 	}
-	checks := []string{"services:", "  " + document.Service + ":", "context: ..", "dockerfile: .devcontainer/Dockerfile", "- ..:/workspaces/" + manifest.ProjectName}
-	if manifest.Database == config.DatabasePostgres {
-		checks = append(checks, "  postgres:", "POSTGRES_USER: projectsetup", "POSTGRES_PASSWORD: projectsetup", "POSTGRES_DB: '"+manifest.ProjectName+"'", "condition: service_healthy", "image: "+config.PostgresImage(manifest.PostgresVersion), "postgres-data:"+config.PostgresDataPath(manifest.PostgresVersion)+"\n")
-	} else if strings.Contains(text, "  postgres:") {
-		add(Error, relative(root, path), "PostgreSQL service is configured but database is %q", manifest.Database)
+	if document.Name != cfg.Container.ComposeProjectName {
+		add(Error, file, "Compose project name is %q; expected %q", document.Name, cfg.Container.ComposeProjectName)
 	}
-	if containsTool(manifest.AITools, config.AIToolCodex) {
-		checks = append(checks, "      - type: bind\n        source: \""+config.CodexStateSource+"\"\n        target: /home/vscode/.codex")
-	}
-	for _, expected := range checks {
-		if !strings.Contains(text, expected) {
-			add(Error, relative(root, path), "missing expected Compose configuration %q", expected)
+	appName := cfg.Container.ServiceName
+	app, ok := document.Services[appName]
+	if !ok {
+		add(Error, file, "Compose service %q is missing", appName)
+	} else {
+		if app.Build.Context != ".." || app.Build.Dockerfile != ".devcontainer/Dockerfile" {
+			add(Error, file, "service %s must build context .. with dockerfile .devcontainer/Dockerfile", appName)
+		}
+		if workspace := "..:" + cfg.Workspace.ContainerPath; !containsVolume(app.Volumes, workspace) {
+			add(Error, file, "service %s must mount the project with volume %q", appName, workspace)
+		}
+		if containsTool(cfg.AITools, config.AIToolCodex) && !containsBind(app.Volumes, config.CodexStateSource, cfg.Container.Home+"/.codex") {
+			add(Error, file, "service %s must bind-mount %q to %s/.codex when Codex is selected", appName, config.CodexStateSource, cfg.Container.Home)
 		}
 	}
+	for _, name := range sortedKeys(document.Services) {
+		if _, ok := resolved.Services[name]; !ok && name != appName {
+			add(Error, file, "Compose service %q is not provided by the selected definitions", name)
+		}
+	}
+	for _, name := range sortedKeys(resolved.Services) {
+		want := resolved.Services[name]
+		actual, ok := document.Services[name]
+		if !ok {
+			add(Error, file, "Compose service %q required by the selected definitions is missing", name)
+			continue
+		}
+		if actual.Image != want.Image {
+			add(Error, file, "service %s image is %q; expected %q", name, actual.Image, want.Image)
+		}
+		for _, key := range sortedKeys(want.Environment) {
+			if actual.Environment[key] != want.Environment[key] {
+				add(Error, file, "service %s environment %s is %q; expected %q", name, key, actual.Environment[key], want.Environment[key])
+			}
+		}
+		if want.Healthcheck != nil && !slices.Equal(actual.Healthcheck.Test, want.Healthcheck.Test) {
+			add(Error, file, "service %s healthcheck test is %q; expected %q", name, actual.Healthcheck.Test, want.Healthcheck.Test)
+		}
+		for _, volume := range sortedKeys(want.Volumes) {
+			if mount := volume + ":" + want.Volumes[volume]; !containsVolume(actual.Volumes, mount) {
+				add(Error, file, "service %s must mount volume %q", name, mount)
+			}
+			if _, ok := document.Volumes[volume]; !ok {
+				add(Error, file, "named volume %q is not declared", volume)
+			}
+		}
+		if want.AppDependsOn != "" && app.DependsOn[name].Condition != want.AppDependsOn {
+			add(Error, file, "service %s must depend on %s with condition %s", appName, name, want.AppDependsOn)
+		}
+	}
+}
+
+func containsVolume(volumes []any, want string) bool {
+	for _, volume := range volumes {
+		if volume == want {
+			return true
+		}
+	}
+	return false
+}
+
+func containsBind(volumes []any, source, target string) bool {
+	for _, volume := range volumes {
+		mount, ok := volume.(map[string]any)
+		if ok && mount["type"] == "bind" && mount["source"] == source && mount["target"] == target {
+			return true
+		}
+	}
+	return false
+}
+
+// jsonValue converts a definition value to the type encoding/json decodes.
+func jsonValue(value any) any {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return value
+	}
+	var result any
+	if err := json.Unmarshal(data, &result); err != nil {
+		return value
+	}
+	return result
+}
+
+func jsonText(value any) string {
+	if value == nil {
+		return "missing"
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprint(value)
+	}
+	return string(data)
+}
+
+func sortedKeys[V any](values map[string]V) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func validateExternal(root, devDir string, compose, build bool, options Options, add func(Severity, string, string, ...any)) {

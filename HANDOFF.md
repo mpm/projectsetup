@@ -32,11 +32,9 @@ The first version supports:
 
 Explicitly out of scope for the first version:
 
-- User-defined templates or plugins
-- Remote template repositories
-- Arbitrary YAML or JSON fragments
+- Arbitrary YAML or JSON fragments; presets use the constrained schema in [Preset System](#preset-system)
 - Automatic migration of hand-written Dev Containers
-- Automatic or schema-changing migrations of previously generated configurations; an explicit same-schema `upgrade` command is supported
+- Automatic migrations of previously generated configurations; the explicit `upgrade` command reads supported older manifest schemas and writes the current one
 - Databases other than SQLite and PostgreSQL
 - Alpine or other musl-based images
 - Windows containers
@@ -540,7 +538,7 @@ Construct `devcontainer.json` and `projectsetup.json` from Go structs and serial
 
 For Compose, either:
 
-- Build a small typed representation and serialize YAML with one focused YAML dependency, or
+- Build a small typed representation and serialize YAML with one focused YAML dependency (chosen: `go.yaml.in/yaml/v3`; `check` parses Compose with the same library), or
 - Use a tightly controlled template populated only from the normalized model.
 
 Do not implement a generic text-substitution layer.
@@ -576,6 +574,11 @@ internal/generate/
     devcontainer.go
     compose.go
     templates.go
+internal/presets/
+    presets.go          definition schema, strict parsing, validation
+    resolve.go          registry, conditions, placeholder expansion, merging
+    builtin.go
+    builtin/*.toml      embedded preset and add-on definitions
 internal/validate/
     validate.go
     external.go
@@ -674,6 +677,159 @@ Known inconsistencies to avoid:
 - Separate, drifting copies of AI installation scripts.
 - Unconditional Docker-outside-of-Docker support without a project requirement.
 - SSH or Git configuration mounts that conflict with `dworm` forwarding.
+
+## Preset System
+
+Presets and add-ons are described by TOML definition files instead of Go code. `projectsetup` still owns the core that makes generated setups work with `dworm`; definitions can only contribute to it.
+
+### Core owned by Go
+
+Definitions cannot change:
+
+- The `vscode` user, `/home/vscode`, `containerUser`, `remoteUser`, and the final Dockerfile `USER vscode`.
+- The Compose project name, the `app` service, its build, command, workspace volume, and `workspaceFolder`.
+- AI tool mounts, AI environment variables, and the canonical `install-ai-tools.sh`. Post-create runs AI setup before any definition script.
+- The GitHub CLI feature and the core `containerEnv.PATH` entries.
+- Host mounts. Definitions have no mount field; sidecar volumes are named volumes only.
+
+### Definition files
+
+One TOML format with two kinds, decoded strictly with `github.com/pelletier/go-toml/v2`:
+
+- `kind = "preset"`: exactly one per project. Sets `image.base` and usually the language runtime, package managers, and dependency setup.
+- `kind = "addon"`: zero or more per project, such as `postgres`, `sqlite`, `rust`, or `go`. Add-ons cannot set `image.base`.
+
+Fields:
+
+```toml
+schema = 1
+kind = "preset"                 # or "addon"
+name = "node"                   # ^[a-z][a-z0-9-]*$
+version = "1.0.0"               # MAJOR.MINOR.PATCH
+description = "Node.js with npm, pnpm, or Yarn"
+
+[options.version]               # option names: ^[a-z][a-z0-9_]*$
+description = "Node.js version"
+default = "26"                  # required
+pattern = '^[0-9]+(\.[0-9]+){0,2}$'   # exactly one of pattern or choices
+
+[image]
+base = "mcr.microsoft.com/devcontainers/base:ubuntu-24.04"   # presets only, top level only
+apt = []                        # rendered as one Dockerfile line per contributing block
+root_run = []                   # single-line RUN steps as root, after apt
+user_run = []                   # single-line RUN steps as vscode, after the final USER vscode
+
+[features."ghcr.io/devcontainers/features/node:1"]
+version = "${option:version}"
+
+[container]
+path = []                       # absolute containerEnv.PATH entries after the core user entries
+env = {}                        # containerEnv; PATH, HOME, USER, CODEX_HOME, CLAUDE_CONFIG_DIR are reserved
+
+[setup]
+script = '''...'''              # bash appended to post-create.sh after AI setup
+
+[services.postgres]             # sidecar; the name must not be "app"
+image = "postgres:${option:version}-trixie"
+restart = "unless-stopped"
+environment = { POSTGRES_DB = "${project:name}" }
+volumes = { postgres-data = "/var/lib/postgresql" }   # named volume -> container path
+app_depends_on = "service_healthy"                     # or service_started
+[services.postgres.healthcheck]
+test = ["CMD-SHELL", "pg_isready"]
+interval = "5s"
+timeout = "5s"
+retries = 10
+
+[[variant]]                     # additive block applied when every condition matches
+when = { preset = ["rails"], not_preset = [], addon = ["postgres"], option = { version = { in = ["17"], below = 18 } } }
+# The block may contain image (without base), features, container, setup, and services.
+```
+
+Rules:
+
+- Placeholders are limited to `${option:NAME}` (the definition's own options) and `${project:name|home|workspace}`. Unknown names in either namespace are errors; all other text, including shell `${VAR}`, is literal. There is no `text/template` in definitions.
+- Option values must match the option's `choices` or anchored `pattern` and the shell-safe character set `^[A-Za-z0-9][A-Za-z0-9._+-]*$`.
+- Contributions are applied in this order: the preset, then add-ons sorted by name. Each definition's top-level block comes first, followed by its matching variants in file order. A variant can override its own definition's feature options, env values, and service fields. Two different definitions cannot set the same feature, env key, or service.
+- A condition's `below` compares the option value's leading integer.
+- Output stays deterministic. JSON maps are sorted. Compose services are ordered `app` first, then the remaining services sorted by name.
+
+### Sources and lookup
+
+- Built-in definitions are embedded from `internal/presets/builtin/*.toml`.
+- User definitions live in `os.UserConfigDir()/projectsetup/presets/` (`~/.config/projectsetup/presets` on Linux), overridable with `PROJECTSETUP_CONFIG_DIR`. A user definition cannot reuse a built-in name; `preset eject NAME --as NEW` copies a built-in for editing.
+- Remote definitions are installed only by `preset add URL|github:owner/repo[/path][@ref]`. They are fetched over HTTPS with the standard library, validated completely before installing, and recorded with their source URL and sha256 in `sources.toml`. A URL may point to one definition or to an `index.toml` listing several. `preset update` shows a diff and asks for confirmation. `init`, `check`, and `upgrade` never use the network.
+- Each generated project gets a copy of the exact resolved definition files in `.devcontainer/presets/`. The manifest records each definition's name, version, source, and sha256. `check` and `upgrade` use that copy, so they do not depend on the local registry; `upgrade --refresh-presets` re-resolves from the registry.
+- Remote definitions run shell code in a container that has AI credentials mounted and a forwarded SSH agent. Install them only on explicit command, show their content before installing, pin hashes, and never update them automatically.
+
+### Manifest schema 2
+
+```json
+{
+  "schemaVersion": 2,
+  "projectName": "example",
+  "preset": { "name": "node", "version": "1.0.0", "source": "builtin", "sha256": "..." },
+  "addons": [{ "name": "postgres", "version": "1.0.0", "source": "builtin", "sha256": "..." }],
+  "options": { "node": { "version": "26", "package_manager": "npm" }, "postgres": { "version": "18" } },
+  "aiTools": ["opencode"],
+  "ports": [],
+  "systemPackages": [],
+  "generatedBy": "projectsetup"
+}
+```
+
+`check` and `upgrade` continue to read schema 1 manifests. Those map to the built-in definitions: `database` becomes the `postgres` or `sqlite` add-on, `languageVersion` and `packageManager` become preset options, and a missing PostgreSQL version means `17`. `upgrade` writes schema 2.
+
+The CLI gains a repeatable `--addon NAME` and `--set [DEFINITION.]OPTION=VALUE`. These flags remain as aliases: `--node-version`, `--ruby-version`, `--python-version`, `--package-manager`, `--database`, and `--postgres-version`.
+
+## Preset System Roadmap
+
+Each phase ends with `go test ./...`, `go vet ./...`, and gofmt passing.
+
+### Phase 1: Definition schema and loader
+
+- [x] Add `internal/presets` with typed definitions, strict TOML decoding, aggregated validation errors that name the file, placeholder checking and expansion, conditions, and `Resolve`.
+- [x] Add table-driven tests for valid definitions, every rejection rule, placeholder handling, variant matching, merge order, and cross-definition conflicts.
+
+### Phase 2: Built-ins as embedded definitions
+
+- [x] Port node, ruby, rails, python, postgres, and sqlite to `internal/presets/builtin/*.toml`.
+- [x] Read preset package managers, default language versions, and the default PostgreSQL version from the definitions.
+- [x] Render the Dockerfile, `devcontainer.json`, and `post-create.sh` from the resolved definitions. Golden output for these files must stay byte-identical.
+- [x] Render Compose from typed YAML nodes and make `check` parse Compose semantically, so files generated by earlier releases still pass. Prove equivalence for Compose golden changes with `docker compose config`.
+- [x] Derive the `check` rules for features, containerEnv, PATH, apt packages, and sidecar services from the resolved definitions. Remove the preset-specific switches.
+
+### Phase 3: Data-driven detection
+
+- [ ] Add `[detect]` to the schema: `any_file`, `file_contains` (file plus regex), `supersedes`, version sources (`file:NAME`, `builtin:NAME`), lockfile-to-choice maps for options, `suggest_addons` rules, and warnings.
+- [ ] Keep complex parsers in Go as named built-ins: `package-json-engines`, `gemfile-ruby`, `pyproject-requires-python`, and `pyproject-poetry`.
+- [ ] Port the four detectors and keep every existing detection test passing. Remove `internal/detect/{node,ruby,rails,python}.go`.
+- [ ] Derive `check`'s language-version and lockfile convention checks from the same rules.
+
+### Phase 4: Open names, manifest v2, user definitions
+
+- [ ] Replace the closed `Preset`, `PackageManager`, and `Database` enums in the normalized model with registry-validated names and per-definition options. Keep the old flags as aliases.
+- [ ] Write manifest schema 2 and the `.devcontainer/presets/` copies, and extend the generated-path allow-list. `upgrade` reads schema 1 and writes schema 2.
+- [ ] Load user definitions from the config directory and reject name collisions with built-ins.
+- [ ] Add `preset list [--json]`, `preset show NAME`, `preset validate FILE`, and `preset eject NAME --as NEW`.
+- [ ] Publish `schema/preset.schema.json` for editor completion and test that it accepts every built-in.
+- [ ] Generate `init --list-options [--json]` from the registry. Increment `OptionsSchemaVersion` if a field's meaning changes.
+
+### Phase 5: Remote definitions
+
+- [ ] Add `preset add URL|github:owner/repo[/path][@ref]`, supporting a single file or `index.toml`.
+- [ ] Add `preset update [NAME]` with a diff and confirmation, and `preset remove NAME`.
+- [ ] Record `sources.toml` with the URL, ref, sha256, and fetch time. Enforce HTTPS and size limits, and write into the registry atomically.
+- [ ] Test with `httptest` servers, including failure, oversize, invalid-definition, and hash-change cases.
+
+### Phase 6: New built-in add-ons
+
+- [ ] Add `go`, `rust`, and `redis` add-ons, each with the PATH entries its feature needs, because the generated `containerEnv.PATH` replaces feature PATH changes.
+- [ ] Add golden fixtures and an opt-in build test per add-on.
+
+### Phase 7: Documentation and release
+
+- [ ] Update the README with authoring documentation and a security note, the projectsetup skill, and release notes.
 
 ## Implementation Order
 

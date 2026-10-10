@@ -249,7 +249,7 @@ func TestNormalizePostgresVersion(t *testing.T) {
 		want     string
 		wantErr  string
 	}{
-		{name: "default for postgres", database: DatabasePostgres, want: DefaultPostgresVersion},
+		{name: "default for postgres", database: DatabasePostgres, want: DefaultPostgresVersion()},
 		{name: "explicit major kept", database: DatabasePostgres, version: "17", want: "17"},
 		{name: "surrounding space trimmed", database: DatabasePostgres, version: " 18 ", want: "18"},
 		{name: "empty without postgres", database: DatabaseSQLite, want: ""},
@@ -274,26 +274,5 @@ func TestNormalizePostgresVersion(t *testing.T) {
 				t.Fatalf("PostgresVersion = %q, want %q", cfg.PostgresVersion, tt.want)
 			}
 		})
-	}
-}
-
-func TestPostgresImageAndDataPath(t *testing.T) {
-	tests := []struct {
-		version   string
-		wantImage string
-		wantPath  string
-	}{
-		{version: "16", wantImage: "postgres:16-bookworm", wantPath: "/var/lib/postgresql/data"},
-		{version: "17", wantImage: "postgres:17-bookworm", wantPath: "/var/lib/postgresql/data"},
-		{version: "18", wantImage: "postgres:18-trixie", wantPath: "/var/lib/postgresql"},
-		{version: "19", wantImage: "postgres:19-trixie", wantPath: "/var/lib/postgresql"},
-	}
-	for _, tt := range tests {
-		if got := PostgresImage(tt.version); got != tt.wantImage {
-			t.Errorf("PostgresImage(%q) = %q, want %q", tt.version, got, tt.wantImage)
-		}
-		if got := PostgresDataPath(tt.version); got != tt.wantPath {
-			t.Errorf("PostgresDataPath(%q) = %q, want %q", tt.version, got, tt.wantPath)
-		}
 	}
 }

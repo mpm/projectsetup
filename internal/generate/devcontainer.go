@@ -1,9 +1,11 @@
 package generate
 
 import (
+	"maps"
 	"strings"
 
 	"github.com/mpm/projectsetup/internal/config"
+	"github.com/mpm/projectsetup/internal/presets"
 )
 
 type devcontainerConfig struct {
@@ -21,7 +23,7 @@ type devcontainerConfig struct {
 	ShutdownAction    string                    `json:"shutdownAction,omitempty"`
 }
 
-func renderDevcontainer(cfg config.Config) ([]byte, error) {
+func renderDevcontainer(cfg config.Config, resolved presets.Resolved) ([]byte, error) {
 	document := devcontainerConfig{
 		Name:              cfg.ProjectName,
 		DockerComposeFile: "compose.yaml",
@@ -29,22 +31,16 @@ func renderDevcontainer(cfg config.Config) ([]byte, error) {
 		WorkspaceFolder:   cfg.Workspace.ContainerPath,
 		ContainerUser:     cfg.Container.User,
 		RemoteUser:        cfg.Container.User,
-		Features:          features(cfg),
-		ContainerEnv: map[string]string{
-			"PATH": containerPath(cfg),
-		},
+		Features:          features(resolved),
+		ContainerEnv:      map[string]string{},
 		Mounts:            aiMounts(cfg),
 		ForwardPorts:      append([]int(nil), cfg.Ports...),
 		PostCreateCommand: ".devcontainer/scripts/post-create.sh",
 		ShutdownAction:    "stopCompose",
 	}
-	if cfg.Database == config.DatabasePostgres {
-		document.ContainerEnv["DB_HOST"] = "postgres"
-		document.ContainerEnv["PGHOST"] = "postgres"
-		document.ContainerEnv["PGUSER"] = "projectsetup"
-		document.ContainerEnv["PGPASSWORD"] = "projectsetup"
-		document.ContainerEnv["PGDATABASE"] = cfg.ProjectName
-	}
+	// Definitions cannot set the reserved keys written below.
+	maps.Copy(document.ContainerEnv, resolved.Env)
+	document.ContainerEnv["PATH"] = containerPath(cfg, resolved)
 	for _, tool := range cfg.AITools {
 		if tool == config.AIToolCodex {
 			document.ContainerEnv["CODEX_HOME"] = cfg.Container.Home + "/.codex"
@@ -56,42 +52,23 @@ func renderDevcontainer(cfg config.Config) ([]byte, error) {
 	return marshalJSON(document)
 }
 
-func features(cfg config.Config) map[string]map[string]any {
+func features(resolved presets.Resolved) map[string]map[string]any {
 	result := map[string]map[string]any{
 		"ghcr.io/devcontainers/features/github-cli:1": {},
 	}
-	switch cfg.Preset {
-	case config.PresetNode:
-		result["ghcr.io/devcontainers/features/node:1"] = map[string]any{"version": cfg.LanguageVersion}
-	case config.PresetRuby:
-		result["ghcr.io/rails/devcontainer/features/ruby:2"] = map[string]any{
-			"version":              cfg.LanguageVersion,
-			"usePrecompiledRubies": true,
-		}
-	case config.PresetRails:
-		result["ghcr.io/rails/devcontainer/features/ruby:2"] = map[string]any{
-			"version":              cfg.LanguageVersion,
-			"usePrecompiledRubies": true,
-		}
-		result["ghcr.io/devcontainers/features/node:1"] = map[string]any{"version": "lts"}
-		result["ghcr.io/rails/devcontainer/features/activestorage"] = map[string]any{}
-		if cfg.Database == config.DatabasePostgres {
-			result["ghcr.io/rails/devcontainer/features/postgres-client"] = map[string]any{}
-		}
-	case config.PresetPython:
-		result["ghcr.io/devcontainers/features/python:1"] = map[string]any{"version": cfg.LanguageVersion}
-	}
+	maps.Copy(result, resolved.Features)
 	return result
 }
 
-func containerPath(cfg config.Config) string {
+// containerPath is set in containerEnv because dworm exec does not apply
+// remoteEnv. It replaces PATH changes made by features, so definitions list
+// the directories their features install into.
+func containerPath(cfg config.Config, resolved presets.Resolved) string {
 	paths := []string{
 		cfg.Container.Home + "/.local/bin",
 		cfg.Container.Home + "/.opencode/bin",
 	}
-	if cfg.Preset == config.PresetRuby || cfg.Preset == config.PresetRails {
-		paths = append(paths, cfg.Container.Home+"/.local/share/mise/shims")
-	}
+	paths = append(paths, resolved.Path...)
 	paths = append(paths, "/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin")
 	return strings.Join(paths, ":")
 }

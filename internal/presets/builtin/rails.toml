@@ -1,0 +1,40 @@
+schema = 1
+kind = "preset"
+name = "rails"
+version = "1.0.0"
+description = "Ruby on Rails with Bundler, Node, and Active Storage support"
+
+[options.version]
+description = "Ruby version"
+default = "4.0"
+pattern = '[0-9]+(\.[0-9]+){0,2}([-+][a-zA-Z0-9.-]+)?'
+
+[image]
+base = "mcr.microsoft.com/devcontainers/base:ubuntu-24.04"
+
+[features."ghcr.io/rails/devcontainer/features/ruby:2"]
+version = "${option:version}"
+usePrecompiledRubies = true
+
+[features."ghcr.io/devcontainers/features/node:1"]
+version = "lts"
+
+[features."ghcr.io/rails/devcontainer/features/activestorage"]
+
+# The Ruby feature installs through mise; dworm exec needs its shims on PATH.
+[container]
+path = ["${project:home}/.local/share/mise/shims"]
+
+[setup]
+script = '''
+if [[ -x bin/setup ]]; then
+  bin/setup --skip-server
+elif [[ -f Gemfile ]]; then
+  bundle install
+fi
+'''
+
+[[variant]]
+when = { addon = ["postgres"] }
+
+[variant.features."ghcr.io/rails/devcontainer/features/postgres-client"]

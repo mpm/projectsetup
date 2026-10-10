@@ -42,7 +42,7 @@ func ListOptions() Options {
 		defaults := PresetDefaults{
 			LanguageVersion: DefaultLanguageVersion(preset),
 			Database:        DefaultDatabase,
-			PostgresVersion: DefaultPostgresVersion,
+			PostgresVersion: DefaultPostgresVersion(),
 			AITools:         DefaultAITools(),
 		}
 		if manager := DefaultPackageManager(preset); manager != "" {

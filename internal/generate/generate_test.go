@@ -227,3 +227,32 @@ func readGenerated(t *testing.T, root, name string) []byte {
 	}
 	return data
 }
+
+func TestDockerfileRendersDefinitionRunSteps(t *testing.T) {
+	cfg, err := config.Normalize(config.Input{Root: t.TempDir(), Preset: config.PresetNode})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := config.Resolve(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved.Apt = append(resolved.Apt, []string{"make", "jq"})
+	resolved.RootRun = []string{"echo root"}
+	resolved.UserRun = []string{"echo user"}
+	dockerfile, err := executeTemplate("Dockerfile.tmpl", templateData(cfg, resolved))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"gnupg sudo \\\n        make jq \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN echo root\n\nRUN mkdir -p",
+		"\nUSER vscode\nRUN echo user\n",
+	} {
+		if !strings.Contains(string(dockerfile), want) {
+			t.Fatalf("Dockerfile does not contain %q:\n%s", want, dockerfile)
+		}
+	}
+	if !strings.HasSuffix(string(dockerfile), "RUN echo user\n") {
+		t.Fatalf("Dockerfile does not end with the user step:\n%s", dockerfile)
+	}
+}

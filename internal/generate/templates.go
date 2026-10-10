@@ -4,33 +4,34 @@ import (
 	"bytes"
 	"embed"
 	"fmt"
+	"strings"
 	"text/template"
 
 	"github.com/mpm/projectsetup/internal/config"
+	"github.com/mpm/projectsetup/internal/presets"
 )
 
 //go:embed templates/*
 var templateFiles embed.FS
 
 type data struct {
-	Config           config.Config
-	AITools          string
-	Codex            bool
-	CodexStateSource string
-	PostgresImage    string
-	PostgresDataPath string
+	Config   config.Config
+	Resolved presets.Resolved
+	AITools  string
+	// AptGroups holds one space-separated line per contributing definition block.
+	AptGroups []string
+	Setup     string
 }
 
-func templateData(cfg config.Config) data {
-	result := data{Config: cfg, AITools: shellWords(cfg.AITools), CodexStateSource: config.CodexStateSource}
-	if cfg.Database == config.DatabasePostgres {
-		result.PostgresImage = config.PostgresImage(cfg.PostgresVersion)
-		result.PostgresDataPath = config.PostgresDataPath(cfg.PostgresVersion)
+func templateData(cfg config.Config, resolved presets.Resolved) data {
+	result := data{
+		Config:   cfg,
+		Resolved: resolved,
+		AITools:  shellWords(cfg.AITools),
+		Setup:    strings.Join(resolved.Setup, "\n"),
 	}
-	for _, tool := range cfg.AITools {
-		if tool == config.AIToolCodex {
-			result.Codex = true
-		}
+	for _, group := range resolved.Apt {
+		result.AptGroups = append(result.AptGroups, strings.Join(group, " "))
 	}
 	return result
 }
