@@ -20,9 +20,12 @@ const presetUsage = `Usage:
   projectsetup preset show NAME
   projectsetup preset validate FILE
   projectsetup preset eject NAME --as NEW
+  projectsetup preset add [--yes] URL|github:owner/repo[/path][@ref]
+  projectsetup preset update [--yes] [NAME]
+  projectsetup preset remove NAME
 `
 
-func runPreset(args []string, stdout, stderr io.Writer) error {
+func runPreset(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
 		_, err := io.WriteString(stderr, presetUsage)
 		if err != nil {
@@ -39,6 +42,12 @@ func runPreset(args []string, stdout, stderr io.Writer) error {
 		return runPresetValidate(args[1:], stdout, stderr)
 	case "eject":
 		return runPresetEject(args[1:], stdout, stderr)
+	case "add":
+		return runPresetAdd(args[1:], stdin, stdout, stderr)
+	case "update":
+		return runPresetUpdate(args[1:], stdin, stdout, stderr)
+	case "remove":
+		return runPresetRemove(args[1:], stdout, stderr)
 	case "help", "-h", "--help":
 		_, err := io.WriteString(stdout, presetUsage)
 		return err
@@ -50,6 +59,15 @@ func runPreset(args []string, stdout, stderr io.Writer) error {
 // parsePresetFlags parses flags that may follow the positional arguments
 // and returns the positional arguments.
 func parsePresetFlags(flags *flag.FlagSet, args []string, positional int) ([]string, error) {
+	names, err := parsePresetArgs(flags, args, positional)
+	if err == nil && len(names) != positional {
+		err = fmt.Errorf("%s expects %d argument(s), got %d", flags.Name(), positional, len(names))
+	}
+	return names, err
+}
+
+// parsePresetArgs is parsePresetFlags for up to most positional arguments.
+func parsePresetArgs(flags *flag.FlagSet, args []string, most int) ([]string, error) {
 	flags.SetOutput(io.Discard)
 	var names []string
 	for {
@@ -63,8 +81,8 @@ func parsePresetFlags(flags *flag.FlagSet, args []string, positional int) ([]str
 		names = append(names, args[0])
 		args = args[1:]
 	}
-	if len(names) != positional {
-		return nil, fmt.Errorf("%s expects %d argument(s), got %d", flags.Name(), positional, len(names))
+	if len(names) > most {
+		return nil, fmt.Errorf("%s expects at most %d argument(s), got %d", flags.Name(), most, len(names))
 	}
 	return names, nil
 }
@@ -126,16 +144,8 @@ func runPresetValidate(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	// A preset must also resolve on its own with default options, which
-	// checks rules that only hold for merged results.
-	if definition.Kind == presets.KindPreset {
-		registry, err := presets.NewRegistry(definition)
-		if err != nil {
-			return err
-		}
-		if _, err := registry.Resolve(presets.Selection{Preset: definition.Name, Project: presets.Project{Name: "example", Home: "/home/vscode", Workspace: "/workspaces/example"}}); err != nil {
-			return fmt.Errorf("%s: resolve with default options: %w", paths[0], err)
-		}
+	if err := presets.CheckStandalone(definition); err != nil {
+		return fmt.Errorf("%s: %w", paths[0], err)
 	}
 	if want := strings.TrimSuffix(filepath.Base(paths[0]), ".toml"); want != definition.Name {
 		fmt.Fprintf(stderr, "warning: %s: name %q does not match the file name; save it as %s.toml in the user definition directory\n", paths[0], definition.Name, definition.Name)

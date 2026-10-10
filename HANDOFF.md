@@ -576,9 +576,11 @@ internal/presets/
     presets.go          definition schema, strict parsing, validation
     resolve.go          registry, conditions, placeholder expansion, merging
     load.go             user definitions, project copies, refs, listings
+    remote.go           remote locations, HTTPS fetching, indexes, sources.toml
     builtin.go
     builtin/*.toml      embedded preset and add-on definitions
 internal/cli/preset.go  preset list, show, validate, eject
+internal/cli/preset_remote.go  preset add, update, remove
 schema/preset.schema.json
 internal/validate/
     validate.go
@@ -790,6 +792,11 @@ Rules:
 - Built-in definitions are embedded from `internal/presets/builtin/*.toml`.
 - User definitions live in `os.UserConfigDir()/projectsetup/presets/` (`~/.config/projectsetup/presets` on Linux). `PROJECTSETUP_CONFIG_DIR` replaces `os.UserConfigDir()/projectsetup`, so definitions are read from `$PROJECTSETUP_CONFIG_DIR/presets` and `sources.toml` will live next to that directory. Each file is `NAME.toml`; other files are ignored. A user definition cannot reuse a built-in name; `preset eject NAME --as NEW` copies a built-in (or user) definition, changing only its `name` line, for editing. Copied variant conditions and `supersedes` still name the original definitions.
 - Remote definitions are installed only by `preset add URL|github:owner/repo[/path][@ref]`. They are fetched over HTTPS with the standard library, validated completely before installing, and recorded with their source URL and sha256 in `sources.toml`. A URL may point to one definition or to an `index.toml` listing several. `preset update` shows a diff and asks for confirmation. `init`, `check`, and `upgrade` never use the network.
+  - `github:owner/repo[/path][@ref]` maps to `https://raw.githubusercontent.com/owner/repo/REF/path`; the ref defaults to `HEAD`, and a path that does not end in `.toml` (or no path) names a directory holding `index.toml`.
+  - A URL whose last path segment is `index.toml` is an index: `schema = 1` and `definitions = ["a.toml", "dir/b.toml"]`, clean relative `.toml` paths resolved against the index URL, at most 64 entries. Every file is at most 64 KiB, redirects must stay on HTTPS, and URLs cannot contain credentials.
+  - Installed definitions are written to the user directory as `NAME.toml` and are recorded in `sources.toml` as `[[definition]]` tables with `name`, the definition file `url`, the `ref` of a github location, `sha256`, and `fetched`. `Load` uses the URL as the definition's source, so manifests record it, and fails when a file does not match its recorded digest or a recorded file is missing.
+  - `add` refuses built-in names and names that already exist; `update [NAME]` re-fetches each recorded URL, refuses a changed `name`, and installs nothing if any fetch fails; `remove NAME` deletes only remote definitions. `add` and `update` print the content or diff and a credential warning, and accept `--yes` to skip confirmation. `sources.toml` is written before definition files and after removals, so an interruption never leaves an unpinned remote definition; `update` repairs a missing or mismatched file.
+  - `add`, `update`, and `preset validate` resolve each definition with default options: a preset alone, an add-on on top of a minimal preset.
 - Each generated project gets a copy of the exact resolved definition files in `.devcontainer/presets/`. The manifest records each definition's name, version, source, and sha256. `check` and `upgrade` use that copy, so they do not depend on the local registry; `upgrade --refresh-presets` re-resolves from the registry.
 - Remote definitions run shell code in a container that has AI credentials mounted and a forwarded SSH agent. Install them only on explicit command, show their content before installing, pin hashes, and never update them automatically.
 
@@ -852,10 +859,10 @@ Each phase ends with `go test ./...`, `go vet ./...`, and gofmt passing.
 
 ### Phase 5: Remote definitions
 
-- [ ] Add `preset add URL|github:owner/repo[/path][@ref]`, supporting a single file or `index.toml`.
-- [ ] Add `preset update [NAME]` with a diff and confirmation, and `preset remove NAME`.
-- [ ] Record `sources.toml` with the URL, ref, sha256, and fetch time. Enforce HTTPS and size limits, and write into the registry atomically.
-- [ ] Test with `httptest` servers, including failure, oversize, invalid-definition, and hash-change cases.
+- [x] Add `preset add URL|github:owner/repo[/path][@ref]`, supporting a single file or `index.toml`.
+- [x] Add `preset update [NAME]` with a diff and confirmation, and `preset remove NAME`.
+- [x] Record `sources.toml` with the URL, ref, sha256, and fetch time. Enforce HTTPS and size limits, and write into the registry atomically.
+- [x] Test with `httptest` servers, including failure, oversize, invalid-definition, and hash-change cases.
 
 ### Phase 6: New built-in add-ons
 

@@ -17,6 +17,9 @@ const usage = `Usage:
   projectsetup preset show NAME
   projectsetup preset validate FILE
   projectsetup preset eject NAME --as NEW
+  projectsetup preset add [--yes] URL|github:owner/repo[/path][@ref]
+  projectsetup preset update [--yes] [NAME]
+  projectsetup preset remove NAME
   projectsetup self-update
   projectsetup check [--build]
   projectsetup doctor
@@ -26,7 +29,7 @@ Commands:
   init    Generate a Dev Container configuration
           (--list-options prints accepted values; add --json for JSON)
   upgrade Regenerate an existing projectsetup configuration
-  preset  List, show, validate, or copy preset and add-on definitions
+  preset  List, show, validate, copy, or install preset and add-on definitions
   self-update Update the projectsetup executable
   check   Validate a generated configuration
   doctor  Diagnose host dependencies and dworm compatibility
@@ -67,7 +70,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		}
 		return runUpgrade(root, args[1:], stdout, stderr)
 	case "preset":
-		return runPreset(args[1:], stdout, stderr)
+		return runPreset(args[1:], stdin, stdout, stderr)
 	case "doctor":
 		root, err := os.Getwd()
 		if err != nil {

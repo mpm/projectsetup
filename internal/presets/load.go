@@ -11,7 +11,8 @@ import (
 	"strings"
 )
 
-// Definition sources other than the URL of a remote definition.
+// Definition sources other than the URL of a remote definition, which is
+// recorded in sources.toml.
 const (
 	SourceBuiltin = "builtin"
 	SourceUser    = "user"
@@ -99,6 +100,10 @@ func Load() (*Registry, error) {
 	if err != nil {
 		errs = append(errs, err)
 	}
+	user, err = pinRemote(dir, user)
+	if err != nil {
+		errs = append(errs, err)
+	}
 	builtin := Builtin()
 	definitions := builtin.all()
 	for _, definition := range user {
@@ -112,6 +117,35 @@ func Load() (*Registry, error) {
 		return nil, errors.Join(errs...)
 	}
 	return NewRegistry(definitions...)
+}
+
+// pinRemote marks the user definitions recorded in sources.toml as remote,
+// with their URL as source, and requires them to match the recorded digest.
+func pinRemote(dir string, user []Definition) ([]Definition, error) {
+	sources, err := ReadSources()
+	if err != nil {
+		return user, err
+	}
+	var errs []error
+	found := map[string]bool{}
+	for i, definition := range user {
+		source, ok := sources.Lookup(definition.Name)
+		if !ok {
+			continue
+		}
+		found[definition.Name] = true
+		if got := definition.SHA256(); got != source.SHA256 {
+			errs = append(errs, fmt.Errorf("%s: sha256 is %s but %s records %s for %s; remote definitions cannot be edited in place, run projectsetup preset update %s to restore it or preset remove %s", filepath.Join(dir, definition.Name+".toml"), got, SourcesFile, source.SHA256, source.URL, definition.Name, definition.Name))
+			continue
+		}
+		user[i].Source = source.URL
+	}
+	for _, source := range sources.Definitions {
+		if !found[source.Name] {
+			errs = append(errs, fmt.Errorf("%s: remote definition %q recorded in %s is missing; run projectsetup preset update %s or preset remove %s", filepath.Join(dir, source.Name+".toml"), source.Name, SourcesFile, source.Name, source.Name))
+		}
+	}
+	return user, errors.Join(errs...)
 }
 
 // readDir parses every NAME.toml in dir. A missing directory holds no
