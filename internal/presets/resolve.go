@@ -46,6 +46,12 @@ type Resolved struct {
 	Options map[string]map[string]string
 }
 
+// ConsumesPreinstalledImage distinguishes actual image claims from absent or
+// empty contracts, whose historical installation and metadata behavior remains.
+func (r Resolved) ConsumesPreinstalledImage() bool {
+	return r.Preinstalled != nil && (len(r.Preinstalled.CorePackages) > 0 || len(r.Preinstalled.Tools) > 0)
+}
+
 // Registry holds definitions by name.
 type Registry struct {
 	definitions map[string]Definition

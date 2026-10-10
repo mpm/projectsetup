@@ -231,7 +231,16 @@ devcontainer build --workspace-folder <project-root>
 
 It builds the configuration but does not start the Dev Container or application.
 
+For a preset with **nonempty preinstalled claims**, `check --build` first inspects the locally available base image's `devcontainer.metadata` and asks the Dev Container CLI for its effective merged configuration. Pull or build that base image locally before checking; a missing image or unavailable daemon fails with guidance. Unsafe inherited lifecycle commands or mounts stop the check before the project build. After building, it inspects the final image user/HOME and merged feature requests, environment, mounts, UID-adjustment policy, and lifecycle commands. Inspection creates stopped, mount-free probe containers, never runs their commands, and removes only those probes (including any anonymous volumes they created). Cleanup failures identify the probe to remove. Ordinary `check` warns that shared-image metadata is uninspected; generation and static checks remain offline. These inspections do not verify executable availability, versions, glibc compatibility, home writability, or runtime behavior.
+
 Maintainers can run the opt-in preset integration checks with `PROJECTSETUP_BUILD_TESTS=1 go test ./internal/generate -run TestBuildPresetFixtures` and the first-run lifecycle smoke tests with `PROJECTSETUP_SMOKE_TESTS=1 go test ./internal/generate -run TestSmokePresetFixtures`.
+
+The focused metadata integration test needs a **local** Debian/Ubuntu image with `vscode`, `/bin/bash`, and the core prerequisites. It builds isolated test images, checks rejection of inherited project setup, then checks consumption of toolchain-only metadata without fetching baked feature installers or executing lifecycle commands:
+
+```bash
+PROJECTSETUP_METADATA_TESTS=1 PROJECTSETUP_METADATA_BASE=<local-compatible-image> \
+  go test ./internal/generate -run '^TestSharedImageMetadataIntegration$' -v
+```
 
 The Codex-specific smoke test uses isolated temporary directories to verify official installation, explicit update, custom state sharing, and host execution of the container-installed binary:
 
@@ -332,7 +341,15 @@ Generated `containerEnv.PATH` contains the core AI/user directories first, then 
 
 Generation skips only the declared `core_packages` from its core apt list; undeclared prerequisites retain their original installation order. All definition `image.apt` groups (including add-ons and matching variants) and explicit `--system-package` requests remain, even when they overlap declared packages. If no core or project packages remain, the entire apt update/install/cleanup step is omitted. For example, `core_packages = ["bash", "git"]` leaves CA certificates, curl, GnuPG, and sudo in the core apt step; an explicit `--system-package git` still installs Git. Absent/empty package claims preserve legacy installation behavior independently of tool declarations.
 
-Dockerfiles preserve root/user steps and existing user/home ownership handling. `check` accepts declared bash without a Dockerfile installation and still requires undeclared core packages and explicit project packages. Static checks validate the declared configuration, not the image artifact: a claim asserts usable prerequisites, including working GnuPG commands and an initialized CA trust store. Debian/Ubuntu glibc, `/bin/bash`, `vscode`, and writable `/home/vscode` remain required. Follow the [shared-image roadmap](SHARED_IMAGES_ROADMAP.md#phase-1-first-class-consumption-of-shared-images) for version-file binding, inherited metadata, ownership, and opt-in runtime verification before relying on this as an end-to-end shared-image workflow.
+Dockerfiles preserve root/user steps and existing user/home ownership handling. `check` accepts declared bash without a Dockerfile installation and still requires undeclared core packages and explicit project packages. Static checks validate the declared configuration, not the image artifact: a claim asserts usable prerequisites, including working GnuPG commands and an initialized CA trust store. Debian/Ubuntu glibc, `/bin/bash`, `vscode`, and writable `/home/vscode` remain required. Follow the [shared-image roadmap](SHARED_IMAGES_ROADMAP.md#phase-1-first-class-consumption-of-shared-images) for version-file binding, ownership, and opt-in runtime verification before relying on this as an end-to-end shared-image workflow.
+
+#### Inherited Dev Container metadata
+
+Run `projectsetup check --build` before starting a shared-image project. Baked feature `id` entries in `devcontainer.metadata` describe installed layers; they are not feature installer requests and are allowed, including opaque feature IDs and older single-object metadata. Only the generated `features` map requests installation. Declarations still govern suppression/conflicts; projectsetup never infers installed capabilities from metadata IDs.
+
+Reusable images must carry **toolchain-only metadata**: no project lifecycle/dependency/server commands, Dev Container mounts, or Docker `VOLUME` declarations. The effective container/remote users must be `vscode`; HOME must agree with `/home/vscode`; generated PATH/environment must survive merging; reserved `remoteEnv` values must not conflict with direct execution. Inherited `updateRemoteUserUID: false` is rejected until an explicit fixed-ID contract exists. The project post-create script must appear exactly once, with no other nonempty lifecycle hooks (including hooks from explicitly requested features).
+
+Do not reuse an application image whose metadata contains its project setup. Rebuild its recipe without those entries, or deliberately reset `LABEL devcontainer.metadata="[]"` in a **separately built toolchain artifact**, retaining any needed runtime environment in image `ENV` or preset `container.env`/paths. A reset in the consuming project's Dockerfile is insufficient: the Dev Container CLI reads `FROM` metadata before building and can re-emit inherited hooks. Project configuration overrides do not remove additive lifecycle commands/mounts. Checks fail with the image, metadata entry, and field requiring repair; they do not rewrite the base image, definitions, or credentials. Absent/empty preinstalled declarations retain historical generation and build behavior.
 
 ### Writing a definition
 

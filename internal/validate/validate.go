@@ -48,7 +48,14 @@ type commandRunner struct{}
 
 func (commandRunner) LookPath(name string) (string, error) { return exec.LookPath(name) }
 func (commandRunner) Run(name string, args ...string) ([]byte, error) {
-	return exec.Command(name, args...).CombinedOutput()
+	command := exec.Command(name, args...)
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
+	output, err := command.Output()
+	if err != nil {
+		output = append(output, stderr.Bytes()...)
+	}
+	return output, err
 }
 
 type devcontainerDocument struct {
@@ -144,7 +151,7 @@ func Check(root string, options Options) []Diagnostic {
 	}
 	if options.External {
 		build := options.Build && ErrorCount(diagnostics) == 0
-		validateExternal(root, devDir, manifestValid, build, options, add)
+		validateExternal(root, devDir, manifestValid, build, resolved, document, options, add)
 	}
 
 	sort.SliceStable(diagnostics, func(i, j int) bool {
@@ -569,12 +576,16 @@ func sortedKeys[V any](values map[string]V) []string {
 	return keys
 }
 
-func validateExternal(root, devDir string, compose, build bool, options Options, add func(Severity, string, string, ...any)) {
+func validateExternal(root, devDir string, compose, build bool, resolved presets.Resolved, document devcontainerDocument, options Options, add func(Severity, string, string, ...any)) {
+	if resolved.ConsumesPreinstalledImage() && !build {
+		add(Warning, ".devcontainer/Dockerfile", "shared-image Dev Container metadata has not been inspected; run projectsetup check --build before starting the container")
+	}
 	if compose {
 		if _, err := options.Runner.LookPath("docker"); err != nil {
 			add(Warning, ".devcontainer/compose.yaml", "docker is not installed; skipped docker compose config")
 		} else if output, err := options.Runner.Run("docker", "compose", "-f", filepath.Join(devDir, "compose.yaml"), "config"); err != nil {
 			add(Error, ".devcontainer/compose.yaml", "docker compose config failed: %s", commandFailure(err, output))
+			build = false
 		}
 	}
 	if _, err := options.Runner.LookPath("devcontainer"); err != nil {
@@ -590,8 +601,13 @@ func validateExternal(root, devDir string, compose, build bool, options Options,
 		return
 	}
 	if build {
+		if resolved.ConsumesPreinstalledImage() && !validateBaseMetadata(root, devDir, resolved.Base, document, options.Runner, add) {
+			return
+		}
 		if output, err := options.Runner.Run("devcontainer", "build", "--workspace-folder", root); err != nil {
 			add(Error, ".devcontainer/devcontainer.json", "devcontainer build failed: %s", commandFailure(err, output))
+		} else if resolved.ConsumesPreinstalledImage() {
+			validateBuiltMetadata(root, devDir, output, document, options.Runner, add)
 		}
 	}
 }
