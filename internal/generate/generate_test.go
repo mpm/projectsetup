@@ -2,6 +2,7 @@ package generate
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -146,6 +147,20 @@ func TestWriteOnlyReplacesRecognizedDirectoryWithForce(t *testing.T) {
 	}
 	if err := Write(root, cfg, true); err == nil || !strings.Contains(err.Error(), `unrelated path "presets/notes.txt"`) {
 		t.Fatalf("Write() error = %v, want unrelated-file refusal", err)
+	}
+	if err := os.Remove(filepath.Join(root, directoryName, "presets", "notes.txt")); err != nil {
+		t.Fatal(err)
+	}
+	// The Dev Container CLI's feature lockfile is replaced with the rest.
+	lockfile := filepath.Join(root, directoryName, "devcontainer-lock.json")
+	if err := os.WriteFile(lockfile, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Write(root, cfg, true); err != nil {
+		t.Fatalf("Write() with devcontainer-lock.json error = %v", err)
+	}
+	if _, err := os.Stat(lockfile); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("devcontainer-lock.json after replacement: %v, want it removed", err)
 	}
 
 	otherRoot := t.TempDir()

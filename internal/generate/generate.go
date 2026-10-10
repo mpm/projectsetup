@@ -180,6 +180,10 @@ func checkGeneratedContents(target string) error {
 		"scripts/install-ai-tools.sh": false,
 		"scripts/post-create.sh":      false,
 		config.PresetsDir:             true,
+		// The Dev Container CLI pins the features it installed here when it
+		// starts the container. Replacement drops it, and the next start
+		// writes it again for the regenerated features.
+		"devcontainer-lock.json": false,
 	}
 	return filepath.WalkDir(target, func(current string, entry fs.DirEntry, err error) error {
 		if err != nil {
