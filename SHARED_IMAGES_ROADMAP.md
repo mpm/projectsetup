@@ -1,6 +1,6 @@
 # Shared Toolchain Images: Implementation Roadmap
 
-Status: Phase 1 declaration design, schema evolution, parsing/resolution/normalization/editor/listing support, generated tool consumption, core apt suppression, explicit inherited metadata inspection, fixed-runtime version-file binding, and opt-in built-artifact runtime verification completed. Digest-pinned end-to-end documentation and ownership policy remain pending.
+Status: Phase 1 declaration design, schema evolution, parsing/resolution/normalization/editor/listing support, generated tool consumption, core apt suppression, explicit inherited metadata inspection, fixed-runtime version-file binding, and opt-in built-artifact runtime verification completed. Digest-pinned end-to-end documentation, ownership policy, and the explicit host-integrations extension remain pending. Schedule host integrations alongside or immediately after Phase 2.
 
 This roadmap records the shared-image design discussed with the user. It is a handoff for a future implementation session. Read `AGENTS.md` and `HANDOFF.md` first, then this document. `HANDOFF.md` remains the contract for existing behavior; this roadmap describes proposed extensions.
 
@@ -255,6 +255,23 @@ Coordinate this phase with Phase 1 before claiming support for populated shared 
 
 Acceptance: a matching fixed-ID image avoids toolchain-copying UID-adjustment layers; mismatched IDs produce actionable diagnostics; first-run AI setup still works without recursively modifying host state.
 
+## Extension alongside or after Phase 2: Explicit host integrations
+
+Support selected project-specific host integrations through typed preset/add-on declarations. The first concrete use case is forwarding a Linux Wayland socket into the app container. This is a planned extension, not existing host-mount support, and is independent of the shared toolchain artifact's contents.
+
+Current definitions already support non-reserved environment variables through `[container.env]`, and their snapshots preserve those contributions through `upgrade`. They cannot declare host mounts. Ordinary static checks may accept a manually added mount, but regeneration discards it; that acceptance does not imply persistence or complete source/access validation. `HANDOFF.md` deliberately reserves host mounts to the core, so implementing this extension requires an explicit revision of that contract.
+
+- [ ] Design a constrained typed bind-mount declaration for presets/add-ons, with explicit source, absolute container target, and read-only/read-write behavior. Decide definition/editor schema evolution and compatibility before implementation; do not introduce arbitrary JSON/Compose fragments or a generic template engine.
+- [ ] Support explicit host-environment references in mount sources, including `XDG_RUNTIME_DIR` and `WAYLAND_DISPLAY`. Define missing-variable behavior and any supported defaults without shell evaluation or implicit host discovery. Reuse existing `[container.env]` for container variables; keep runtime environment available to non-login `dworm exec`, not only editor `remoteEnv`.
+- [ ] Normalize mount contributions with deterministic ordering, reject conflicting/overlapping targets where they would hide core-managed paths, and preserve ownership of workspace/AI mounts and the prohibition on host `.ssh`/`.gitconfig` mounts.
+- [ ] Snapshot the declarations and preserve them through ordinary `upgrade` and regeneration. Retain host-variable references rather than persisting machine-specific resolved paths. Keep generation and static checks offline, with existing presets and absent host-integration declarations retaining their current behavior.
+- [ ] Validate selected integrations with actionable errors for missing required host variables/sources, incorrect source kinds, and invalid targets. Distinguish directory, file, and Unix-socket sources; never auto-create a directory in place of a missing file/socket or recursively change host ownership.
+- [ ] Integrate source/access diagnostics with Phase 2's user-ID and bind-mount policy, including Wayland socket access as `vscode` on Linux. Define unsupported-host behavior explicitly; integrations remain opt-in and do not change portable defaults.
+- [ ] Extend generation and effective metadata validation from the same typed mount model. Accept explicitly declared project mounts alongside core-managed mounts while retaining rejection of unexpected inherited mounts/hooks. Keep built-artifact runtime probes mount-free and separate from host-integration verification.
+- [ ] Add Docker-independent parsing, normalization, conflict, missing-variable/source, source-kind, snapshot/upgrade, and legacy tests, plus golden output and an opt-in Wayland connection check. Document selection, required host environment, regeneration, and the temporary manual-mount workaround.
+
+First acceptance example: a selected Wayland integration generates a bind mount from `${localEnv:XDG_RUNTIME_DIR}/${localEnv:WAYLAND_DISPLAY}` to `/run/host-wayland/wayland-0` and sets `containerEnv.WAYLAND_DISPLAY` to `/run/host-wayland/wayland-0`. The configuration survives `projectsetup upgrade` without manual reapplication; on a compatible Linux host, a test client connects through non-login execution as `vscode`. Missing variables/socket or insufficient access produce useful diagnostics. No display server or application starts automatically, and existing AI mounts and `dworm` credential forwarding continue to work.
+
 ## Phase 3: Reference recipes and the user's image family
 
 - [ ] Provide a small documented reference recipe/workflow, using custom definitions for the user's CLI bundles and variants.
@@ -295,11 +312,11 @@ This is useful adjacent work, not required for shared app-toolchain images.
 
 Follow the repository's table-driven, golden, and opt-in integration testing conventions.
 
-- Unit tests: declaration parsing, legacy compatibility, normalization, image/runtime inconsistency, UID/GID policy, and actionable validation failures.
-- Golden tests: traditional presets, shared-image presets, project-specific additions, fixed-ID policy, deterministic output, definition snapshots, and executable script modes.
+- Unit tests: declaration parsing, legacy compatibility, normalization, image/runtime inconsistency, UID/GID policy, explicit host-mount/environment validation, and actionable validation failures.
+- Golden tests: traditional presets, shared-image presets, project-specific additions, fixed-ID policy, opt-in host integrations, deterministic output, definition snapshots, and executable script modes.
 - Installer tests: targeted parent creation, unwritable mounts, and nested host mounts are handled without recursive ownership changes; preserve AI tool installation/update behavior.
 - Docker-independent static checks remain in the normal test suite.
-- Opt-in integration checks: effective Dev Container metadata, Compose configuration, artifact user/home/IDs, actual runtime versions and PATH through non-login execution, and first-run writable mounts.
+- Opt-in integration checks: effective Dev Container metadata, Compose configuration, artifact user/home/IDs, actual runtime versions and PATH through non-login execution, first-run writable mounts, and explicitly selected host integrations such as a Wayland socket connection.
 - Layer-sharing check: two project images share the intended parent layers; a matching fixed-ID variant does not acquire a large home-copying UID layer. Record measurements without hardcoding server-specific savings.
 
 For each implementation phase, run:
@@ -314,7 +331,7 @@ When fixtures or integration behavior change, run applicable `docker compose con
 
 ## Scope boundaries
 
-This roadmap covers shared-image support, associated ownership behavior, reusable image recipes, and optional PostgreSQL pinning improvements. Cleanup of the remote server's temporary files, removal of Docker resources, application runtime upgrades, database migration, and temporary-file retention policies are separate tasks requiring their own explicit instructions.
+This roadmap covers shared-image support, associated ownership behavior, explicit opt-in host integrations, reusable image recipes, and optional PostgreSQL pinning improvements. Cleanup of the remote server's temporary files, removal of Docker resources, application runtime upgrades, database migration, and temporary-file retention policies are separate tasks requiring their own explicit instructions.
 
 ## Starting a future session
 
