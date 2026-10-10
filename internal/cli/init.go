@@ -60,6 +60,7 @@ func runInit(root string, args []string, stdin io.Reader, stdout, stderr io.Writ
 	rubyVersion := flags.String("ruby-version", "", "alias for --set ruby.version=VERSION or rails.version=VERSION")
 	pythonVersion := flags.String("python-version", "", "alias for --set python.version=VERSION")
 	managerValue := flags.String("package-manager", "", "alias for --set package_manager=VALUE")
+	postgresImage := flags.String("postgres-image", "", "literal PostgreSQL image tag with optional sha256 digest; major must match --postgres-version (--force preserves it)")
 	postgresVersion := flags.String("postgres-version", "", "alias for --set postgres.version=MAJOR (--force keeps the existing version)")
 	var ports repeatedPorts
 	var systemPackages repeatedStrings
@@ -167,7 +168,10 @@ func runInit(root string, args []string, stdin io.Reader, stdout, stderr io.Writ
 		}
 	}
 	if *force {
-		keepAddonOptions(root, addons, options)
+		previousImage := keepAddonOptions(root, addons, options)
+		if !provided["postgres-image"] {
+			*postgresImage = string(previousImage)
+		}
 	}
 	tools, err := chooseAITools(*aiValue, provided["ai"], prompt)
 	if err != nil {
@@ -175,6 +179,7 @@ func runInit(root string, args []string, stdin io.Reader, stdout, stderr io.Writ
 	}
 
 	cfg, err := config.Normalize(config.Input{
+		PostgresImage:  config.PostgresImageRef(*postgresImage),
 		Root:           root,
 		Registry:       registry,
 		ProjectName:    projectName,
@@ -469,16 +474,17 @@ func chooseAITools(value string, wasProvided bool, prompt *prompter) ([]config.A
 // keepAddonOptions carries option values of add-ons that the existing
 // generated manifest also selected into options when they are not set, so
 // regenerating with --force keeps, for example, a PostgreSQL data volume
-// readable. Unusable manifests are ignored.
-func keepAddonOptions(root string, addons []string, options map[string]map[string]string) {
+// readable. Its explicit image reference is returned when postgres remains
+// selected. Unusable manifests are ignored.
+func keepAddonOptions(root string, addons []string, options map[string]map[string]string) config.PostgresImageRef {
 	file, err := os.Open(filepath.Join(root, ".devcontainer", "projectsetup.json"))
 	if err != nil {
-		return
+		return ""
 	}
 	defer file.Close()
 	manifest, err := config.ReadManifest(file)
 	if err != nil || manifest.GeneratedBy != config.GeneratedBy {
-		return
+		return ""
 	}
 	for _, ref := range manifest.Addons {
 		if !slices.Contains(addons, ref.Name) {
@@ -490,9 +496,16 @@ func keepAddonOptions(root string, addons []string, options map[string]map[strin
 			}
 		}
 	}
+	if slices.Contains(addons, "postgres") {
+		return manifest.PostgresImage
+	}
+	return ""
 }
 
 func printConfigSummary(output io.Writer, cfg config.Config) {
+	if cfg.PostgresImage != "" {
+		fmt.Fprintf(output, "PostgreSQL image: %s\n", cfg.PostgresImage)
+	}
 	tools := make([]string, len(cfg.AITools))
 	for i, tool := range cfg.AITools {
 		tools[i] = string(tool)

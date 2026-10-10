@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 2,
+  "projectName": "exact-db-17",
+  "preset": {
+    "name": "node",
+    "version": "1.0.0",
+    "source": "builtin",
+    "sha256": "ebfea2380619d859da2078471a3793b6690f52b69e9fedf264722d3f3e448a47"
+  },
+  "addons": [
+    {
+      "name": "postgres",
+      "version": "1.0.0",
+      "source": "builtin",
+      "sha256": "2599aeb6646927da792811aac4fc083f264cf652d277b5772de93c38c94476b5"
+    }
+  ],
+  "options": {
+    "node": {
+      "package_manager": "npm",
+      "version": "26"
+    },
+    "postgres": {
+      "version": "17"
+    }
+  },
+  "postgresImage": "postgres:17.6-bookworm",
+  "aiTools": [],
+  "ports": [],
+  "systemPackages": [],
+  "generatedBy": "projectsetup"
+}

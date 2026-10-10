@@ -98,9 +98,10 @@ func DescribeChoices[T ~string](values []T) string {
 // definitions validated against a registry; Definitions holds them in
 // contribution order, the preset first and then add-ons sorted by name.
 type Config struct {
-	ProjectName string
-	Preset      string
-	Addons      []string
+	PostgresImage PostgresImageRef
+	ProjectName   string
+	Preset        string
+	Addons        []string
 	// Options holds the effective value of every option of every selected
 	// definition, keyed by definition name and then option name.
 	Options        map[string]map[string]string

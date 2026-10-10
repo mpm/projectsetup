@@ -25,6 +25,8 @@ type goldenCase struct {
 }
 
 var goldenCases = []goldenCase{
+	{name: "postgres-exact-17", input: config.Input{ProjectName: "exact-db-17", Preset: "node", Addons: []string{"postgres"}, Options: map[string]map[string]string{"postgres": {"version": "17"}}, PostgresImage: "postgres:17.6-bookworm", AITools: []config.AITool{}}},
+	{name: "postgres-exact-18", input: config.Input{ProjectName: "exact-db-18", Preset: "node", Addons: []string{"postgres"}, PostgresImage: config.PostgresImageRef("docker.io/library/postgres:18.1-trixie@sha256:" + strings.Repeat("a", 64)), AITools: []config.AITool{}}},
 	{name: "python-codex", input: config.Input{ProjectName: "python-codex", Preset: "python", AITools: []config.AITool{config.AIToolCodex}}},
 	{name: "node-all-agents", input: config.Input{ProjectName: "node-all-agents", Preset: "node", AITools: []config.AITool{config.AIToolOpenCode, config.AIToolCodex, config.AIToolClaude}}},
 
@@ -197,7 +199,7 @@ func TestGoldenDevcontainerConfigurations(t *testing.T) {
 		t.Skipf("Docker daemon is unavailable: %v: %s", err, output)
 	}
 
-	for _, name := range []string{"node-opencode", "ruby-opencode", "rails-claude-postgres", "rails-sqlite", "python-uv-claude-postgres", "python-codex", "node-all-agents", "shared-node", "fixed-image", "wayland"} {
+	for _, name := range []string{"postgres-exact-17", "postgres-exact-18", "node-opencode", "ruby-opencode", "rails-claude-postgres", "rails-sqlite", "python-uv-claude-postgres", "python-codex", "node-all-agents", "shared-node", "fixed-image", "wayland"} {
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()

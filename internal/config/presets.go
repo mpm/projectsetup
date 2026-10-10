@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+
 	"github.com/mpm/projectsetup/internal/presets"
 )
 
@@ -27,7 +29,7 @@ func Resolve(cfg Config) (presets.Resolved, error) {
 	if err != nil {
 		return presets.Resolved{}, err
 	}
-	return registry.Resolve(presets.Selection{
+	resolved, err := registry.Resolve(presets.Selection{
 		Preset:  cfg.Preset,
 		Addons:  cfg.Addons,
 		Options: cfg.Options,
@@ -37,4 +39,19 @@ func Resolve(cfg Config) (presets.Resolved, error) {
 			Workspace: cfg.Workspace.ContainerPath,
 		},
 	})
+	if err != nil {
+		return presets.Resolved{}, err
+	}
+	if cfg.PostgresImage != "" {
+		if err := validatePostgresImage(cfg); err != nil {
+			return presets.Resolved{}, err
+		}
+		service, ok := resolved.Services["postgres"]
+		if !ok {
+			return presets.Resolved{}, fmt.Errorf("postgresImage requires the built-in postgres service")
+		}
+		service.Image = string(cfg.PostgresImage)
+		resolved.Services["postgres"] = service
+	}
+	return resolved, nil
 }

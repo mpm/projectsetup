@@ -21,7 +21,8 @@ var invalidNameCharacters = regexp.MustCompile(`[^a-z0-9_-]+`)
 var validSystemPackage = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9+.-]*$`)
 
 type Input struct {
-	Root string
+	PostgresImage PostgresImageRef
+	Root          string
 	// Registry provides the definitions; nil means the built-in definitions.
 	Registry    *presets.Registry
 	ProjectName string
@@ -91,6 +92,7 @@ func Normalize(input Input) (Config, error) {
 		addons = append(addons, definition.Name)
 	}
 	cfg := Config{
+		PostgresImage:  input.PostgresImage,
 		ProjectName:    name,
 		Preset:         definitions[0].Name,
 		Addons:         addons,

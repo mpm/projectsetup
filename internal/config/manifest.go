@@ -26,6 +26,7 @@ type Manifest struct {
 	Preset         presets.Ref                  `json:"preset"`
 	Addons         []presets.Ref                `json:"addons"`
 	Options        map[string]map[string]string `json:"options"`
+	PostgresImage  PostgresImageRef             `json:"postgresImage,omitempty"`
 	AITools        []AITool                     `json:"aiTools"`
 	Ports          []int                        `json:"ports"`
 	SystemPackages []string                     `json:"systemPackages"`
@@ -49,6 +50,7 @@ type manifestV1 struct {
 
 func NewManifest(config Config) Manifest {
 	manifest := Manifest{
+		PostgresImage:  config.PostgresImage,
 		SchemaVersion:  SchemaVersion,
 		ProjectName:    config.ProjectName,
 		Addons:         []presets.Ref{},
@@ -76,6 +78,7 @@ func NewManifest(config Config) Manifest {
 // Input returns the normalization input that reproduces the manifest.
 func (m Manifest) Input(root string, registry *presets.Registry) Input {
 	input := Input{
+		PostgresImage:  m.PostgresImage,
 		Root:           root,
 		Registry:       registry,
 		ProjectName:    m.ProjectName,

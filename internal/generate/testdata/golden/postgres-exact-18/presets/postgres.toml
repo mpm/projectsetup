@@ -1,0 +1,52 @@
+schema = 1
+kind = "addon"
+name = "postgres"
+version = "1.0.0"
+description = "PostgreSQL sidecar with development-only credentials"
+
+# A data volume can only be opened by the major version that created it, so
+# manifests record the version and it never changes implicitly.
+[options.version]
+description = "PostgreSQL major version"
+default = "18"
+pattern = '[1-9][0-9]*'
+
+[container.env]
+DB_HOST = "postgres"
+PGHOST = "postgres"
+PGUSER = "projectsetup"
+PGPASSWORD = "projectsetup"
+PGDATABASE = "${project:name}"
+
+[services.postgres]
+image = "postgres:${option:version}-trixie"
+restart = "unless-stopped"
+app_depends_on = "service_healthy"
+volumes = { postgres-data = "/var/lib/postgresql" }
+
+[services.postgres.environment]
+POSTGRES_USER = "projectsetup"
+POSTGRES_PASSWORD = "projectsetup"
+POSTGRES_DB = "${project:name}"
+
+[services.postgres.healthcheck]
+test = ["CMD-SHELL", "pg_isready -U projectsetup -d ${project:name}"]
+interval = "5s"
+timeout = "5s"
+retries = 10
+
+# The rails preset installs the client through its own feature.
+[[variant]]
+when = { not_preset = ["rails"] }
+
+[variant.image]
+apt = ["libpq-dev", "postgresql-client"]
+
+# Before 18, keep the bookworm image earlier releases generated, because
+# changing glibc can change collation order, and the old data directory.
+[[variant]]
+when = { option = { version = { below = 18 } } }
+
+[variant.services.postgres]
+image = "postgres:${option:version}-bookworm"
+volumes = { postgres-data = "/var/lib/postgresql/data" }

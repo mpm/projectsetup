@@ -1,0 +1,24 @@
+{
+  "name": "exact-db-18",
+  "dockerComposeFile": "compose.yaml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/exact-db-18",
+  "containerUser": "vscode",
+  "remoteUser": "vscode",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "26"
+    }
+  },
+  "containerEnv": {
+    "DB_HOST": "postgres",
+    "PATH": "/home/vscode/.local/bin:/home/vscode/.opencode/bin:/usr/local/share/nvm/current/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "PGDATABASE": "exact-db-18",
+    "PGHOST": "postgres",
+    "PGPASSWORD": "projectsetup",
+    "PGUSER": "projectsetup"
+  },
+  "postCreateCommand": ".devcontainer/scripts/post-create.sh",
+  "shutdownAction": "stopCompose"
+}
