@@ -1,5 +1,9 @@
 # Projectsetup Implementation Handoff
 
+## Planned Extensions
+
+See [Shared Toolchain Images: Implementation Roadmap](SHARED_IMAGES_ROADMAP.md) for the planned shared-image consumption, UID/GID and ownership handling, customizable image-family recipes, optional build/export workflow, and exact PostgreSQL reference support. That roadmap describes future work; the contract below documents existing behavior.
+
 ## Purpose
 
 `projectsetup` is an opinionated command-line tool that creates reliable Dev Container setups for local software projects. It targets the author's workflow:
