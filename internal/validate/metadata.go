@@ -84,8 +84,12 @@ func validateBaseMetadata(root, devDir, image string, want devcontainerDocument,
 	return valid
 }
 
-func validateBuiltMetadata(root, devDir string, output []byte, want devcontainerDocument, runner Runner, add func(Severity, string, string, ...any)) {
-	fail := func(format string, args ...any) { add(Error, ".devcontainer/devcontainer.json", format, args...) }
+func validateBuiltMetadata(root, devDir string, output []byte, want devcontainerDocument, runner Runner, add func(Severity, string, string, ...any)) (string, bool) {
+	valid := true
+	fail := func(format string, args ...any) {
+		valid = false
+		add(Error, ".devcontainer/devcontainer.json", format, args...)
+	}
 	var result struct {
 		ImageName json.RawMessage `json:"imageName"`
 	}
@@ -99,11 +103,15 @@ func validateBuiltMetadata(root, devDir string, output []byte, want devcontainer
 	}
 	if err != nil || image == "" {
 		fail("inspect built Dev Container metadata: build did not return an imageName string or array")
-		return
+		return "", false
 	}
 	inspected, ok := inspectImage(image, runner, fail)
 	if !ok {
-		return
+		return "", false
+	}
+	if len(inspected.Config.Volumes) > 0 {
+		fail("built image %q declares Docker VOLUME mounts; remove them before mount-free verification", image)
+		return image, false
 	}
 	if inspected.Config.User != "vscode" {
 		fail("built image %q effective user is %q; expected vscode", image, inspected.Config.User)
@@ -121,6 +129,7 @@ func validateBuiltMetadata(root, devDir string, output []byte, want devcontainer
 		}
 	}
 	probeMetadata(root, devDir, image, true, want, runner, fail)
+	return image, valid
 }
 
 // A stopped, mount-free probe uses the CLI's own merge rules. Labels on a final

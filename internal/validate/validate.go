@@ -36,6 +36,7 @@ type Options struct {
 	CheckHostMounts bool
 	External        bool
 	Build           bool
+	Runtime         bool
 	Runner          Runner
 }
 
@@ -149,8 +150,11 @@ func Check(root string, options Options) []Diagnostic {
 		validateProjectConventions(root, cfg, add)
 		validateCompose(root, devDir, cfg, resolved, add)
 	}
-	if options.External {
-		build := options.Build && ErrorCount(diagnostics) == 0
+	if options.Runtime && manifestValid && !resolved.ConsumesPreinstalledImage() {
+		add(Error, ".devcontainer/projectsetup.json", "runtime verification requires nonempty image.preinstalled claims; legacy presets retain their explicit integration smoke tests")
+	}
+	if options.External || options.Runtime {
+		build := (options.Build || options.Runtime) && ErrorCount(diagnostics) == 0
 		validateExternal(root, devDir, manifestValid, build, resolved, document, options, add)
 	}
 
@@ -613,6 +617,10 @@ func validateExternal(root, devDir string, compose, build bool, resolved presets
 	}
 	if compose {
 		if _, err := options.Runner.LookPath("docker"); err != nil {
+			if build && options.Runtime {
+				add(Error, ".devcontainer/Dockerfile", "docker is not installed; requested runtime verification requires Docker")
+				return
+			}
 			add(Warning, ".devcontainer/compose.yaml", "docker is not installed; skipped docker compose config")
 		} else if output, err := options.Runner.Run("docker", "compose", "-f", filepath.Join(devDir, "compose.yaml"), "config"); err != nil {
 			add(Error, ".devcontainer/compose.yaml", "docker compose config failed: %s", commandFailure(err, output))
@@ -638,7 +646,13 @@ func validateExternal(root, devDir string, compose, build bool, resolved presets
 		if output, err := options.Runner.Run("devcontainer", "build", "--workspace-folder", root); err != nil {
 			add(Error, ".devcontainer/devcontainer.json", "devcontainer build failed: %s", commandFailure(err, output))
 		} else if resolved.ConsumesPreinstalledImage() {
-			validateBuiltMetadata(root, devDir, output, document, options.Runner, add)
+			image, valid := validateBuiltMetadata(root, devDir, output, document, options.Runner, add)
+			if valid && options.Runtime {
+				validateRuntime(image, resolved.Preinstalled, document, options.Runner, add)
+			}
+			if valid && !options.Runtime {
+				add(Warning, ".devcontainer/Dockerfile", "build and metadata checks do not verify installed capabilities; run projectsetup check --runtime")
+			}
 		}
 	}
 }

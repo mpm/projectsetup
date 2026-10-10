@@ -219,6 +219,7 @@ The list replaces the previous selection; use `--ai none` to disable all agents.
 ```bash
 projectsetup check
 projectsetup check --build
+projectsetup check --runtime
 ```
 
 `check` validates the manifest, generated files and script modes, users and workspace paths, Compose service configuration, AI mounts, ports, option values against detected version files and lockfiles, and the features, environment, PATH entries, apt packages, and sidecar services that the selected definitions contribute. It reads the definitions from `.devcontainer/presets/` and fails when a copy does not match the hash recorded in the manifest. When installed, it also runs `docker compose config` and `devcontainer read-configuration`. Configurations with schema 1 manifests from earlier releases are checked against the built-in definitions. Node, Rails, and Python configurations from v0.8.0 and earlier fail because they lack PATH entries that `dworm exec` needs; `projectsetup upgrade` adds them.
@@ -233,6 +234,15 @@ It builds the configuration but does not start the Dev Container or application.
 
 For a preset with **nonempty preinstalled claims**, `check --build` first inspects the locally available base image's `devcontainer.metadata` and asks the Dev Container CLI for its effective merged configuration. Pull or build that base image locally before checking; a missing image or unavailable daemon fails with guidance. Unsafe inherited lifecycle commands or mounts stop the check before the project build. After building, it inspects the final image user/HOME and merged feature requests, environment, mounts, UID-adjustment policy, and lifecycle commands. Inspection creates stopped, mount-free probe containers, never runs their commands, and removes only those probes (including any anonymous volumes they created). Cleanup failures identify the probe to remove. Ordinary `check` warns that shared-image metadata is uninspected; generation and static checks remain offline. These inspections do not verify executable availability, versions, glibc compatibility, home writability, or runtime behavior.
 
+`check --runtime` **implies a build** and requires nonempty `image.preinstalled` claims. After static/external checks, the build, and successful base/final metadata inspection, it starts a separate disposable container from the built image with the generated `containerEnv`. It overrides the image startup command, disables networking and inherited healthchecks, mounts no workspace or host credentials, and uses non-login direct `docker exec` as `vscode`, without lifecycle scripts or application setup. It checks:
+
+- Debian/Ubuntu identity, glibc, `/bin/bash`, non-root `vscode`, `/home/vscode` identity and actual temporary-file writability.
+- Installed core packages, a nonempty CA bundle whose certificates OpenSSL can parse, and working curl, Git, GnuPG (including gpg-agent), and sudo version commands.
+- Every declared executable's executable bit and command lookup through the generated PATH. Lookup must resolve to the declared file (symlinks are allowed); shadowed commands fail.
+- The exact reported release from both the absolute executable and the lookup command for supported identities: `node`, `ruby`, `python`, `go`, `rust` (`rustc`), `gh`, `npm`, `pnpm`, `yarn`, `bundler`, `pip`, `uv`, `poetry`, and `cargo`. Version output must match that tool's recognized format and the literal declared release; unrelated or unrecognized output fails.
+
+Custom tool keys still receive executable/PATH checks, but have no inferred version parser: an unsupported probe is an **error**, so partial checks cannot report full runtime verification. Independent probe failures are aggregated. Only newly created probes are removed on success/failure; cleanup failures name the owned resource and repair command. Build images/cache remain. This checks the built artifact's executable/version capabilities, not application dependencies, network trust against a remote server, first-run lifecycle behavior, bind-mount writability, or host UID/GID compatibility. Use the first-run smoke tests for lifecycle behavior; ownership policy remains a separate roadmap item. Static checks and build success alone are not capability proof. Absent/empty contracts retain historical static/build behavior; `--runtime` rejects them rather than inventing runtime claims.
+
 Maintainers can run the opt-in preset integration checks with `PROJECTSETUP_BUILD_TESTS=1 go test ./internal/generate -run TestBuildPresetFixtures` and the first-run lifecycle smoke tests with `PROJECTSETUP_SMOKE_TESTS=1 go test ./internal/generate -run TestSmokePresetFixtures`.
 
 The focused metadata integration test needs a **local** Debian/Ubuntu image with `vscode`, `/bin/bash`, and the core prerequisites. It builds isolated test images, checks rejection of inherited project setup, then checks consumption of toolchain-only metadata without fetching baked feature installers or executing lifecycle commands:
@@ -240,6 +250,13 @@ The focused metadata integration test needs a **local** Debian/Ubuntu image with
 ```bash
 PROJECTSETUP_METADATA_TESTS=1 PROJECTSETUP_METADATA_BASE=<local-compatible-image> \
   go test ./internal/generate -run '^TestSharedImageMetadataIntegration$' -v
+```
+
+The runtime integration test additionally requires real Node and GitHub CLI installations in that local image (Node on `/usr/local/share/nvm/current/bin` or the system PATH). It discovers fixture releases explicitly, builds a toolchain-only test artifact, and tests valid capabilities, wrong releases, missing/shadowed executables, unsupported custom probes, missing/corrupt CA bundles, unwritable homes, probe isolation (including disabled healthchecks), cleanup, and unchanged manifests/snapshots without executing project setup:
+
+```bash
+PROJECTSETUP_RUNTIME_TESTS=1 PROJECTSETUP_RUNTIME_BASE=<local-node-gh-image> \
+  go test ./internal/generate -run '^TestSharedImageRuntimeIntegration$' -v -timeout 10m
 ```
 
 The Codex-specific smoke test uses isolated temporary directories to verify official installation, explicit update, custom state sharing, and host execution of the container-installed binary:
@@ -341,7 +358,7 @@ Generated `containerEnv.PATH` contains the core AI/user directories first, then 
 
 Generation skips only the declared `core_packages` from its core apt list; undeclared prerequisites retain their original installation order. All definition `image.apt` groups (including add-ons and matching variants) and explicit `--system-package` requests remain, even when they overlap declared packages. If no core or project packages remain, the entire apt update/install/cleanup step is omitted. For example, `core_packages = ["bash", "git"]` leaves CA certificates, curl, GnuPG, and sudo in the core apt step; an explicit `--system-package git` still installs Git. Absent/empty package claims preserve legacy installation behavior independently of tool declarations.
 
-Dockerfiles preserve root/user steps and existing user/home ownership handling. `check` accepts declared bash without a Dockerfile installation and still requires undeclared core packages and explicit project packages. Static checks validate the declared configuration, not the image artifact: a claim asserts usable prerequisites, including working GnuPG commands and an initialized CA trust store. Debian/Ubuntu glibc, `/bin/bash`, `vscode`, and writable `/home/vscode` remain required. Follow the [shared-image roadmap](SHARED_IMAGES_ROADMAP.md#phase-1-first-class-consumption-of-shared-images) for ownership and opt-in runtime verification before relying on this as an end-to-end shared-image workflow.
+Dockerfiles preserve root/user steps and existing user/home ownership handling. `check` accepts declared bash without a Dockerfile installation and still requires undeclared core packages and explicit project packages. Static checks validate the declared configuration, not the image artifact: a claim asserts usable prerequisites, including working GnuPG commands and an initialized CA trust store. Debian/Ubuntu glibc, `/bin/bash`, `vscode`, and writable `/home/vscode` remain required. Use `check --runtime` for explicit built-artifact capability probes; follow the [shared-image roadmap](SHARED_IMAGES_ROADMAP.md#phase-2-explicit-ownership-policy) for the still-pending ownership policy before relying on populated shared homes or host ID compatibility.
 
 #### Fixed runtime versions and project pins
 

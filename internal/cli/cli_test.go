@@ -68,6 +68,28 @@ func TestRunHelp(t *testing.T) {
 	}
 }
 
+func TestCheckRuntimeFlag(t *testing.T) {
+	root := t.TempDir()
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: "node", AITools: []config.AITool{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := generate.Write(root, cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	// Missing external tools do not prevent rejection of a legacy runtime request.
+	t.Setenv("PATH", t.TempDir())
+	var stdout, stderr bytes.Buffer
+	err = runCheck(root, []string{"--runtime"}, &stdout, &stderr)
+	if err == nil || !strings.Contains(stderr.String(), "requires nonempty image.preinstalled claims") || stdout.Len() != 0 {
+		t.Fatalf("legacy runtime request: err=%v stdout=%s stderr=%s", err, &stdout, &stderr)
+	}
+	stderr.Reset()
+	if err := runCheck(root, []string{"--help"}, &stdout, &stderr); err != nil || !strings.Contains(stderr.String(), "-runtime") || !strings.Contains(stderr.String(), "requires preinstalled claims") {
+		t.Fatalf("runtime help: err=%v stderr=%s", err, &stderr)
+	}
+}
+
 func TestRunVersion(t *testing.T) {
 	var stdout bytes.Buffer
 	if err := Run([]string{"--version"}, &bytes.Buffer{}, &stdout, &bytes.Buffer{}); err != nil {

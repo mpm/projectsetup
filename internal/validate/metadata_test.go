@@ -211,6 +211,7 @@ func TestBuiltImageUserHomeAndResultForms(t *testing.T) {
 		{"wrong user", `{"imageName":"built-image"}`, `[{"Config":{"User":"root"}}]`, "effective user"},
 		{"wrong home", `{"imageName":"built-image"}`, `[{"Config":{"User":"vscode","Env":["HOME=/root"]}}]`, "HOME"},
 		{"wrong USER env", `{"imageName":"built-image"}`, `[{"Config":{"User":"vscode","Env":["USER=root"]}}]`, "USER"},
+		{"final volume", `{"imageName":"built-image"}`, `[{"Config":{"User":"vscode","Volumes":{"/project":{}}}}]`, "VOLUME"},
 		{"invalid inspect", `{"imageName":"built-image"}`, `{}`, "inspection document"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

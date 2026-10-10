@@ -21,7 +21,7 @@ const usage = `Usage:
   projectsetup preset update [--yes] [NAME]
   projectsetup preset remove NAME
   projectsetup self-update
-  projectsetup check [--build]
+  projectsetup check [--build] [--runtime]
   projectsetup doctor
   projectsetup version
 

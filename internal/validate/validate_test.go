@@ -9,6 +9,7 @@ import (
 
 	"github.com/mpm/projectsetup/internal/config"
 	"github.com/mpm/projectsetup/internal/generate"
+	"github.com/mpm/projectsetup/internal/presets"
 	"github.com/mpm/projectsetup/internal/validate"
 )
 
@@ -38,6 +39,63 @@ func TestCheckAcceptsGeneratedConfiguration(t *testing.T) {
 	diagnostics := validate.Check(root, validate.Options{CheckHostMounts: true})
 	if count := validate.ErrorCount(diagnostics); count != 0 {
 		t.Fatalf("Check() errors = %d, diagnostics = %#v", count, diagnostics)
+	}
+}
+
+func TestRuntimeStaticAndContractGates(t *testing.T) {
+	for _, tt := range []struct {
+		name, contract            string
+		external, runtime, broken bool
+		failure                   string
+	}{
+		{name: "offline shared", contract: "core_packages = ['bash']"},
+		{name: "external static shared", contract: "core_packages = ['bash']", external: true},
+		{name: "absent runtime", runtime: true, failure: "requires nonempty"},
+		{name: "empty runtime", contract: "# empty", runtime: true, failure: "requires nonempty"},
+		{name: "invalid shared runtime", contract: "core_packages = ['bash']", runtime: true, broken: true, failure: "required generated file"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			raw := "schema = 2\nkind = 'preset'\nname = 'shared'\nversion = '1.0.0'\ndescription = 'Shared test'\n[image]\nbase = 'example:fixed'\n"
+			if tt.contract != "" {
+				raw += "[image.preinstalled]\n" + tt.contract + "\n"
+			}
+			definition, err := presets.Parse([]byte(raw), "shared.toml")
+			if err != nil {
+				t.Fatal(err)
+			}
+			registry, err := presets.NewRegistry(definition)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: "shared", Registry: registry, AITools: []config.AITool{}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := generate.Write(root, cfg, false); err != nil {
+				t.Fatal(err)
+			}
+			if tt.broken {
+				if err := os.Remove(filepath.Join(root, ".devcontainer", "Dockerfile")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			runner := &fakeRunner{}
+			diagnostics := validate.Check(root, validate.Options{External: tt.external, Runtime: tt.runtime, Runner: runner})
+			if tt.failure != "" {
+				assertDiagnostic(t, diagnostics, validate.Error, tt.failure)
+			} else if validate.ErrorCount(diagnostics) != 0 {
+				t.Fatalf("static check failed: %v", diagnostics)
+			}
+			if !tt.external && !tt.runtime && len(runner.commands) != 0 {
+				t.Fatalf("offline check invoked external commands: %v", runner.commands)
+			}
+			for _, command := range runner.commands {
+				if strings.HasPrefix(command, "docker image") || strings.HasPrefix(command, "docker create") || strings.HasPrefix(command, "devcontainer build") || strings.HasPrefix(command, "docker exec") {
+					t.Fatalf("static/failed-contract check invoked an artifact operation: %v", runner.commands)
+				}
+			}
+		})
 	}
 }
 
@@ -265,6 +323,12 @@ func TestCheckBuildRunsAfterStaticValidation(t *testing.T) {
 	}
 	if !contains(runner.commands, wantCompose) {
 		t.Fatalf("commands = %q, want %q", runner.commands, wantCompose)
+	}
+	runner.commands = nil
+	diagnostics = validate.Check(root, validate.Options{Runtime: true, Runner: runner})
+	assertDiagnostic(t, diagnostics, validate.Error, "requires nonempty image.preinstalled claims")
+	if contains(runner.commands, want) {
+		t.Fatal("runtime check built a legacy preset without claims")
 	}
 
 	if err := os.Remove(filepath.Join(root, ".devcontainer", "Dockerfile")); err != nil {
