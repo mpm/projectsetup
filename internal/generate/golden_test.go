@@ -305,13 +305,22 @@ func compareTrees(t *testing.T, expectedRoot, actualRoot string) {
 			t.Errorf("missing generated file %s", path)
 			continue
 		}
-		if want.mode != got.mode {
-			t.Errorf("%s mode = %o, want %o", path, got.mode, want.mode)
+		if wantMode := gitMode(want.mode); got.mode != wantMode {
+			t.Errorf("%s mode = %o, want %o", path, got.mode, wantMode)
 		}
 		if !bytes.Equal(want.data, got.data) {
 			t.Errorf("%s content differs from golden fixture; run UPDATE_GOLDEN=1 go test ./internal/generate", path)
 		}
 	}
+}
+
+// gitMode returns the mode git records for a golden file. Git tracks only the
+// executable bit, so the checked-out mode depends on the umask.
+func gitMode(mode fs.FileMode) fs.FileMode {
+	if mode&0o100 != 0 {
+		return 0o755
+	}
+	return 0o644
 }
 
 func readTree(t *testing.T, root string) map[string]treeFile {

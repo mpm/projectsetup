@@ -32,7 +32,7 @@ Read `HANDOFF.md` before making architectural or implementation decisions. It de
 
 - Keep command parsing thin.
 - Put project detection in dedicated, testable functions.
-- Use validated enum-like Go types for presets, databases, AI tools, and package managers.
+- Use validated enum-like Go types for AI tools; validate preset, add-on, and option names and values against the definition registry.
 - Build `devcontainer.json` and the manifest from typed structures.
 - Use embedded templates only for files such as Dockerfiles, shell scripts, and documentation.
 - Write generated files atomically and preserve executable script modes.
