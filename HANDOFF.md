@@ -881,7 +881,7 @@ Each phase ends with `go test ./...`, `go vet ./...`, and gofmt passing.
 
 ### Phase 7: Documentation and release
 
-- [ ] Update the README with authoring documentation and a security note, the projectsetup skill, and release notes.
+- [x] Update the README with authoring documentation and a security note, the projectsetup skill, and release notes.
 
 ## Implementation Order
 

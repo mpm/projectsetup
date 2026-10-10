@@ -4,16 +4,15 @@
 
 ## Status and scope
 
-The current implementation provides interactive and flag-driven `init`, static `check`, host diagnostics with `doctor`, and optional Dev Container build validation. It supports:
+The current implementation provides interactive and flag-driven `init`, static `check`, host diagnostics with `doctor`, optional Dev Container build validation, and management of preset and add-on definitions. The built-in definitions support:
 
-- Node with npm, pnpm, or Yarn
-- Ruby with Bundler
-- Rails
-- Python with pip, Poetry, or uv
-- Optional SQLite in the app container or PostgreSQL sidecar (18 by default)
+- Presets: Node with npm, pnpm, or Yarn; Ruby with Bundler; Rails; Python with pip, Poetry, or uv
+- Add-ons: SQLite in the app container, a PostgreSQL sidecar (18 by default), a Redis sidecar (8 by default), and Go (1.27 by default) and Rust (1.99 by default) toolchains in the app image
 - OpenCode by default, optional Claude Code and Codex, and GitHub CLI
 
-User templates, plugins, migration of hand-written configurations, databases other than SQLite and PostgreSQL, Alpine/musl images, Windows containers, and application generation are out of scope.
+Presets and add-ons are TOML definition files. You can copy and edit a built-in, write your own, or install definitions from a URL; see [Presets and add-ons](#presets-and-add-ons). Definitions use a constrained schema and cannot change the parts `dworm` relies on.
+
+Arbitrary Compose or `devcontainer.json` fragments, migration of hand-written configurations, Alpine/musl images, Windows containers, and application generation are out of scope.
 
 ## Prerequisites
 
@@ -90,25 +89,21 @@ For automation, add `--non-interactive`; unresolved or ambiguous required choice
 
 ```bash
 projectsetup init --non-interactive --preset node
-projectsetup init --non-interactive --preset ruby --ruby-version 4.0
-projectsetup init --non-interactive --preset python --python-version 3.14 --package-manager uv
-projectsetup init --non-interactive --preset rails --database postgres --ai opencode,claude
-projectsetup init --non-interactive --preset rails --database sqlite
+projectsetup init --non-interactive --preset ruby --set version=4.0
+projectsetup init --non-interactive --preset python --set version=3.14 --set package_manager=uv
+projectsetup init --non-interactive --preset rails --addon postgres --ai opencode,claude
+projectsetup init --non-interactive --preset ruby --addon go --addon redis --set go.version=1.26
 projectsetup init --non-interactive --preset node --port 3000 --port 5173 --system-package imagemagick
 ```
 
 Available `init` flags:
 
 ```text
---preset node|ruby|rails|python
+--preset NAME                preset definition (projectsetup preset list)
+--addon NAME                 add-on definition (repeatable)
+--set [DEF.]OPTION=VALUE     option value (repeatable); DEF defaults to the preset
 --name NAME
---database none|postgres|sqlite
---postgres-version MAJOR     with --database postgres; default 18
 --ai TOOL[,TOOL...]          opencode, claude, codex; or none
---node-version VERSION
---ruby-version VERSION
---python-version VERSION
---package-manager npm|pnpm|yarn|pip|poetry|uv
 --port PORT                  repeatable
 --system-package PACKAGE     repeatable apt package
 --non-interactive
@@ -117,7 +112,18 @@ Available `init` flags:
 --json                       with --list-options, print JSON
 ```
 
-Defaults are detected from version files, manifests, and lockfiles. Without a detected language version, the defaults are Node 26, Ruby 4.0, and Python 3.14. OpenCode is enabled by default; the database defaults to none.
+These older flags remain as aliases:
+
+```text
+--node-version VERSION       --set node.version=VERSION
+--ruby-version VERSION       --set ruby.version=VERSION (or rails.version)
+--python-version VERSION     --set python.version=VERSION
+--package-manager NAME       --set package_manager=NAME
+--database none|postgres|sqlite    --addon postgres, --addon sqlite, or neither
+--postgres-version MAJOR     --set postgres.version=MAJOR
+```
+
+`--set` can only name the preset and selected add-ons. `projectsetup init --list-options` lists every option with its default and accepted values. Option values are detected from version files, manifests, and lockfiles. Without a detected language version, the defaults are Node 26, Ruby 4.0, and Python 3.14. OpenCode is enabled by default, and no add-on is selected by default. Interactive mode offers detected add-on suggestions, such as PostgreSQL for a Rails project whose `config/database.yml` uses the PostgreSQL adapter, as the default.
 
 Ruby projects are detected from a root-level `Gemfile`, `Gemfile.lock`, `.ruby-version`, or `*.gemspec`. The Ruby version comes from `.ruby-version` when present, then from a literal `ruby "VERSION"` declaration in the Gemfile. Rails-specific signals take precedence over generic Ruby detection. The Ruby preset installs the selected Ruby version and runs `bundle install` when a `Gemfile` exists; it does not add Node, Active Storage, Rails setup, or a default port.
 
@@ -136,38 +142,51 @@ projectsetup init --list-options --json
 projectsetup init --list-options
 ```
 
-The listing is built from the same tables that validate `init` flags. It does not read or write the project directory, run detection, or prompt. Without `--json`, it prints a short human-readable summary. `--list-options` may be combined only with `--json` and `--non-interactive`; any other `init` flag is rejected, and `--json` without `--list-options` is an error.
+The listing is built from the same registry of built-in and user definitions that validates `init` flags. It does not read or write the project directory, run detection, or prompt. Without `--json`, it prints a short human-readable summary. `--list-options` may be combined only with `--json` and `--non-interactive`; any other `init` flag is rejected, and `--json` without `--list-options` is an error.
 
-The JSON output is indented, ends with a newline, and has this shape:
+The JSON output is indented and ends with a newline. Shortened to one preset and one add-on, it has this shape:
 
 ```json
 {
-  "schemaVersion": 1,
-  "presets": ["node", "ruby", "rails", "python"],
-  "packageManagers": {
-    "node": ["npm", "pnpm", "yarn"],
-    "python": ["pip", "poetry", "uv"],
-    "rails": [],
-    "ruby": []
+  "schemaVersion": 2,
+  "presets": ["node", "python", "rails", "ruby"],
+  "addons": ["go", "postgres", "redis", "rust", "sqlite"],
+  "definitions": {
+    "node": {
+      "name": "node",
+      "kind": "preset",
+      "version": "1.0.0",
+      "source": "builtin",
+      "description": "Node.js with npm, pnpm, or Yarn",
+      "options": {
+        "package_manager": {"description": "Node.js package manager", "default": "npm", "choices": ["npm", "pnpm", "yarn"]},
+        "version": {"description": "Node.js version", "default": "26", "pattern": "[0-9]+(\\.[0-9]+){0,2}([-+][a-zA-Z0-9.-]+)?"}
+      }
+    },
+    "postgres": {
+      "name": "postgres",
+      "kind": "addon",
+      "version": "1.0.0",
+      "source": "builtin",
+      "description": "PostgreSQL sidecar with development-only credentials",
+      "options": {
+        "version": {"description": "PostgreSQL major version", "default": "18", "pattern": "[1-9][0-9]*"}
+      }
+    }
   },
-  "databases": ["none", "postgres", "sqlite"],
   "aiTools": ["opencode", "claude", "codex"],
-  "projectNamePattern": "^[a-z0-9][a-z0-9_-]*$",
-  "defaults": {
-    "node": {"packageManager": "npm", "languageVersion": "26", "database": "none", "postgresVersion": "18", "aiTools": ["opencode"]},
-    "python": {"packageManager": "pip", "languageVersion": "3.14", "database": "none", "postgresVersion": "18", "aiTools": ["opencode"]},
-    "rails": {"packageManager": null, "languageVersion": "4.0", "database": "none", "postgresVersion": "18", "aiTools": ["opencode"]},
-    "ruby": {"packageManager": null, "languageVersion": "4.0", "database": "none", "postgresVersion": "18", "aiTools": ["opencode"]}
-  }
+  "defaultAITools": ["opencode"],
+  "projectNamePattern": "^[a-z0-9][a-z0-9_-]*$"
 }
 ```
 
-- `schemaVersion` identifies this listing format, independent of the manifest schema. New fields may be added without changing it.
-- `presets`, `databases`, and `aiTools` are in display order. Object keys are sorted.
-- `packageManagers` has a key for every preset. An empty array means the preset accepts no `--package-manager`.
-- `aiTools` values may be combined in a comma-separated `--ai` list; pass `--ai none` to select no tools.
+- `schemaVersion` identifies this listing format, independent of the manifest schema. New fields may be added without changing it. Version 2 replaced the `packageManagers`, `databases`, and `defaults` fields of version 1 with `addons`, `definitions`, and `defaultAITools`.
+- `presets` and `addons` are sorted by name; `aiTools` is in display order. Object keys are sorted.
+- `definitions` has an entry for every preset and add-on, including user definitions. `source` is `builtin`, `user`, or the URL of an installed remote definition.
+- Each option has a `default` and either `choices` or a `pattern`. A pattern must match the whole value. Pass a value with `--set DEFINITION.OPTION=VALUE`. A definition without options has an empty `options` object.
+- Detected version files and lockfiles take precedence over option defaults.
+- `aiTools` values may be combined in a comma-separated `--ai` list; pass `--ai none` to select no tools. `defaultAITools` is the selection used when `--ai` is omitted.
 - `projectNamePattern` is the regular expression an explicit `--name` must match.
-- `defaults` lists what `init` uses when a flag is omitted and nothing is detected. Detected version files and lockfiles take precedence over `packageManager` and `languageVersion`. `packageManager` is `null` for presets without a package-manager choice. `postgresVersion` is the PostgreSQL major version used when `--database postgres` is selected.
 
 ## Upgrade a generated project
 
@@ -177,7 +196,15 @@ Run this from a project with an older `projectsetup`-generated `.devcontainer`, 
 projectsetup upgrade
 ```
 
-The command regenerates from `.devcontainer/projectsetup.json`, preserving its preset, versions, tools, ports, packages, and database selection. It only replaces recognized projectsetup output containing known generated files; hand-written configurations and unsupported manifest schemas are refused.
+The command regenerates from `.devcontainer/projectsetup.json`, preserving its preset, add-ons, option values, tools, ports, and packages. It only replaces recognized projectsetup output containing known generated files; hand-written configurations and unsupported manifest schemas are refused. This includes `devcontainer-lock.json`, which the Dev Container CLI writes when `dworm up` starts the container; delete it before upgrading.
+
+`upgrade` uses the definition copies in `.devcontainer/presets/`, so the result does not depend on the definitions installed on this machine. To pick up newer versions of the built-in, user, or installed remote definitions, add `--refresh-presets`. It keeps the recorded option values and fills in defaults only for options the newer definitions add:
+
+```bash
+projectsetup upgrade --refresh-presets
+```
+
+Manifests written by v0.8.0 and earlier use schema 1. `upgrade` maps them to the built-in definitions, which produce the same setup: `database` becomes the `postgres` or `sqlite` add-on, `languageVersion` and `packageManager` become preset options, and a missing PostgreSQL version means 17. The upgraded manifest uses schema 2, and the definition copies are added to `.devcontainer/presets/`.
 
 To change only the selected agents while upgrading:
 
@@ -194,7 +221,7 @@ projectsetup check
 projectsetup check --build
 ```
 
-`check` validates the manifest, generated files and script modes, users and workspace paths, Compose service configuration, AI mounts, ports, language versions, lockfiles, SQLite packages, and PostgreSQL consistency. When installed, it also runs `docker compose config` and `devcontainer read-configuration`.
+`check` validates the manifest, generated files and script modes, users and workspace paths, Compose service configuration, AI mounts, ports, option values against detected version files and lockfiles, and the features, environment, PATH entries, apt packages, and sidecar services that the selected definitions contribute. It reads the definitions from `.devcontainer/presets/` and fails when a copy does not match the hash recorded in the manifest. When installed, it also runs `docker compose config` and `devcontainer read-configuration`. Configurations with schema 1 manifests from earlier releases still pass.
 
 `check --build` runs the static and external checks first, then executes:
 
@@ -230,14 +257,168 @@ projectsetup doctor
 ├── compose.yaml
 ├── devcontainer.json
 ├── projectsetup.json
+├── presets/
+│   ├── node.toml
+│   └── postgres.toml
 └── scripts/
     ├── install-ai-tools.sh
     └── post-create.sh
 ```
 
-Every setup uses Compose with an `app` service and a project-scoped network. Selecting SQLite installs it directly in the app image; selecting PostgreSQL adds a `postgres` service and named data volume. `projectsetup.json` is the generated configuration manifest and source of truth for validation. The scripts are executable.
+Every setup uses Compose with an `app` service and a project-scoped network. Add-ons with sidecars, such as PostgreSQL and Redis, add their services and named data volumes. `presets/` holds a copy of each selected definition. The scripts are executable.
 
-If `.devcontainer` already exists, generation stops. `--force` replaces it only when `projectsetup.json` identifies it as generated by `projectsetup` and it contains only the known generated paths; unrelated files are never overwritten. Generation is staged and validated before installation.
+`projectsetup.json` is the generated configuration manifest and source of truth for validation. It uses schema 2:
+
+```json
+{
+  "schemaVersion": 2,
+  "projectName": "example",
+  "preset": {"name": "node", "version": "1.0.0", "source": "builtin", "sha256": "..."},
+  "addons": [{"name": "postgres", "version": "1.0.0", "source": "builtin", "sha256": "..."}],
+  "options": {"node": {"package_manager": "npm", "version": "26"}, "postgres": {"version": "18"}},
+  "aiTools": ["opencode"],
+  "ports": [],
+  "systemPackages": [],
+  "generatedBy": "projectsetup"
+}
+```
+
+`options` records every option of every selected definition, including defaults; definitions without options have no entry.
+
+If `.devcontainer` already exists, generation stops. `--force` replaces it only when `projectsetup.json` identifies it as generated by `projectsetup` and it contains only the known generated paths; unrelated files are never overwritten. `--force` keeps the recorded option values of add-ons that remain selected unless you set them explicitly, so a PostgreSQL data volume stays readable. Generation is staged and validated before installation.
+
+## Presets and add-ons
+
+A project uses exactly one preset and any number of add-ons. Presets set the base image and usually install the language runtime, package managers, and dependency setup. Add-ons add tools, packages, environment, setup steps, or sidecar services. Both are TOML definition files, from three sources:
+
+| Source | Location | How it gets there |
+| --- | --- | --- |
+| `builtin` | embedded in the executable | ships with `projectsetup` |
+| `user` | `~/.config/projectsetup/presets/NAME.toml` | written by you or by `preset eject` |
+| a URL | `~/.config/projectsetup/presets/NAME.toml`, pinned in `~/.config/projectsetup/sources.toml` | installed by `preset add` |
+
+On macOS, the configuration directory is `~/Library/Application Support/projectsetup`. Set `PROJECTSETUP_CONFIG_DIR` to use another directory; definitions are then read from `$PROJECTSETUP_CONFIG_DIR/presets`. Only files named `NAME.toml` are read, and a user definition cannot reuse a built-in name.
+
+```bash
+projectsetup preset list [--json]          # every definition with kind, version, and source
+projectsetup preset show NAME              # print a definition file
+projectsetup preset validate FILE          # check a definition before using it
+projectsetup preset eject NAME --as NEW    # copy a definition into the user directory as NEW
+projectsetup preset add [--yes] URL|github:owner/repo[/path][@ref]
+projectsetup preset update [--yes] [NAME]
+projectsetup preset remove NAME
+```
+
+Every generated project gets a copy of the exact definition files it was generated from in `.devcontainer/presets/`. The manifest records each definition's name, version, source, and SHA-256 hash. `check` and `upgrade` use these copies, so a project keeps working on a machine that does not have its user or remote definitions, and changing a definition does not affect existing projects until you run `projectsetup upgrade --refresh-presets` there. Do not edit the copies: `check` reports a copy whose hash differs from the manifest.
+
+### Writing a definition
+
+The easiest start is a copy of a similar built-in:
+
+```bash
+projectsetup preset eject go --as go-tip
+$EDITOR ~/.config/projectsetup/presets/go-tip.toml
+projectsetup preset validate ~/.config/projectsetup/presets/go-tip.toml
+projectsetup init --addon go-tip
+```
+
+`eject` changes only the `name` line, so variant conditions and `supersedes` in the copy still name the original definitions. This add-on installs a Java JDK and optionally Maven or Gradle:
+
+```toml
+#:schema https://raw.githubusercontent.com/mpm/projectsetup/main/schema/preset.schema.json
+schema = 1
+kind = "addon"
+name = "java"
+version = "1.0.0"
+description = "Java JDK with optional Maven or Gradle"
+
+[options.version]
+description = "Java major version"
+default = "21"
+pattern = '[1-9][0-9]*'
+
+[options.build_tool]
+description = "Java build tool"
+default = "none"
+choices = ["none", "maven", "gradle"]
+
+[features."ghcr.io/devcontainers/features/java:1"]
+version = "${option:version}"
+
+# The generated containerEnv.PATH replaces the feature's PATH changes.
+[container]
+path = ["/usr/local/sdkman/bin", "/usr/local/sdkman/candidates/java/current/bin"]
+
+[[variant]]
+when = { option = { build_tool = { in = ["maven"] } } }
+
+[variant.features."ghcr.io/devcontainers/features/java:1"]
+installMaven = true
+
+[variant.container]
+path = ["/usr/local/sdkman/candidates/maven/current/bin"]
+
+[[variant]]
+when = { option = { build_tool = { in = ["gradle"] } } }
+
+[variant.features."ghcr.io/devcontainers/features/java:1"]
+installGradle = true
+
+[variant.container]
+path = ["/usr/local/sdkman/candidates/gradle/current/bin"]
+```
+
+Save it as `java.toml` in the user definition directory, then select it with `projectsetup init --addon java --set java.build_tool=maven`. The `#:schema` comment enables completion and inline validation in editors with TOML schema support, such as VS Code with Even Better TOML. [`schema/preset.schema.json`](schema/preset.schema.json) describes every field. `preset validate` checks the rules the schema cannot express and resolves the definition with its default options. It reports every problem with the file name.
+
+Fields:
+
+| Field | Purpose |
+| --- | --- |
+| `schema`, `kind`, `name`, `version`, `description` | Required. `schema = 1`; `kind` is `preset` or `addon`; `name` matches `^[a-z][a-z0-9-]*$`; `version` is `MAJOR.MINOR.PATCH`. |
+| `[options.NAME]` | A value users set with `--set DEFINITION.NAME=VALUE`. Requires `description`, `default`, and exactly one of `choices` or `pattern`. A pattern must match the whole value. |
+| `[image]` | `base` (presets only, and required for them), `apt` packages, `root_run` steps run as root, and `user_run` steps run as `vscode` after the final `USER vscode`. Each step is one line. |
+| `[features."ID"]` | A Dev Container feature with its options. Values are strings, booleans, or numbers. |
+| `[container]` | `path` entries added to `containerEnv.PATH` after the core entries, and `env` values for `containerEnv`. |
+| `[setup]` | A bash `script` appended to `post-create.sh` after AI tool setup. |
+| `[services.NAME]` | A Compose sidecar with `image`, `restart`, `environment`, `healthcheck`, named `volumes` (volume name to container path), and `app_depends_on` (`service_started` or `service_healthy`). |
+| `[[variant]]` | An additive block with `image` (without `base`), `features`, `container`, `setup`, or `services`, applied when every condition in `when` matches: `preset`, `not_preset`, `addon`, and `option` with `in = [...]` or `below = N` (compares the value's leading integer). |
+| `[detect]` | Presets only. `signals` are files reported as evidence; `match` rules detect the preset (when empty, any signal does); `supersedes` drops other detected presets; `[[detect.suggest]]` offers an add-on; `[[detect.warning]]` prints a message. |
+| `[options.NAME.detect]` | Presets only. `sources` read a value from a file (its first word, or the first capture group of `pattern`) or from the `package-json-engines` built-in; the first source with a value wins. `choices` map each choice to the files that indicate it, such as lockfiles. |
+
+Rules:
+
+- Text can use `${option:NAME}` for the definition's own options and `${project:name}`, `${project:home}`, and `${project:workspace}`. Any other `${...}`, including shell variables, is left as written.
+- Option values, including defaults and detected values, must also match `^[A-Za-z0-9][A-Za-z0-9._+-]*$`, so they are safe in shell scripts, Dockerfiles, and YAML.
+- Detection file paths are relative to the project root. Globs cannot include a directory, and directories never match.
+- Contributions are applied in this order: the preset, then add-ons sorted by name. Each definition's top-level block comes first, followed by its matching variants in file order. A variant can override its own definition's feature options, `env` values, and service fields, but two definitions cannot set the same feature, environment variable, or service.
+- Feature PATH changes made through the feature's own `containerEnv` are replaced by the generated `containerEnv.PATH`, which `dworm exec` uses. List the directories the feature adds in `container.path`. The feature's other environment variables are kept.
+
+Definitions cannot change the parts that `dworm` and the AI tools rely on: the `vscode` user and `/home/vscode`, the `app` service with its build, command, and workspace mount, the AI tool installer, mounts, and environment, the GitHub CLI feature, and the core PATH entries. `PATH`, `HOME`, `USER`, `CODEX_HOME`, and `CLAUDE_CONFIG_DIR` cannot be set, a sidecar cannot be named `app`, and there is no field for host mounts; sidecar volumes are named volumes.
+
+### Remote definitions
+
+Install definitions from an HTTPS URL or a GitHub repository:
+
+```bash
+projectsetup preset add https://example.com/presets/java.toml
+projectsetup preset add github:owner/repo/presets/java.toml@v1.2.0
+projectsetup preset add github:owner/repo@v1.2.0
+```
+
+`github:owner/repo[/path][@ref]` reads from `https://raw.githubusercontent.com/owner/repo/REF/path`; the ref defaults to `HEAD`. A path that does not end in `.toml`, or no path, names a directory containing `index.toml`. An index installs several definitions:
+
+```toml
+schema = 1
+definitions = ["java.toml", "addons/kotlin.toml"]
+```
+
+Entries are relative `.toml` paths resolved against the index URL; an index lists at most 64. Each file is limited to 64 KiB, redirects must stay on HTTPS, and URLs cannot contain credentials. Every definition is validated before anything is installed, and `add` refuses names that already exist. `sources.toml` records each definition's URL, ref, SHA-256 hash, and fetch time.
+
+`preset update [NAME]` fetches the recorded URLs again and shows a diff for each changed definition. It installs nothing if any fetch fails, refuses a definition whose `name` changed, and repairs a missing or modified installed file. `preset remove NAME` deletes a remote definition and its record. Both `add` and `update` ask for confirmation unless `--yes` is passed. Remove user definitions you wrote yourself by deleting their file.
+
+`init`, `check`, and `upgrade` never use the network. Installed remote definitions are loaded like user definitions, but loading fails when a file no longer matches its recorded hash.
+
+**Security:** a definition is code. Its `setup.script`, `root_run`, and `user_run` steps and the features it installs run in a container that mounts your AI tool credentials and history from the host and receives your forwarded SSH agent while `dworm up` runs. Install only definitions you trust, read the content or diff that `add` and `update` print before confirming, and prefer a `github:` location pinned to a tag or commit. Definitions are never updated automatically, and an updated definition affects a project only after `projectsetup upgrade --refresh-presets`.
 
 ## `dworm` workflow and limitations
 
@@ -327,12 +508,24 @@ Updates persist in shared host installation directories and affect every contain
 
 ## PostgreSQL
 
-`--database postgres` switches generation to Docker Compose with an `app` service and a healthy PostgreSQL sidecar backed by the `postgres-data` named volume. New projects use PostgreSQL 18 (`postgres:18-trixie`, volume mounted at `/var/lib/postgresql`); pass `--postgres-version MAJOR` to choose another major version. Versions before 18 use the `-bookworm` image with the volume at `/var/lib/postgresql/data`. The generated development credentials are `projectsetup`/`projectsetup`; `DB_HOST` and `PGHOST` are `postgres`, and the database name is the normalized project name.
+`--addon postgres` (or `--database postgres`) adds a healthy PostgreSQL sidecar backed by the `postgres-data` named volume. New projects use PostgreSQL 18 (`postgres:18-trixie`, volume mounted at `/var/lib/postgresql`); pass `--set postgres.version=MAJOR` (or `--postgres-version MAJOR`) to choose another major version. Versions before 18 use the `-bookworm` image with the volume at `/var/lib/postgresql/data`. The generated development credentials are `projectsetup`/`projectsetup`; `DB_HOST` and `PGHOST` are `postgres`, and the database name is the normalized project name.
 
-The major version is recorded as `postgresVersion` in `projectsetup.json`, because a data volume can only be opened by the major version that created it. `upgrade` and `init --force` keep the recorded version; manifests from v0.7.0 and earlier have no `postgresVersion` and are treated as PostgreSQL 17, which those releases generated. To move an existing project to a newer major version, dump the database, regenerate with `projectsetup init --force --postgres-version 18` and the original options, remove the old `postgres-data` volume, and restore the dump.
+The major version is recorded in the manifest `options`, because a data volume can only be opened by the major version that created it. `upgrade` and `init --force` keep the recorded version; schema 1 manifests from v0.7.0 and earlier have no `postgresVersion` and are treated as PostgreSQL 17, which those releases generated. To move an existing project to a newer major version, dump the database, regenerate with `projectsetup init --force --set postgres.version=18` and the original options, remove the old `postgres-data` volume, and restore the dump.
 
 The PostgreSQL port is not published to the host. `dworm` scans only the primary `app` container, and adding `forwardPorts` metadata would not expose the sidecar. Application database configuration is not rewritten automatically.
 
 ## SQLite
 
-`--database sqlite` installs the `sqlite3` command and `libsqlite3-dev` development files in the primary app image. SQLite does not add a Compose service, dependency, volume, or database environment variables; the application stores its database in the workspace according to its own configuration.
+`--addon sqlite` (or `--database sqlite`) installs the `sqlite3` command and `libsqlite3-dev` development files in the primary app image. SQLite does not add a Compose service, dependency, volume, or database environment variables; the application stores its database in the workspace according to its own configuration.
+
+## Redis
+
+`--addon redis` adds a `redis` sidecar (`redis:8-trixie`) with a `redis-cli ping` health check and its data in the `redis-data` named volume at `/data`. The app container waits for the sidecar to become healthy, gets `redis-cli` from the `redis-tools` package, and has `REDIS_URL=redis://redis:6379`. Pass `--set redis.version=VERSION` to choose another version; the image is `redis:VERSION-trixie`. Like PostgreSQL, the port is not published to the host.
+
+## Go and Rust
+
+`--addon go` installs Go with the official Dev Container feature, 1.27 by default; pass `--set go.version=VERSION` to choose another. `/usr/local/go/bin` and `/go/bin`, where `go install` puts binaries, are on PATH.
+
+`--addon rust` installs Rust with rustup and Cargo through the official feature, 1.99 by default; pass `--set rust.version=VERSION` to choose another. `/usr/local/cargo/bin` is on PATH.
+
+Both directories are in `containerEnv`, so `dworm exec -- go ...` and `dworm exec -- cargo ...` work without a login shell. The add-ons combine with any preset and with each other.
