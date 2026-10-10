@@ -564,11 +564,7 @@ internal/config/
     manifest.go
     normalize.go
 internal/detect/
-    detect.go
-    node.go
-    ruby.go
-    rails.go
-    python.go
+    detect.go           evaluates definition detection rules
 internal/generate/
     generate.go
     devcontainer.go
@@ -746,6 +742,36 @@ when = { preset = ["rails"], not_preset = [], addon = ["postgres"], option = { v
 # The block may contain image (without base), features, container, setup, and services.
 ```
 
+Detection rules (presets only):
+
+```toml
+[options.version.detect]          # first source with a value wins
+sources = [
+  { file = ".node-version" },     # first word, without a leading "v" or "ruby-"
+  { file = "pyproject.toml", pattern = '(\d+\.\d+)' },   # first capture group
+  { builtin = "package-json-engines" },                   # Go parser, see presets.DetectBuiltins
+]
+
+[options.package_manager.detect.choices]   # every choice with a matching file, in declaration order
+npm = [{ file = "package-lock.json" }]
+poetry = [{ file = "poetry.lock" }, { file = "pyproject.toml", pattern = '(?m)^\[tool\.poetry\]' }]
+
+[detect]
+signals = ["Gemfile", "*.gemspec"]  # reported when present; globs cannot include a directory
+match = [{ file = "bin/rails" }]    # any rule detects the preset; when empty, any present signal does
+supersedes = ["ruby"]               # drop these presets when this one is detected
+
+[[detect.suggest]]                  # offered as a default, never added silently
+addon = "postgres"
+match = [{ file = "config/database.yml", pattern = 'adapter:\s*postgresql' }]
+
+[[detect.warning]]
+message = "Pipfile detected, but Pipenv is not supported"
+match = [{ file = "Pipfile" }]
+```
+
+Paths are clean and relative to the project root. Directories never match. Detected values are validated later, during normalization, not during detection.
+
 Rules:
 
 - Placeholders are limited to `${option:NAME}` (the definition's own options) and `${project:name|home|workspace}`. Unknown names in either namespace are errors; all other text, including shell `${VAR}`, is literal. There is no `text/template` in definitions.
@@ -801,10 +827,10 @@ Each phase ends with `go test ./...`, `go vet ./...`, and gofmt passing.
 
 ### Phase 3: Data-driven detection
 
-- [ ] Add `[detect]` to the schema: `any_file`, `file_contains` (file plus regex), `supersedes`, version sources (`file:NAME`, `builtin:NAME`), lockfile-to-choice maps for options, `suggest_addons` rules, and warnings.
-- [ ] Keep complex parsers in Go as named built-ins: `package-json-engines`, `gemfile-ruby`, `pyproject-requires-python`, and `pyproject-poetry`.
-- [ ] Port the four detectors and keep every existing detection test passing. Remove `internal/detect/{node,ruby,rails,python}.go`.
-- [ ] Derive `check`'s language-version and lockfile convention checks from the same rules.
+- [x] Add detection to the schema: `[detect]` with `signals`, `match` (a file plus an optional regex), `supersedes`, `[[detect.suggest]]`, and `[[detect.warning]]`; and `[options.NAME.detect]` with value `sources` (`file`, `file` plus `pattern`, or `builtin`) or lockfile `choices`.
+- [x] Express the Gemfile Ruby version, `requires-python`, and Poetry metadata as regex rules. Keep only `package-json-engines` as a Go built-in, because it needs JSON parsing.
+- [x] Port the four detectors to the built-in definitions and evaluate them generically in `internal/detect`. A characterization test pinned the previous signals, versions, candidates, suggestions, and warnings before the port. `internal/detect/{node,ruby,rails,python}.go` are removed.
+- [x] `check`'s language-version, lockfile, and PostgreSQL convention checks use the same rule-based detection. Mapping detected values to `languageVersion`, `packageManager`, and `database` remains until phase 4 replaces those manifest fields with per-definition options.
 
 ### Phase 4: Open names, manifest v2, user definitions
 

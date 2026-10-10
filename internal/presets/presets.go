@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"path"
 	"regexp"
 	"slices"
 	"sort"
@@ -33,16 +34,71 @@ type Definition struct {
 	Version     string            `toml:"version"`
 	Description string            `toml:"description"`
 	Options     map[string]Option `toml:"options"`
+	Detect      Detect            `toml:"detect"`
 	Fragment
 	Variants []Variant `toml:"variant"`
 }
 
 // Option is a value the user can set. Values must match Choices or Pattern.
 type Option struct {
-	Description string   `toml:"description"`
-	Default     string   `toml:"default"`
-	Choices     []string `toml:"choices"`
-	Pattern     string   `toml:"pattern"`
+	Description string       `toml:"description"`
+	Default     string       `toml:"default"`
+	Choices     []string     `toml:"choices"`
+	Pattern     string       `toml:"pattern"`
+	Detect      OptionDetect `toml:"detect"`
+}
+
+// OptionDetect describes how an option's value is read from a project.
+// Sources yield one value; the first source with a value wins. Choices
+// yield every choice with a matching file, in declaration order.
+type OptionDetect struct {
+	Sources []ValueSource          `toml:"sources"`
+	Choices map[string][]FileMatch `toml:"choices"`
+}
+
+// ValueSource reads a value from File or from a named built-in parser. A
+// File without Pattern yields its first word without a leading "v" or
+// "ruby-"; with Pattern it yields the first capture group.
+type ValueSource struct {
+	File    string `toml:"file"`
+	Pattern string `toml:"pattern"`
+	Builtin string `toml:"builtin"`
+}
+
+// DetectBuiltins are the parsers a ValueSource can name with builtin.
+var DetectBuiltins = []string{"package-json-engines"}
+
+// Detect describes how a project using a preset is recognized.
+type Detect struct {
+	// Signals are files reported as evidence when present.
+	Signals []string `toml:"signals"`
+	// Match detects the preset when any rule matches. When empty, any
+	// present signal detects it.
+	Match []FileMatch `toml:"match"`
+	// Supersedes lists presets dropped when this one is detected.
+	Supersedes []string        `toml:"supersedes"`
+	Suggest    []Suggestion    `toml:"suggest"`
+	Warnings   []DetectWarning `toml:"warning"`
+}
+
+// FileMatch matches a regular file relative to the project root. File may be
+// a glob without a directory part. With Pattern, the file content must also
+// match the regular expression.
+type FileMatch struct {
+	File    string `toml:"file"`
+	Pattern string `toml:"pattern"`
+}
+
+// Suggestion proposes an add-on when any Match rule matches.
+type Suggestion struct {
+	Addon string      `toml:"addon"`
+	Match []FileMatch `toml:"match"`
+}
+
+// DetectWarning reports Message when any Match rule matches.
+type DetectWarning struct {
+	Message string      `toml:"message"`
+	Match   []FileMatch `toml:"match"`
 }
 
 // Fragment is what a definition or a matching variant contributes.
@@ -203,7 +259,9 @@ func (d Definition) problems() []string {
 		} else if err := option.check(option.Default); err != nil {
 			fail("%s: default: %v", where, err)
 		}
+		problems = append(problems, option.Detect.problems(where+".detect", d.Kind, option)...)
 	}
+	problems = append(problems, d.Detect.problems(d.Kind)...)
 
 	if d.Kind == KindPreset && d.Image.Base == "" {
 		fail("image.base is required for a preset")
@@ -326,6 +384,118 @@ func (f Fragment) problems(prefix string, options map[string]Option) []string {
 			if check.Retries < 0 {
 				fail("%s%s.healthcheck.retries must not be negative", prefix, where)
 			}
+		}
+	}
+	return problems
+}
+
+func (o OptionDetect) problems(where string, kind Kind, option Option) []string {
+	var problems []string
+	fail := func(format string, args ...any) { problems = append(problems, fmt.Sprintf(format, args...)) }
+	if len(o.Sources) == 0 && len(o.Choices) == 0 {
+		return nil
+	}
+	if kind != KindPreset {
+		fail("%s: detection is only supported in presets", where)
+	}
+	if len(o.Sources) > 0 && len(o.Choices) > 0 {
+		fail("%s: set sources or choices, not both", where)
+	}
+	if len(o.Choices) > 0 && len(option.Choices) == 0 {
+		fail("%s.choices: the option has no choices; use sources", where)
+	}
+	for i, source := range o.Sources {
+		at := fmt.Sprintf("%s.sources[%d]", where, i)
+		switch {
+		case (source.File == "") == (source.Builtin == ""):
+			fail("%s: set exactly one of file or builtin", at)
+		case source.Builtin != "":
+			if source.Pattern != "" {
+				fail("%s: pattern requires file", at)
+			}
+			if !slices.Contains(DetectBuiltins, source.Builtin) {
+				fail("%s: unknown builtin %q (available: %s)", at, source.Builtin, strings.Join(DetectBuiltins, ", "))
+			}
+		default:
+			problems = append(problems, FileMatch{File: source.File, Pattern: source.Pattern}.problems(at)...)
+			if pattern, err := regexp.Compile(source.Pattern); err == nil && source.Pattern != "" && pattern.NumSubexp() == 0 {
+				fail("%s: pattern needs a capture group for the value", at)
+			}
+		}
+	}
+	for _, choice := range sortedKeys(o.Choices) {
+		at := where + ".choices." + choice
+		if !slices.Contains(option.Choices, choice) {
+			fail("%s: %q is not a choice of the option", at, choice)
+		}
+		problems = append(problems, matchProblems(at, o.Choices[choice])...)
+	}
+	return problems
+}
+
+func (d Detect) problems(kind Kind) []string {
+	var problems []string
+	fail := func(format string, args ...any) { problems = append(problems, fmt.Sprintf(format, args...)) }
+	if kind != KindPreset && (len(d.Signals) > 0 || len(d.Match) > 0 || len(d.Supersedes) > 0 || len(d.Suggest) > 0 || len(d.Warnings) > 0) {
+		fail("detect: detection is only supported in presets")
+	}
+	for _, signal := range d.Signals {
+		problems = append(problems, FileMatch{File: signal}.problems("detect.signals")...)
+	}
+	for i, match := range d.Match {
+		problems = append(problems, match.problems(fmt.Sprintf("detect.match[%d]", i))...)
+	}
+	for _, name := range d.Supersedes {
+		if !validName.MatchString(name) {
+			fail("detect.supersedes: %q is not a valid definition name", name)
+		}
+	}
+	for i, suggestion := range d.Suggest {
+		at := fmt.Sprintf("detect.suggest[%d]", i)
+		if !validName.MatchString(suggestion.Addon) {
+			fail("%s.addon: %q is not a valid definition name", at, suggestion.Addon)
+		}
+		problems = append(problems, matchProblems(at+".match", suggestion.Match)...)
+	}
+	for i, warning := range d.Warnings {
+		at := fmt.Sprintf("detect.warning[%d]", i)
+		if strings.TrimSpace(warning.Message) == "" {
+			fail("%s.message is required", at)
+		}
+		problems = append(problems, matchProblems(at+".match", warning.Match)...)
+	}
+	return problems
+}
+
+func matchProblems(where string, matches []FileMatch) []string {
+	if len(matches) == 0 {
+		return []string{where + ": at least one file rule is required"}
+	}
+	var problems []string
+	for i, match := range matches {
+		problems = append(problems, match.problems(fmt.Sprintf("%s[%d]", where, i))...)
+	}
+	return problems
+}
+
+func (m FileMatch) problems(where string) []string {
+	var problems []string
+	fail := func(format string, args ...any) { problems = append(problems, fmt.Sprintf(format, args...)) }
+	switch {
+	case m.File == "":
+		fail("%s: file is required", where)
+	case path.IsAbs(m.File) || path.Clean(m.File) != m.File || m.File == ".." || strings.HasPrefix(m.File, "../"):
+		fail("%s: %q must be a clean path inside the project", where, m.File)
+	case strings.ContainsAny(m.File, "*?[") && strings.Contains(m.File, "/"):
+		fail("%s: glob %q cannot include a directory", where, m.File)
+	default:
+		if _, err := path.Match(m.File, ""); err != nil {
+			fail("%s: invalid glob %q", where, m.File)
+		}
+	}
+	if m.Pattern != "" {
+		if _, err := regexp.Compile(m.Pattern); err != nil {
+			fail("%s: invalid pattern: %v", where, err)
 		}
 	}
 	return problems

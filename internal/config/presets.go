@@ -4,10 +4,11 @@ import (
 	"github.com/mpm/projectsetup/internal/presets"
 )
 
-// Option names shared by the built-in preset and add-on definitions.
+// Option names the built-in definitions use for the values that the
+// manifest stores as languageVersion, packageManager, and postgresVersion.
 const (
-	optionVersion        = "version"
-	optionPackageManager = "package_manager"
+	OptionVersion        = "version"
+	OptionPackageManager = "package_manager"
 )
 
 func presetOption(preset Preset, name string) (presets.Option, bool) {
@@ -22,7 +23,7 @@ func presetOption(preset Preset, name string) (presets.Option, bool) {
 // PackageManagers returns the package managers a preset accepts in display
 // order. Presets without a package-manager choice return an empty slice.
 func PackageManagers(preset Preset) []PackageManager {
-	option, _ := presetOption(preset, optionPackageManager)
+	option, _ := presetOption(preset, OptionPackageManager)
 	managers := make([]PackageManager, len(option.Choices))
 	for i, choice := range option.Choices {
 		managers[i] = PackageManager(choice)
@@ -33,14 +34,14 @@ func PackageManagers(preset Preset) []PackageManager {
 // DefaultPackageManager returns the package manager used for preset when none
 // is selected or detected, or "" when the preset has no package-manager choice.
 func DefaultPackageManager(preset Preset) PackageManager {
-	option, _ := presetOption(preset, optionPackageManager)
+	option, _ := presetOption(preset, OptionPackageManager)
 	return PackageManager(option.Default)
 }
 
 // DefaultLanguageVersion returns the language version used for preset when
 // none is selected or detected.
 func DefaultLanguageVersion(preset Preset) string {
-	option, _ := presetOption(preset, optionVersion)
+	option, _ := presetOption(preset, OptionVersion)
 	return option.Default
 }
 
@@ -49,7 +50,7 @@ func DefaultLanguageVersion(preset Preset) string {
 // existing data.
 func DefaultPostgresVersion() string {
 	definition, _ := presets.Builtin().Lookup(DatabasePostgres.Addon())
-	return definition.Options[optionVersion].Default
+	return definition.Options[OptionVersion].Default
 }
 
 // Addon returns the add-on definition that provides d, or "" for none.
@@ -65,15 +66,15 @@ func (d Database) Addon() string {
 // Resolve merges the definitions that cfg selects.
 func Resolve(cfg Config) (presets.Resolved, error) {
 	preset := string(cfg.Preset)
-	options := map[string]map[string]string{preset: {optionVersion: cfg.LanguageVersion}}
+	options := map[string]map[string]string{preset: {OptionVersion: cfg.LanguageVersion}}
 	if cfg.PackageManager != "" {
-		options[preset][optionPackageManager] = string(cfg.PackageManager)
+		options[preset][OptionPackageManager] = string(cfg.PackageManager)
 	}
 	var addons []string
 	if addon := cfg.Database.Addon(); addon != "" {
 		addons = append(addons, addon)
 		if cfg.PostgresVersion != "" {
-			options[addon] = map[string]string{optionVersion: cfg.PostgresVersion}
+			options[addon] = map[string]string{OptionVersion: cfg.PostgresVersion}
 		}
 	}
 	return presets.Builtin().Resolve(presets.Selection{
