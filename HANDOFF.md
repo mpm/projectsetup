@@ -2,7 +2,7 @@
 
 ## Planned Extensions
 
-See [Shared Toolchain Images: Implementation Roadmap](SHARED_IMAGES_ROADMAP.md) for the planned shared-image consumption, UID/GID and ownership handling, customizable image-family recipes, optional build/export workflow, and exact PostgreSQL reference support. That roadmap describes future work; the contract below documents existing behavior.
+Shared-image consumption is implemented through definition schema 2's optional top-level preset `image.preinstalled` contract. See [Consume a digest-pinned shared toolchain](docs/shared-images.md) and the [README declaration contract](README.md#preinstalled-image-declarations) for current syntax, snapshot/refresh behavior, and opt-in metadata/runtime verification. The [Shared Toolchain Images: Implementation Roadmap](SHARED_IMAGES_ROADMAP.md) tracks completed consumption work and pending UID/GID ownership handling, customizable image-family recipes, optional build/export workflow, host integrations, and exact PostgreSQL references. Ownership and measured two-project shared-layer acceptance remain pending.
 
 ## Purpose
 
@@ -705,7 +705,7 @@ Definitions cannot change:
 - The `vscode` user, `/home/vscode`, `containerUser`, `remoteUser`, and the final Dockerfile `USER vscode`.
 - The Compose project name, the `app` service, its build, command, workspace volume, and `workspaceFolder`.
 - AI tool mounts, AI environment variables, and the canonical `install-ai-tools.sh`. Post-create runs AI setup before any definition script.
-- The GitHub CLI feature and the core `containerEnv.PATH` entries.
+- The GitHub CLI feature and the core `containerEnv.PATH` entries. A schema 2 preset's fixed `image.preinstalled.tools.gh` declaration suppresses the feature; declared tool paths supplement the generated PATH using the core's deterministic ordering.
 - Host mounts. Definitions have no mount field; sidecar volumes are named volumes only.
 
 ### Definition files

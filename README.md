@@ -362,6 +362,8 @@ Dockerfiles preserve root/user steps and existing user/home ownership handling. 
 
 #### Fixed runtime versions and project pins
 
+For a complete consuming preset, two project configurations, explicit artifact verification, and offline upgrade/refresh instructions, see [Consume a digest-pinned shared toolchain](docs/shared-images.md). Its artifact values are illustrative; replace them with verified values from your own image.
+
 Nonempty preinstalled claims require a **literal `image.base`**, without option/project placeholders or shell expansion. Configurable image-family selection is not supported: use a separate preset per fixed artifact. Normal checks and upgrades use the snapshotted image/declarations offline; changing the artifact requires explicitly selecting another preset or refreshing its definition.
 
 `check` and staged generation compare declared `node`, `ruby`, and `python` versions with `.node-version` and `.nvmrc`, `.ruby-version`, and `.python-version`, respectively. These checks do not depend on the custom preset's name, detection signals, or an `options.version` field. Every present, nonempty version file is compared, so a matching `.node-version` cannot hide a conflicting `.nvmrc`. Existing first-word and `v`/`ruby-` prefix handling and major/minor-versus-patch compatibility apply; differing exact patch releases fail. Moving selectors such as `lts/*` cannot describe compatibility with a fixed release. Absent/empty declarations keep the existing option/detection checks.
