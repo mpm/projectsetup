@@ -1,12 +1,21 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "projectName": "ruby-gem",
-  "preset": "ruby",
-  "database": "none",
+  "preset": {
+    "name": "ruby",
+    "version": "1.0.0",
+    "source": "builtin",
+    "sha256": "43dd5a5a8348b80d8ff3630718ab75f01c3814893f39da22fb28f40ce80f40a7"
+  },
+  "addons": [],
+  "options": {
+    "ruby": {
+      "version": "4.0"
+    }
+  },
   "aiTools": [
     "opencode"
   ],
-  "languageVersion": "4.0",
   "ports": [],
   "systemPackages": [],
   "generatedBy": "projectsetup"

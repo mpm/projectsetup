@@ -5,14 +5,17 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/mpm/projectsetup/internal/config"
 	"github.com/mpm/projectsetup/internal/detect"
 	"github.com/mpm/projectsetup/internal/generate"
+	"github.com/mpm/projectsetup/internal/presets"
 )
 
 type repeatedStrings []string
@@ -46,22 +49,25 @@ func (ports *repeatedPorts) Set(value string) error {
 func runInit(root string, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("projectsetup init", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	presetValue := flags.String("preset", "", config.DescribeChoices(config.Presets()))
+	presetValue := flags.String("preset", "", "preset definition (projectsetup preset list)")
 	name := flags.String("name", "", "project name")
-	databaseValue := flags.String("database", "", config.DescribeChoices(config.Databases()))
+	var addonValues, settings repeatedStrings
+	flags.Var(&addonValues, "addon", "add-on definition (repeatable)")
+	flags.Var(&settings, "set", "option value as [DEFINITION.]OPTION=VALUE; DEFINITION defaults to the preset (repeatable)")
+	databaseValue := flags.String("database", "", "alias for --addon: "+config.DescribeChoices(config.Databases))
 	aiValue := flags.String("ai", "", "comma-separated "+joinChoices(config.AITools(), ", ")+"; or none")
-	nodeVersion := flags.String("node-version", "", "Node version")
-	rubyVersion := flags.String("ruby-version", "", "Ruby version")
-	pythonVersion := flags.String("python-version", "", "Python version")
-	managerValue := flags.String("package-manager", "", "project package manager")
-	postgresVersion := flags.String("postgres-version", "", "PostgreSQL major version for --database postgres (default "+config.DefaultPostgresVersion()+"; --force keeps the existing version)")
+	nodeVersion := flags.String("node-version", "", "alias for --set node.version=VERSION")
+	rubyVersion := flags.String("ruby-version", "", "alias for --set ruby.version=VERSION or rails.version=VERSION")
+	pythonVersion := flags.String("python-version", "", "alias for --set python.version=VERSION")
+	managerValue := flags.String("package-manager", "", "alias for --set package_manager=VALUE")
+	postgresVersion := flags.String("postgres-version", "", "alias for --set postgres.version=MAJOR (--force keeps the existing version)")
 	var ports repeatedPorts
 	var systemPackages repeatedStrings
 	flags.Var(&ports, "port", "forwarded application port (repeatable)")
 	flags.Var(&systemPackages, "system-package", "additional apt package (repeatable)")
 	nonInteractive := flags.Bool("non-interactive", false, "fail instead of prompting for missing values")
 	force := flags.Bool("force", false, "replace an existing projectsetup-generated directory")
-	listOptions := flags.Bool("list-options", false, "list accepted presets, package managers, databases, and AI tools without generating files")
+	listOptions := flags.Bool("list-options", false, "list accepted presets, add-ons, options, and AI tools without generating files")
 	jsonOutput := flags.Bool("json", false, "with --list-options, print the listing as JSON")
 	if err := flags.Parse(args); err != nil {
 		if err == flag.ErrHelp {
@@ -83,17 +89,21 @@ func runInit(root string, args []string, stdin io.Reader, stdout, stderr io.Writ
 			generationFlags = append(generationFlags, "--"+value.Name)
 		}
 	})
-	if *listOptions {
-		if len(generationFlags) > 0 {
-			return fmt.Errorf("--list-options cannot be combined with %s", strings.Join(generationFlags, ", "))
-		}
-		return writeOptions(stdout, config.ListOptions(), *jsonOutput)
+	if *listOptions && len(generationFlags) > 0 {
+		return fmt.Errorf("--list-options cannot be combined with %s", strings.Join(generationFlags, ", "))
 	}
-	if *jsonOutput {
+	if *jsonOutput && !*listOptions {
 		return fmt.Errorf("--json requires --list-options")
 	}
+	registry, err := presets.Load()
+	if err != nil {
+		return fmt.Errorf("load preset definitions: %w", err)
+	}
+	if *listOptions {
+		return writeOptions(stdout, config.ListOptions(registry), *jsonOutput)
+	}
 
-	detected, err := detect.Detect(root)
+	detected, err := detect.Detect(root, registry)
 	if err != nil {
 		return err
 	}
@@ -110,49 +120,70 @@ func runInit(root string, args []string, stdin io.Reader, stdout, stderr io.Writ
 	if err != nil {
 		return err
 	}
-	preset, err := choosePreset(*presetValue, detected, prompt)
+	preset, err := choosePreset(*presetValue, detected, registry, prompt)
 	if err != nil {
 		return err
 	}
-	detail := detected.Details[preset]
-	manager, err := choosePackageManager(*managerValue, preset, detail, prompt)
+	options, err := parseSettings(preset, settings)
 	if err != nil {
 		return err
 	}
-	database, err := chooseDatabase(*databaseValue, provided["database"], detail, prompt)
+	for _, alias := range []struct {
+		flag, value string
+		presets     []string
+		option      string
+	}{
+		{"--node-version", *nodeVersion, []string{"node"}, config.OptionVersion},
+		{"--ruby-version", *rubyVersion, []string{"ruby", "rails"}, config.OptionVersion},
+		{"--python-version", *pythonVersion, []string{"python"}, config.OptionVersion},
+		{"--package-manager", *managerValue, nil, config.OptionPackageManager},
+	} {
+		if alias.value == "" {
+			continue
+		}
+		if alias.presets != nil && !slices.Contains(alias.presets, preset) {
+			return fmt.Errorf("%s requires --preset %s", alias.flag, strings.Join(alias.presets, " or "))
+		}
+		if err := setOption(options, preset, alias.option, alias.value, alias.flag); err != nil {
+			return err
+		}
+	}
+
+	definition, _ := registry.Lookup(preset)
+	if err := choosePresetOptions(definition, detected.Details[preset], options, prompt); err != nil {
+		return err
+	}
+
+	addons, err := chooseAddons(addonValues, *databaseValue, provided["addon"] || provided["database"], detected.Details[preset], registry, prompt)
 	if err != nil {
 		return err
+	}
+	if *postgresVersion != "" {
+		if !slices.Contains(addons, "postgres") {
+			return fmt.Errorf("--postgres-version requires database %q; pass --database postgres or --addon postgres", "postgres")
+		}
+		if err := setOption(options, "postgres", config.OptionVersion, *postgresVersion, "--postgres-version"); err != nil {
+			return err
+		}
+	}
+	if *force {
+		keepAddonOptions(root, addons, options)
 	}
 	tools, err := chooseAITools(*aiValue, provided["ai"], prompt)
 	if err != nil {
 		return err
 	}
-	pgVersion := *postgresVersion
-	if !provided["postgres-version"] && *force && database == config.DatabasePostgres {
-		pgVersion = existingPostgresVersion(root)
-	}
-	version, err := resolveLanguageVersion(preset, *nodeVersion, *rubyVersion, *pythonVersion, detail.LanguageVersion)
-	if err != nil {
-		return err
-	}
-	if prompt != nil && version == "" {
-		version, err = prompt.ask("Language version", config.DefaultLanguageVersion(preset))
-		if err != nil {
-			return err
-		}
-	}
 
 	cfg, err := config.Normalize(config.Input{
-		Root:            root,
-		ProjectName:     projectName,
-		Preset:          preset,
-		Database:        database,
-		AITools:         tools,
-		PackageManager:  manager,
-		LanguageVersion: version,
-		PostgresVersion: pgVersion,
-		Ports:           ports,
-		SystemPackages:  systemPackages,
+		Root:           root,
+		Registry:       registry,
+		ProjectName:    projectName,
+		Preset:         preset,
+		Addons:         addons,
+		Options:        options,
+		AITools:        tools,
+		Ports:          ports,
+		SystemPackages: systemPackages,
 	})
 	if err != nil {
 		return fmt.Errorf("normalize initialization options: %w", err)
@@ -173,6 +204,38 @@ func runInit(root string, args []string, stdin io.Reader, stdout, stderr io.Writ
 	}
 	_, err = fmt.Fprintf(stdout, "Generated .devcontainer for %s (%s).\n", cfg.ProjectName, cfg.Preset)
 	return err
+}
+
+// parseSettings reads --set values. A setting without a definition prefix
+// applies to the preset.
+func parseSettings(preset string, settings []string) (map[string]map[string]string, error) {
+	options := map[string]map[string]string{}
+	for _, setting := range settings {
+		key, value, ok := strings.Cut(setting, "=")
+		definition, option, qualified := strings.Cut(key, ".")
+		if !qualified {
+			definition, option = preset, key
+		}
+		if !ok || definition == "" || option == "" {
+			return nil, fmt.Errorf("--set %q must have the form [DEFINITION.]OPTION=VALUE", setting)
+		}
+		if err := setOption(options, definition, option, value, "--set "+setting); err != nil {
+			return nil, err
+		}
+	}
+	return options, nil
+}
+
+// setOption records value and rejects a different value for the same option.
+func setOption(options map[string]map[string]string, definition, option, value, source string) error {
+	if previous, ok := options[definition][option]; ok && previous != value {
+		return fmt.Errorf("%s conflicts with %s.%s=%s set earlier", source, definition, option, previous)
+	}
+	if options[definition] == nil {
+		options[definition] = map[string]string{}
+	}
+	options[definition][option] = value
+	return nil
 }
 
 type prompter struct {
@@ -215,6 +278,24 @@ func (p *prompter) choice(label string, choices []string, defaultValue string) (
 			}
 		}
 		fmt.Fprintf(p.output, "Please choose one of: %s.\n", strings.Join(choices, ", "))
+	}
+}
+
+// option asks for an option value until it is valid.
+func (p *prompter) option(label string, option presets.Option, defaultValue string) (string, error) {
+	if len(option.Choices) > 0 {
+		return p.choice(label, option.Choices, defaultValue)
+	}
+	for {
+		value, err := p.ask(label, defaultValue)
+		if err != nil {
+			return "", err
+		}
+		if err := option.Check(value); err != nil {
+			fmt.Fprintf(p.output, "%s: %v.\n", label, err)
+			continue
+		}
+		return value, nil
 	}
 }
 
@@ -285,52 +366,93 @@ func chooseProjectName(root, value string, wasProvided bool, prompt *prompter) (
 	return prompt.projectName(config.SanitizeName(base))
 }
 
-func choosePreset(value string, detected detect.Result, prompt *prompter) (config.Preset, error) {
+func choosePreset(value string, detected detect.Result, registry *presets.Registry, prompt *prompter) (string, error) {
 	if value != "" || prompt == nil {
-		return resolvePreset(value, detected)
+		return resolvePreset(value, detected, registry)
 	}
 	if len(detected.Presets) == 1 {
 		return detected.Presets[0], nil
 	}
-	selected, err := prompt.choice("Preset", choiceStrings(config.Presets()), "")
-	if err != nil {
-		return "", err
-	}
-	return config.ParsePreset(selected)
+	return prompt.choice("Preset", registry.Names(presets.KindPreset), "")
 }
 
-func choosePackageManager(value string, preset config.Preset, detail detect.PresetResult, prompt *prompter) (config.PackageManager, error) {
-	if value != "" || prompt == nil || preset == config.PresetRuby || preset == config.PresetRails {
-		return resolvePackageManager(value, preset, detail)
+// choosePresetOptions fills unset preset options from detection. A single
+// detected value is used; several are ambiguous. Interactive mode asks for
+// every remaining option, and non-interactive mode leaves it at its default.
+func choosePresetOptions(definition presets.Definition, detail detect.PresetResult, options map[string]map[string]string, prompt *prompter) error {
+	for _, name := range slices.Sorted(maps.Keys(definition.Options)) {
+		if _, ok := options[definition.Name][name]; ok {
+			continue
+		}
+		option := definition.Options[name]
+		detected := detail.Options[name]
+		value := ""
+		switch {
+		case len(detected) == 1:
+			value = detected[0]
+		case len(detected) > 1 && prompt == nil:
+			return fmt.Errorf("multiple values detected for %s.%s (%s); pass --set %s.%s=VALUE", definition.Name, name, strings.Join(detected, ", "), definition.Name, name)
+		case prompt != nil:
+			defaultValue := option.Default
+			if len(detected) > 1 {
+				defaultValue = ""
+			}
+			var err error
+			if value, err = prompt.option(definition.Name+"."+name, option, defaultValue); err != nil {
+				return err
+			}
+		default:
+			continue
+		}
+		if err := setOption(options, definition.Name, name, value, "detected value"); err != nil {
+			return err
+		}
 	}
-	if len(detail.PackageManagerCandidates) == 1 {
-		return detail.PackageManagerCandidates[0], nil
-	}
-	choices := choiceStrings(config.PackageManagers(preset))
-	defaultValue := string(config.DefaultPackageManager(preset))
-	if len(detail.PackageManagerCandidates) > 1 {
-		defaultValue = ""
-	}
-	selected, err := prompt.choice("Package manager", choices, defaultValue)
-	if err != nil {
-		return "", err
-	}
-	return config.ParsePackageManager(selected)
+	return nil
 }
 
-func chooseDatabase(value string, wasProvided bool, detail detect.PresetResult, prompt *prompter) (config.Database, error) {
+// chooseAddons combines --addon and the --database alias. Without either,
+// interactive mode asks and offers detected suggestions as the default;
+// non-interactive mode selects none.
+func chooseAddons(values []string, database string, wasProvided bool, detail detect.PresetResult, registry *presets.Registry, prompt *prompter) ([]string, error) {
+	addons := slices.Clone(values)
+	if database != "" {
+		if !slices.Contains(config.Databases, database) {
+			return nil, fmt.Errorf("unsupported database %q (expected %s)", database, config.DescribeChoices(config.Databases))
+		}
+		if database != "none" {
+			addons = append(addons, database)
+		}
+	}
 	if wasProvided || prompt == nil {
-		return resolveDatabase(value)
+		return addons, nil
 	}
-	defaultValue := string(config.DefaultDatabase)
-	if detail.SuggestedDatabase == config.DatabasePostgres {
-		defaultValue = string(config.DatabasePostgres)
+	available := registry.Names(presets.KindAddon)
+	defaultValue := "none"
+	if len(detail.SuggestedAddons) > 0 {
+		defaultValue = strings.Join(detail.SuggestedAddons, ",")
 	}
-	selected, err := prompt.choice("Database", choiceStrings(config.Databases()), defaultValue)
-	if err != nil {
-		return "", err
+	for {
+		value, err := prompt.ask(fmt.Sprintf("Add-ons (%s; comma-separated or none)", strings.Join(available, ", ")), defaultValue)
+		if err != nil {
+			return nil, err
+		}
+		if value == "none" {
+			return nil, nil
+		}
+		selected := strings.Split(value, ",")
+		valid := true
+		for i, name := range selected {
+			selected[i] = strings.TrimSpace(name)
+			if !slices.Contains(available, selected[i]) {
+				valid = false
+			}
+		}
+		if valid {
+			return selected, nil
+		}
+		fmt.Fprintf(prompt.output, "Please choose from: %s, or none.\n", strings.Join(available, ", "))
 	}
-	return config.ParseDatabase(selected)
 }
 
 func chooseAITools(value string, wasProvided bool, prompt *prompter) ([]config.AITool, error) {
@@ -344,27 +466,33 @@ func chooseAITools(value string, wasProvided bool, prompt *prompter) ([]config.A
 	return parseAITools(selected, true)
 }
 
-// existingPostgresVersion returns the PostgreSQL version recorded by an
-// existing generated manifest, so regenerating with --force keeps a data
-// volume readable. It returns "" when there is no usable PostgreSQL manifest.
-func existingPostgresVersion(root string) string {
+// keepAddonOptions carries option values of add-ons that the existing
+// generated manifest also selected into options when they are not set, so
+// regenerating with --force keeps, for example, a PostgreSQL data volume
+// readable. Unusable manifests are ignored.
+func keepAddonOptions(root string, addons []string, options map[string]map[string]string) {
 	file, err := os.Open(filepath.Join(root, ".devcontainer", "projectsetup.json"))
 	if err != nil {
-		return ""
+		return
 	}
 	defer file.Close()
 	manifest, err := config.ReadManifest(file)
-	if err != nil || manifest.GeneratedBy != "projectsetup" {
-		return ""
+	if err != nil || manifest.GeneratedBy != config.GeneratedBy {
+		return
 	}
-	return manifest.PostgresVersion
+	for _, ref := range manifest.Addons {
+		if !slices.Contains(addons, ref.Name) {
+			continue
+		}
+		for option, value := range manifest.Options[ref.Name] {
+			if _, ok := options[ref.Name][option]; !ok {
+				setOption(options, ref.Name, option, value, "existing manifest")
+			}
+		}
+	}
 }
 
 func printConfigSummary(output io.Writer, cfg config.Config) {
-	manager := string(cfg.PackageManager)
-	if manager == "" {
-		manager = "none"
-	}
 	tools := make([]string, len(cfg.AITools))
 	for i, tool := range cfg.AITools {
 		tools[i] = string(tool)
@@ -372,53 +500,42 @@ func printConfigSummary(output io.Writer, cfg config.Config) {
 	if len(tools) == 0 {
 		tools = []string{"none"}
 	}
-	database := string(cfg.Database)
-	if cfg.PostgresVersion != "" {
-		database += " " + cfg.PostgresVersion
+	var definitions []string
+	for _, definition := range cfg.Definitions {
+		definitions = append(definitions, fmt.Sprintf("%s %s (%s)", definition.Name, definition.Version, definition.Source))
 	}
-	fmt.Fprintf(output, "\nConfiguration:\n  Project: %s\n  Preset: %s\n  Language version: %s\n  Package manager: %s\n  Database: %s\n  AI tools: %s\n  Ports: %v\n  System packages: %s\n\n",
-		cfg.ProjectName, cfg.Preset, cfg.LanguageVersion, manager, database, strings.Join(tools, ", "), cfg.Ports, strings.Join(cfg.SystemPackages, ", "))
+	addons := "none"
+	if len(definitions) > 1 {
+		addons = strings.Join(definitions[1:], ", ")
+	}
+	var options []string
+	for _, definition := range slices.Sorted(maps.Keys(cfg.Options)) {
+		for _, name := range slices.Sorted(maps.Keys(cfg.Options[definition])) {
+			options = append(options, fmt.Sprintf("%s.%s=%s", definition, name, cfg.Options[definition][name]))
+		}
+	}
+	if len(options) == 0 {
+		options = []string{"none"}
+	}
+	fmt.Fprintf(output, "\nConfiguration:\n  Project: %s\n  Preset: %s\n  Add-ons: %s\n  Options: %s\n  AI tools: %s\n  Ports: %v\n  System packages: %s\n\n",
+		cfg.ProjectName, definitions[0], addons, strings.Join(options, ", "), strings.Join(tools, ", "), cfg.Ports, strings.Join(cfg.SystemPackages, ", "))
 }
 
-func resolvePreset(value string, detected detect.Result) (config.Preset, error) {
+func resolvePreset(value string, detected detect.Result, registry *presets.Registry) (string, error) {
 	if value != "" {
-		return config.ParsePreset(value)
+		if definition, ok := registry.Lookup(value); !ok || definition.Kind != presets.KindPreset {
+			return "", fmt.Errorf("unsupported preset %q (expected %s)", value, config.DescribeChoices(registry.Names(presets.KindPreset)))
+		}
+		return value, nil
 	}
 	switch len(detected.Presets) {
 	case 0:
-		return "", fmt.Errorf("could not infer a preset; pass --preset %s", config.DescribeChoices(config.Presets()))
+		return "", fmt.Errorf("could not infer a preset; pass --preset %s", config.DescribeChoices(registry.Names(presets.KindPreset)))
 	case 1:
 		return detected.Presets[0], nil
 	default:
-		return "", fmt.Errorf("multiple project presets detected (%s); pass --preset explicitly", joinChoices(detected.Presets, ", "))
+		return "", fmt.Errorf("multiple project presets detected (%s); pass --preset explicitly", strings.Join(detected.Presets, ", "))
 	}
-}
-
-func resolvePackageManager(value string, preset config.Preset, detail detect.PresetResult) (config.PackageManager, error) {
-	if value != "" {
-		return config.ParsePackageManager(value)
-	}
-	if len(detail.PackageManagerCandidates) > 1 {
-		values := make([]string, len(detail.PackageManagerCandidates))
-		for i, manager := range detail.PackageManagerCandidates {
-			values[i] = string(manager)
-		}
-		return "", fmt.Errorf("multiple package managers detected (%s); pass --package-manager explicitly", strings.Join(values, ", "))
-	}
-	if len(detail.PackageManagerCandidates) == 1 {
-		return detail.PackageManagerCandidates[0], nil
-	}
-	if preset == config.PresetRuby || preset == config.PresetRails {
-		return "", nil
-	}
-	return "", nil
-}
-
-func resolveDatabase(value string) (config.Database, error) {
-	if value == "" {
-		return config.DatabaseNone, nil
-	}
-	return config.ParseDatabase(value)
 }
 
 func resolveAITools(value string, flags *flag.FlagSet) ([]config.AITool, error) {
@@ -447,31 +564,4 @@ func parseAITools(value string, provided bool) ([]config.AITool, error) {
 		tools = append(tools, tool)
 	}
 	return tools, nil
-}
-
-func resolveLanguageVersion(preset config.Preset, node, ruby, python, detected string) (string, error) {
-	if preset != config.PresetNode && node != "" {
-		return "", fmt.Errorf("--node-version requires --preset node")
-	}
-	if preset != config.PresetRuby && preset != config.PresetRails && ruby != "" {
-		return "", fmt.Errorf("--ruby-version requires --preset ruby or rails")
-	}
-	if preset != config.PresetPython && python != "" {
-		return "", fmt.Errorf("--python-version requires --preset python")
-	}
-	switch preset {
-	case config.PresetNode:
-		if node != "" {
-			return node, nil
-		}
-	case config.PresetRuby, config.PresetRails:
-		if ruby != "" {
-			return ruby, nil
-		}
-	case config.PresetPython:
-		if python != "" {
-			return python, nil
-		}
-	}
-	return detected, nil
 }

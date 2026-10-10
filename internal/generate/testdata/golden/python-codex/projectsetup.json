@@ -1,13 +1,22 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "projectName": "python-codex",
-  "preset": "python",
-  "database": "none",
+  "preset": {
+    "name": "python",
+    "version": "1.0.0",
+    "source": "builtin",
+    "sha256": "bce189dcb22725e4cd9acfcd49f5875e7bb9ad12a241404732830a25cacfc8bf"
+  },
+  "addons": [],
+  "options": {
+    "python": {
+      "package_manager": "pip",
+      "version": "3.14"
+    }
+  },
   "aiTools": [
     "codex"
   ],
-  "packageManager": "pip",
-  "languageVersion": "3.14",
   "ports": [],
   "systemPackages": [],
   "generatedBy": "projectsetup"

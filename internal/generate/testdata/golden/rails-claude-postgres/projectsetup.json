@@ -1,14 +1,32 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "projectName": "rails-postgres",
-  "preset": "rails",
-  "database": "postgres",
+  "preset": {
+    "name": "rails",
+    "version": "1.0.0",
+    "source": "builtin",
+    "sha256": "63762b8f37cbf8ad7574a62421731f6b4dfe4d27ac2da5e4a89f44ad3a8c0e0b"
+  },
+  "addons": [
+    {
+      "name": "postgres",
+      "version": "1.0.0",
+      "source": "builtin",
+      "sha256": "2599aeb6646927da792811aac4fc083f264cf652d277b5772de93c38c94476b5"
+    }
+  ],
+  "options": {
+    "postgres": {
+      "version": "18"
+    },
+    "rails": {
+      "version": "3.3.6"
+    }
+  },
   "aiTools": [
     "claude",
     "opencode"
   ],
-  "languageVersion": "3.3.6",
-  "postgresVersion": "18",
   "ports": [
     3000
   ],

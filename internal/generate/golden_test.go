@@ -24,37 +24,36 @@ type goldenCase struct {
 }
 
 var goldenCases = []goldenCase{
-	{name: "python-codex", input: config.Input{ProjectName: "python-codex", Preset: config.PresetPython, AITools: []config.AITool{config.AIToolCodex}}},
-	{name: "node-all-agents", input: config.Input{ProjectName: "node-all-agents", Preset: config.PresetNode, AITools: []config.AITool{config.AIToolOpenCode, config.AIToolCodex, config.AIToolClaude}}},
+	{name: "python-codex", input: config.Input{ProjectName: "python-codex", Preset: "python", AITools: []config.AITool{config.AIToolCodex}}},
+	{name: "node-all-agents", input: config.Input{ProjectName: "node-all-agents", Preset: "node", AITools: []config.AITool{config.AIToolOpenCode, config.AIToolCodex, config.AIToolClaude}}},
 
 	{
 		name: "node-opencode",
 		input: config.Input{
-			ProjectName: "node-app", Preset: config.PresetNode,
-			PackageManager: config.PackageManagerNPM,
+			ProjectName: "node-app", Preset: "node",
+			Options: map[string]map[string]string{"node": {"package_manager": "npm"}},
 		},
 	},
 	{
 		name: "node-claude-postgres",
 		input: config.Input{
-			ProjectName: "node-postgres", Preset: config.PresetNode,
-			PackageManager: config.PackageManagerPNPM, LanguageVersion: "20",
-			Database: config.DatabasePostgres,
-			AITools:  []config.AITool{config.AIToolOpenCode, config.AIToolClaude},
-			Ports:    []int{5173},
+			ProjectName: "node-postgres", Preset: "node", Addons: []string{"postgres"},
+			Options: map[string]map[string]string{"node": {"package_manager": "pnpm", "version": "20"}},
+			AITools: []config.AITool{config.AIToolOpenCode, config.AIToolClaude},
+			Ports:   []int{5173},
 		},
 	},
 	{
 		name: "ruby-opencode",
 		input: config.Input{
-			ProjectName: "ruby-gem", Preset: config.PresetRuby,
+			ProjectName: "ruby-gem", Preset: "ruby",
 		},
 	},
 	{
 		name: "rails-claude-postgres",
 		input: config.Input{
-			ProjectName: "rails-postgres", Preset: config.PresetRails,
-			LanguageVersion: "3.3.6", Database: config.DatabasePostgres,
+			ProjectName: "rails-postgres", Preset: "rails", Addons: []string{"postgres"},
+			Options: map[string]map[string]string{"rails": {"version": "3.3.6"}},
 			AITools: []config.AITool{config.AIToolOpenCode, config.AIToolClaude},
 			Ports:   []int{3000},
 		},
@@ -62,38 +61,36 @@ var goldenCases = []goldenCase{
 	{
 		name: "rails-opencode",
 		input: config.Input{
-			ProjectName: "rails-app", Preset: config.PresetRails,
+			ProjectName: "rails-app", Preset: "rails",
 		},
 	},
 	{
 		name: "rails-sqlite",
 		input: config.Input{
-			ProjectName: "rails-sqlite", Preset: config.PresetRails,
-			Database: config.DatabaseSQLite,
+			ProjectName: "rails-sqlite", Preset: "rails", Addons: []string{"sqlite"},
 		},
 	},
 	{
 		name: "python-pip",
 		input: config.Input{
-			ProjectName: "python-pip", Preset: config.PresetPython,
-			PackageManager: config.PackageManagerPip, LanguageVersion: "3.13",
+			ProjectName: "python-pip", Preset: "python",
+			Options: map[string]map[string]string{"python": {"package_manager": "pip", "version": "3.13"}},
 		},
 	},
 	{
 		name: "python-uv-claude-postgres",
 		input: config.Input{
-			ProjectName: "python-uv", Preset: config.PresetPython,
-			PackageManager: config.PackageManagerUV, LanguageVersion: "3.12",
-			Database: config.DatabasePostgres,
-			AITools:  []config.AITool{config.AIToolOpenCode, config.AIToolClaude},
-			Ports:    []int{8000}, SystemPackages: []string{"build-essential"},
+			ProjectName: "python-uv", Preset: "python", Addons: []string{"postgres"},
+			Options: map[string]map[string]string{"python": {"package_manager": "uv", "version": "3.12"}},
+			AITools: []config.AITool{config.AIToolOpenCode, config.AIToolClaude},
+			Ports:   []int{8000}, SystemPackages: []string{"build-essential"},
 		},
 	},
 	{
 		name: "python-poetry",
 		input: config.Input{
-			ProjectName: "python-poetry", Preset: config.PresetPython,
-			PackageManager: config.PackageManagerPoetry, LanguageVersion: "3.11",
+			ProjectName: "python-poetry", Preset: "python",
+			Options: map[string]map[string]string{"python": {"package_manager": "poetry", "version": "3.11"}},
 		},
 	},
 }
@@ -437,7 +434,7 @@ func TestSmokeCodexSharedInstallation(t *testing.T) {
 	root, home := t.TempDir(), t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("CODEX_HOME", filepath.Join(home, "custom-codex-state"))
-	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: fmt.Sprintf("codex-smoke-%d", time.Now().UnixNano()), Preset: config.PresetNode, AITools: []config.AITool{config.AIToolCodex}})
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: fmt.Sprintf("codex-smoke-%d", time.Now().UnixNano()), Preset: "node", AITools: []config.AITool{config.AIToolCodex}})
 	if err != nil {
 		t.Fatal(err)
 	}

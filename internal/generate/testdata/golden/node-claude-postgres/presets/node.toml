@@ -1,0 +1,62 @@
+schema = 1
+kind = "preset"
+name = "node"
+version = "1.0.0"
+description = "Node.js with npm, pnpm, or Yarn"
+
+[options.version]
+description = "Node.js version"
+default = "26"
+pattern = '[0-9]+(\.[0-9]+){0,2}([-+][a-zA-Z0-9.-]+)?'
+
+[options.version.detect]
+sources = [
+  { file = ".node-version" },
+  { file = ".nvmrc" },
+  { builtin = "package-json-engines" },
+]
+
+[options.package_manager]
+description = "Node.js package manager"
+default = "npm"
+choices = ["npm", "pnpm", "yarn"]
+
+[options.package_manager.detect.choices]
+npm = [{ file = "package-lock.json" }]
+pnpm = [{ file = "pnpm-lock.yaml" }]
+yarn = [{ file = "yarn.lock" }]
+
+[detect]
+signals = ["package.json", ".node-version", ".nvmrc", "package-lock.json", "pnpm-lock.yaml", "yarn.lock"]
+match = [{ file = "package.json" }]
+
+[image]
+base = "mcr.microsoft.com/devcontainers/base:ubuntu-24.04"
+
+[features."ghcr.io/devcontainers/features/node:1"]
+version = "${option:version}"
+
+[setup]
+script = '''
+if [[ -f package.json ]]; then
+  case "${option:package_manager}" in
+    npm)
+      if [[ -f package-lock.json ]]; then
+        npm ci
+      fi
+      ;;
+    pnpm)
+      corepack enable
+      if [[ -f pnpm-lock.yaml ]]; then
+        pnpm install --frozen-lockfile
+      fi
+      ;;
+    yarn)
+      corepack enable
+      if [[ -f yarn.lock ]]; then
+        yarn install --immutable || yarn install --frozen-lockfile
+      fi
+      ;;
+  esac
+fi
+'''

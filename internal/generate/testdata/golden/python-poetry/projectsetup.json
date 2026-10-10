@@ -1,13 +1,22 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "projectName": "python-poetry",
-  "preset": "python",
-  "database": "none",
+  "preset": {
+    "name": "python",
+    "version": "1.0.0",
+    "source": "builtin",
+    "sha256": "bce189dcb22725e4cd9acfcd49f5875e7bb9ad12a241404732830a25cacfc8bf"
+  },
+  "addons": [],
+  "options": {
+    "python": {
+      "package_manager": "poetry",
+      "version": "3.11"
+    }
+  },
   "aiTools": [
     "opencode"
   ],
-  "packageManager": "poetry",
-  "languageVersion": "3.11",
   "ports": [],
   "systemPackages": [],
   "generatedBy": "projectsetup"

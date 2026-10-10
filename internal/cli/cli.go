@@ -12,7 +12,11 @@ import (
 const usage = `Usage:
   projectsetup init [flags]
   projectsetup init --list-options [--json]
-  projectsetup upgrade
+  projectsetup upgrade [--ai TOOLS] [--refresh-presets]
+  projectsetup preset list [--json]
+  projectsetup preset show NAME
+  projectsetup preset validate FILE
+  projectsetup preset eject NAME --as NEW
   projectsetup self-update
   projectsetup check [--build]
   projectsetup doctor
@@ -22,6 +26,7 @@ Commands:
   init    Generate a Dev Container configuration
           (--list-options prints accepted values; add --json for JSON)
   upgrade Regenerate an existing projectsetup configuration
+  preset  List, show, validate, or copy preset and add-on definitions
   self-update Update the projectsetup executable
   check   Validate a generated configuration
   doctor  Diagnose host dependencies and dworm compatibility
@@ -61,6 +66,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			return fmt.Errorf("determine current directory: %w", err)
 		}
 		return runUpgrade(root, args[1:], stdout, stderr)
+	case "preset":
+		return runPreset(args[1:], stdout, stderr)
 	case "doctor":
 		root, err := os.Getwd()
 		if err != nil {

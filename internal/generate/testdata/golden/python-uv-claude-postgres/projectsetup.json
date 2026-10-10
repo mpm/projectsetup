@@ -1,15 +1,33 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "projectName": "python-uv",
-  "preset": "python",
-  "database": "postgres",
+  "preset": {
+    "name": "python",
+    "version": "1.0.0",
+    "source": "builtin",
+    "sha256": "bce189dcb22725e4cd9acfcd49f5875e7bb9ad12a241404732830a25cacfc8bf"
+  },
+  "addons": [
+    {
+      "name": "postgres",
+      "version": "1.0.0",
+      "source": "builtin",
+      "sha256": "2599aeb6646927da792811aac4fc083f264cf652d277b5772de93c38c94476b5"
+    }
+  ],
+  "options": {
+    "postgres": {
+      "version": "18"
+    },
+    "python": {
+      "package_manager": "uv",
+      "version": "3.12"
+    }
+  },
   "aiTools": [
     "claude",
     "opencode"
   ],
-  "packageManager": "uv",
-  "languageVersion": "3.12",
-  "postgresVersion": "18",
   "ports": [
     8000
   ],

@@ -126,7 +126,7 @@ func (r *Registry) Resolve(selection Selection) (Resolved, error) {
 		owners: map[string]string{},
 	}
 	for _, definition := range definitions {
-		values, err := definition.optionValues(selection.Options[definition.Name])
+		values, err := definition.OptionValues(selection.Options[definition.Name])
 		if err != nil {
 			return Resolved{}, err
 		}
@@ -148,7 +148,9 @@ func (r *Registry) Resolve(selection Selection) (Resolved, error) {
 	return merger.result, nil
 }
 
-func (d Definition) optionValues(given map[string]string) (map[string]string, error) {
+// OptionValues returns the effective option values: given values, which
+// must be valid, and defaults for the rest.
+func (d Definition) OptionValues(given map[string]string) (map[string]string, error) {
 	values := make(map[string]string, len(d.Options))
 	for name, option := range d.Options {
 		values[name] = option.Default
@@ -158,8 +160,12 @@ func (d Definition) optionValues(given map[string]string) (map[string]string, er
 		if !ok {
 			return nil, fmt.Errorf("%s has no option %q (available: %s)", d.Name, name, strings.Join(sortedKeys(d.Options), ", "))
 		}
-		if err := option.check(given[name]); err != nil {
-			return nil, fmt.Errorf("option %s.%s: %w", d.Name, name, err)
+		if err := option.Check(given[name]); err != nil {
+			label := d.Name + "." + name
+			if option.Description != "" {
+				label += " (" + option.Description + ")"
+			}
+			return nil, fmt.Errorf("option %s: %w", label, err)
 		}
 		values[name] = given[name]
 	}

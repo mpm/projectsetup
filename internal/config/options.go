@@ -1,54 +1,36 @@
 package config
 
+import "github.com/mpm/projectsetup/internal/presets"
+
 // OptionsSchemaVersion identifies the format of Options. Increment it when a
 // field is removed or its meaning changes; adding fields keeps the version.
-const OptionsSchemaVersion = 1
+const OptionsSchemaVersion = 2
 
-// Options lists the values init accepts. It is built from the same tables that
-// parsing and normalization use, so it cannot drift from validation.
+// Options lists the values init accepts. It is built from the registry that
+// normalization validates against, so it cannot drift from validation.
 type Options struct {
-	SchemaVersion      int                         `json:"schemaVersion"`
-	Presets            []Preset                    `json:"presets"`
-	PackageManagers    map[Preset][]PackageManager `json:"packageManagers"`
-	Databases          []Database                  `json:"databases"`
-	AITools            []AITool                    `json:"aiTools"`
-	ProjectNamePattern string                      `json:"projectNamePattern"`
-	Defaults           map[Preset]PresetDefaults   `json:"defaults"`
+	SchemaVersion      int                     `json:"schemaVersion"`
+	Presets            []string                `json:"presets"`
+	Addons             []string                `json:"addons"`
+	Definitions        map[string]presets.Info `json:"definitions"`
+	AITools            []AITool                `json:"aiTools"`
+	DefaultAITools     []AITool                `json:"defaultAITools"`
+	ProjectNamePattern string                  `json:"projectNamePattern"`
 }
 
-// PresetDefaults holds the values Normalize uses for a preset when nothing is
-// selected or detected. PackageManager is nil for presets without a choice.
-type PresetDefaults struct {
-	PackageManager  *PackageManager `json:"packageManager"`
-	LanguageVersion string          `json:"languageVersion"`
-	Database        Database        `json:"database"`
-	PostgresVersion string          `json:"postgresVersion"`
-	AITools         []AITool        `json:"aiTools"`
-}
-
-// ListOptions returns the accepted init values.
-func ListOptions() Options {
+// ListOptions returns the accepted init values for registry.
+func ListOptions(registry *presets.Registry) Options {
 	options := Options{
 		SchemaVersion:      OptionsSchemaVersion,
-		Presets:            Presets(),
-		PackageManagers:    make(map[Preset][]PackageManager),
-		Databases:          Databases(),
+		Presets:            registry.Names(presets.KindPreset),
+		Addons:             registry.Names(presets.KindAddon),
+		Definitions:        map[string]presets.Info{},
 		AITools:            AITools(),
+		DefaultAITools:     DefaultAITools(),
 		ProjectNamePattern: ProjectNamePattern,
-		Defaults:           make(map[Preset]PresetDefaults),
 	}
-	for _, preset := range options.Presets {
-		options.PackageManagers[preset] = PackageManagers(preset)
-		defaults := PresetDefaults{
-			LanguageVersion: DefaultLanguageVersion(preset),
-			Database:        DefaultDatabase,
-			PostgresVersion: DefaultPostgresVersion(),
-			AITools:         DefaultAITools(),
-		}
-		if manager := DefaultPackageManager(preset); manager != "" {
-			defaults.PackageManager = &manager
-		}
-		options.Defaults[preset] = defaults
+	for _, info := range registry.Infos() {
+		options.Definitions[info.Name] = info
 	}
 	return options
 }

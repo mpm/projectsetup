@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/mpm/projectsetup/internal/config"
@@ -22,31 +24,25 @@ func writeOptions(output io.Writer, options config.Options, asJSON bool) error {
 	}
 
 	var text strings.Builder
-	fmt.Fprintf(&text, "Presets: %s\n", joinChoices(options.Presets, ", "))
-	text.WriteString("Package managers (--package-manager):\n")
-	for _, preset := range options.Presets {
-		managers := options.PackageManagers[preset]
-		values := []string{"none"}
-		if len(managers) > 0 {
-			values = choiceStrings(managers)
-			if manager := options.Defaults[preset].PackageManager; manager != nil {
-				markDefault(values, string(*manager))
+	fmt.Fprintf(&text, "Presets (--preset): %s\n", strings.Join(options.Presets, ", "))
+	fmt.Fprintf(&text, "Add-ons (--addon, repeatable): %s\n", strings.Join(options.Addons, ", "))
+	fmt.Fprintf(&text, "Databases (--database, alias for --addon): %s\n", strings.Join(config.Databases, ", "))
+	text.WriteString("Options (--set [DEFINITION.]OPTION=VALUE):\n")
+	for _, name := range append(slices.Clone(options.Presets), options.Addons...) {
+		info := options.Definitions[name]
+		for _, option := range slices.Sorted(maps.Keys(info.Options)) {
+			details := info.Options[option]
+			if len(details.Choices) > 0 {
+				values := slices.Clone(details.Choices)
+				markDefault(values, details.Default)
+				fmt.Fprintf(&text, "  %s.%s: %s: %s\n", name, option, details.Description, strings.Join(values, ", "))
+			} else {
+				fmt.Fprintf(&text, "  %s.%s: %s; default %s\n", name, option, details.Description, details.Default)
 			}
 		}
-		fmt.Fprintf(&text, "  %s: %s\n", preset, strings.Join(values, ", "))
 	}
-	text.WriteString("Default language versions:\n")
-	for _, preset := range options.Presets {
-		fmt.Fprintf(&text, "  %s: %s\n", preset, options.Defaults[preset].LanguageVersion)
-	}
-	if len(options.Presets) > 0 {
-		defaults := options.Defaults[options.Presets[0]]
-		databases := choiceStrings(options.Databases)
-		markDefault(databases, string(defaults.Database))
-		fmt.Fprintf(&text, "Databases (--database): %s\n", strings.Join(databases, ", "))
-		fmt.Fprintf(&text, "PostgreSQL major version (--postgres-version): default %s\n", defaults.PostgresVersion)
-		fmt.Fprintf(&text, "AI tools (--ai, comma-separated or none): %s; default %s\n", joinChoices(options.AITools, ", "), joinChoices(defaults.AITools, ","))
-	}
+	text.WriteString("Aliases: --node-version, --ruby-version, --python-version, --package-manager, and --postgres-version set the matching option\n")
+	fmt.Fprintf(&text, "AI tools (--ai, comma-separated or none): %s; default %s\n", joinChoices(options.AITools, ", "), joinChoices(options.DefaultAITools, ","))
 	fmt.Fprintf(&text, "Project name pattern (--name): %s\n", options.ProjectNamePattern)
 	_, err := io.WriteString(output, text.String())
 	return err

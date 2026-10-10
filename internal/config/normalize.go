@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
+
+	"github.com/mpm/projectsetup/internal/presets"
 )
 
 // ProjectNamePattern matches project names that are used as-is for the Compose
@@ -16,25 +19,30 @@ const ProjectNamePattern = `^[a-z0-9][a-z0-9_-]*$`
 var validProjectName = regexp.MustCompile(ProjectNamePattern)
 var invalidNameCharacters = regexp.MustCompile(`[^a-z0-9_-]+`)
 var validSystemPackage = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9+.-]*$`)
-var validLanguageVersion = regexp.MustCompile(`^[0-9]+(?:\.[0-9]+){0,2}(?:[-+][a-zA-Z0-9.-]+)?$`)
-var validPostgresVersion = regexp.MustCompile(`^[1-9][0-9]*$`)
 
 type Input struct {
-	Root            string
-	ProjectName     string
-	Preset          Preset
-	Database        Database
-	AITools         []AITool
-	PackageManager  PackageManager
-	LanguageVersion string
-	PostgresVersion string
-	Ports           []int
-	SystemPackages  []string
+	Root string
+	// Registry provides the definitions; nil means the built-in definitions.
+	Registry    *presets.Registry
+	ProjectName string
+	Preset      string
+	Addons      []string
+	// Options holds explicitly set values keyed by definition and option
+	// name. Unset options use their defaults.
+	Options        map[string]map[string]string
+	AITools        []AITool
+	Ports          []int
+	SystemPackages []string
 }
 
 func Normalize(input Input) (Config, error) {
-	if !input.Preset.Valid() {
-		return Config{}, fmt.Errorf("preset is required and must be %s", DescribeChoices(Presets()))
+	registry := input.Registry
+	if registry == nil {
+		registry = presets.Builtin()
+	}
+	definitions, err := selectDefinitions(registry, input.Preset, input.Addons)
+	if err != nil {
+		return Config{}, err
 	}
 
 	name := input.ProjectName
@@ -48,36 +56,12 @@ func Normalize(input Input) (Config, error) {
 		return Config{}, err
 	}
 
-	database := input.Database
-	if database == "" {
-		database = DefaultDatabase
-	}
-	if !database.Valid() {
-		return Config{}, fmt.Errorf("database must be %s", DescribeChoices(Databases()))
-	}
-
 	tools, err := normalizeAITools(input.AITools)
 	if err != nil {
 		return Config{}, err
 	}
 
-	manager := input.PackageManager
-	if manager == "" {
-		manager = DefaultPackageManager(input.Preset)
-	}
-	if !manager.Supports(input.Preset) {
-		return Config{}, fmt.Errorf("package manager %q is not supported for preset %q", manager, input.Preset)
-	}
-
-	version := strings.TrimSpace(input.LanguageVersion)
-	if version == "" {
-		version = DefaultLanguageVersion(input.Preset)
-	}
-	if !validLanguageVersion.MatchString(version) {
-		return Config{}, fmt.Errorf("language version %q must be a numeric version such as 22 or 3.13.1", version)
-	}
-
-	postgresVersion, err := normalizePostgresVersion(database, input.PostgresVersion)
+	options, err := normalizeOptions(definitions, input.Options)
 	if err != nil {
 		return Config{}, err
 	}
@@ -102,18 +86,19 @@ func Normalize(input Input) (Config, error) {
 		return Config{}, fmt.Errorf("resolve project root: %w", err)
 	}
 
-	serviceName := "app"
+	addons := make([]string, 0, len(definitions)-1)
+	for _, definition := range definitions[1:] {
+		addons = append(addons, definition.Name)
+	}
 	return Config{
-		SchemaVersion:   SchemaVersion,
-		ProjectName:     name,
-		Preset:          input.Preset,
-		Database:        database,
-		AITools:         tools,
-		PackageManager:  manager,
-		LanguageVersion: version,
-		PostgresVersion: postgresVersion,
-		Ports:           ports,
-		SystemPackages:  packages,
+		ProjectName:    name,
+		Preset:         definitions[0].Name,
+		Addons:         addons,
+		Options:        options,
+		Definitions:    definitions,
+		AITools:        tools,
+		Ports:          ports,
+		SystemPackages: packages,
 		Workspace: Workspace{
 			HostPath:      root,
 			ContainerPath: "/workspaces/" + name,
@@ -122,9 +107,58 @@ func Normalize(input Input) (Config, error) {
 			User:               "vscode",
 			Home:               "/home/vscode",
 			ComposeProjectName: name,
-			ServiceName:        serviceName,
+			ServiceName:        "app",
 		},
 	}, nil
+}
+
+// selectDefinitions returns the preset followed by the add-ons sorted by
+// name without duplicates.
+func selectDefinitions(registry *presets.Registry, preset string, addons []string) ([]presets.Definition, error) {
+	presetNames := registry.Names(presets.KindPreset)
+	if preset == "" {
+		return nil, fmt.Errorf("preset is required and must be %s", DescribeChoices(presetNames))
+	}
+	definition, ok := registry.Lookup(preset)
+	if !ok || definition.Kind != presets.KindPreset {
+		return nil, fmt.Errorf("unsupported preset %q (expected %s)", preset, DescribeChoices(presetNames))
+	}
+	definitions := []presets.Definition{definition}
+	names := slices.Clone(addons)
+	slices.Sort(names)
+	for _, name := range slices.Compact(names) {
+		addon, ok := registry.Lookup(name)
+		if !ok || addon.Kind != presets.KindAddon {
+			return nil, fmt.Errorf("unsupported add-on %q (expected %s)", name, DescribeChoices(registry.Names(presets.KindAddon)))
+		}
+		definitions = append(definitions, addon)
+	}
+	return definitions, nil
+}
+
+// normalizeOptions returns the effective values of every option of the
+// selected definitions. Definitions without options have no entry.
+func normalizeOptions(definitions []presets.Definition, given map[string]map[string]string) (map[string]map[string]string, error) {
+	for _, name := range sortedKeys(given) {
+		if !slices.ContainsFunc(definitions, func(definition presets.Definition) bool { return definition.Name == name }) {
+			return nil, fmt.Errorf("options are set for %q, which is not selected", name)
+		}
+	}
+	result := map[string]map[string]string{}
+	for _, definition := range definitions {
+		values := map[string]string{}
+		for option, value := range given[definition.Name] {
+			values[option] = strings.TrimSpace(value)
+		}
+		effective, err := definition.OptionValues(values)
+		if err != nil {
+			return nil, err
+		}
+		if len(effective) > 0 {
+			result[definition.Name] = effective
+		}
+	}
+	return result, nil
 }
 
 // ValidProjectName reports whether name can be used unchanged as the project name.
@@ -174,25 +208,6 @@ func DefaultProjectName(root string) (string, error) {
 	return name, nil
 }
 
-// normalizePostgresVersion returns the PostgreSQL major version for the
-// sidecar, or "" when PostgreSQL is not selected.
-func normalizePostgresVersion(database Database, value string) (string, error) {
-	value = strings.TrimSpace(value)
-	if database != DatabasePostgres {
-		if value != "" {
-			return "", fmt.Errorf("PostgreSQL version %q requires database %q", value, DatabasePostgres)
-		}
-		return "", nil
-	}
-	if value == "" {
-		return DefaultPostgresVersion(), nil
-	}
-	if !validPostgresVersion.MatchString(value) {
-		return "", fmt.Errorf("PostgreSQL version %q must be a major version such as %s", value, DefaultPostgresVersion())
-	}
-	return value, nil
-}
-
 func normalizeAITools(values []AITool) ([]AITool, error) {
 	if values == nil {
 		return DefaultAITools(), nil
@@ -239,4 +254,13 @@ func compact(values []int) []int {
 		}
 	}
 	return result
+}
+
+func sortedKeys[V any](values map[string]V) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }

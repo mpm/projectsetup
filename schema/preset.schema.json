@@ -1,0 +1,263 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mpm/projectsetup/main/schema/preset.schema.json",
+  "title": "projectsetup preset or add-on definition",
+  "description": "A TOML preset or add-on definition. projectsetup preset validate FILE checks the rules this schema cannot express, such as placeholders and option defaults.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "kind", "name", "version", "description"],
+  "properties": {
+    "schema": { "description": "Definition format version.", "const": 1 },
+    "kind": {
+      "description": "A project uses exactly one preset and any number of add-ons.",
+      "enum": ["preset", "addon"]
+    },
+    "name": { "$ref": "#/$defs/name" },
+    "version": {
+      "description": "Definition version as MAJOR.MINOR.PATCH.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "description": { "type": "string", "minLength": 1 },
+    "options": {
+      "description": "Values users set with --set NAME.OPTION=VALUE and that ${option:OPTION} placeholders read.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
+      "additionalProperties": { "$ref": "#/$defs/option" }
+    },
+    "detect": { "$ref": "#/$defs/detect" },
+    "image": { "$ref": "#/$defs/image" },
+    "features": { "$ref": "#/$defs/features" },
+    "container": { "$ref": "#/$defs/container" },
+    "setup": { "$ref": "#/$defs/setup" },
+    "services": { "$ref": "#/$defs/services" },
+    "variant": {
+      "description": "Additive blocks applied when every condition in when matches.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/variant" }
+    }
+  },
+  "$defs": {
+    "name": {
+      "description": "Definition name: lowercase letters, digits, and dashes, starting with a letter.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "names": { "type": "array", "items": { "$ref": "#/$defs/name" } },
+    "strings": { "type": "array", "items": { "type": "string" } },
+    "stringMap": { "type": "object", "additionalProperties": { "type": "string" } },
+    "option": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["default"],
+      "properties": {
+        "description": { "type": "string" },
+        "default": { "type": "string", "minLength": 1 },
+        "choices": {
+          "description": "Accepted values. Set either choices or pattern.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$" }
+        },
+        "pattern": {
+          "description": "Regular expression that must match the whole value. Set either choices or pattern.",
+          "type": "string",
+          "minLength": 1
+        },
+        "detect": { "$ref": "#/$defs/optionDetect" }
+      }
+    },
+    "optionDetect": {
+      "description": "How init reads the option from project files (presets only).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sources": {
+          "description": "The first source that yields a value wins.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/valueSource" }
+        },
+        "choices": {
+          "description": "Every choice with a matching file is a candidate; several candidates are ambiguous.",
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/fileMatches" }
+        }
+      }
+    },
+    "valueSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "description": "Without pattern, the first word without a leading v or ruby- is the value.",
+          "type": "string",
+          "minLength": 1
+        },
+        "pattern": { "description": "The first capture group is the value.", "type": "string" },
+        "builtin": { "enum": ["package-json-engines"] }
+      }
+    },
+    "fileMatch": {
+      "description": "A regular file relative to the project root; a glob cannot include a directory.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file"],
+      "properties": {
+        "file": { "type": "string", "minLength": 1 },
+        "pattern": { "description": "Regular expression the file content must match.", "type": "string" }
+      }
+    },
+    "fileMatches": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/fileMatch" } },
+    "detect": {
+      "description": "How init recognizes a project that uses the preset (presets only).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "signals": { "description": "Files reported as evidence.", "$ref": "#/$defs/strings" },
+        "match": {
+          "description": "Any rule detects the preset. When empty, any present signal does.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/fileMatch" }
+        },
+        "supersedes": { "description": "Presets dropped when this one is detected.", "$ref": "#/$defs/names" },
+        "suggest": {
+          "description": "Add-ons offered as defaults, never added silently.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["addon", "match"],
+            "properties": {
+              "addon": { "$ref": "#/$defs/name" },
+              "match": { "$ref": "#/$defs/fileMatches" }
+            }
+          }
+        },
+        "warning": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["message", "match"],
+            "properties": {
+              "message": { "type": "string", "minLength": 1 },
+              "match": { "$ref": "#/$defs/fileMatches" }
+            }
+          }
+        }
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "base": { "description": "Debian or Ubuntu base image (top-level preset only).", "type": "string", "minLength": 1 },
+        "apt": {
+          "description": "Packages installed as root in one Dockerfile line per contributing block.",
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9+.-]*$" }
+        },
+        "root_run": { "description": "Single-line RUN steps as root, after apt.", "$ref": "#/$defs/strings" },
+        "user_run": { "description": "Single-line RUN steps as vscode, after the final USER vscode.", "$ref": "#/$defs/strings" }
+      }
+    },
+    "features": {
+      "description": "Dev Container features by ID with their options.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": { "type": ["string", "boolean", "number"] }
+      }
+    },
+    "container": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "description": "Absolute containerEnv.PATH entries after the core user entries.",
+          "$ref": "#/$defs/strings"
+        },
+        "env": {
+          "description": "containerEnv values. PATH, HOME, USER, CODEX_HOME, and CLAUDE_CONFIG_DIR are reserved.",
+          "type": "object",
+          "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "setup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "script": { "description": "Bash appended to post-create.sh after AI tool setup.", "type": "string" }
+      }
+    },
+    "services": {
+      "description": "Compose sidecars next to the app service.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$", "not": { "const": "app" } },
+      "additionalProperties": { "$ref": "#/$defs/service" }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "image": { "type": "string", "minLength": 1 },
+        "restart": { "enum": ["always", "no", "on-failure", "unless-stopped"] },
+        "environment": { "$ref": "#/$defs/stringMap" },
+        "healthcheck": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["test"],
+          "properties": {
+            "test": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+            "interval": { "type": "string" },
+            "timeout": { "type": "string" },
+            "retries": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "volumes": {
+          "description": "Named volumes mapped to absolute container paths.",
+          "type": "object",
+          "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$" },
+          "additionalProperties": { "type": "string", "pattern": "^/" }
+        },
+        "app_depends_on": { "enum": ["service_started", "service_healthy"] }
+      }
+    },
+    "variant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["when"],
+      "properties": {
+        "when": { "$ref": "#/$defs/condition" },
+        "image": { "$ref": "#/$defs/image" },
+        "features": { "$ref": "#/$defs/features" },
+        "container": { "$ref": "#/$defs/container" },
+        "setup": { "$ref": "#/$defs/setup" },
+        "services": { "$ref": "#/$defs/services" }
+      }
+    },
+    "condition": {
+      "description": "Every listed condition must match.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "preset": { "$ref": "#/$defs/names" },
+        "not_preset": { "$ref": "#/$defs/names" },
+        "addon": { "description": "Every listed add-on must be selected.", "$ref": "#/$defs/names" },
+        "option": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "in": { "$ref": "#/$defs/strings" },
+              "below": { "description": "Compares the value's leading integer.", "type": "integer" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

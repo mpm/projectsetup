@@ -14,16 +14,16 @@ import (
 func TestWriteGeneratesSupportedPresets(t *testing.T) {
 	tests := []struct {
 		name     string
-		preset   config.Preset
-		manager  config.PackageManager
-		database config.Database
+		preset   string
+		manager  string
+		database string
 		wantText string
 	}{
-		{name: "node", preset: config.PresetNode, manager: config.PackageManagerPNPM, wantText: "pnpm install --frozen-lockfile"},
-		{name: "ruby", preset: config.PresetRuby, wantText: "bundle install"},
-		{name: "rails postgres", preset: config.PresetRails, database: config.DatabasePostgres, wantText: "bin/setup --skip-server"},
-		{name: "rails sqlite", preset: config.PresetRails, database: config.DatabaseSQLite, wantText: "bin/setup --skip-server"},
-		{name: "python", preset: config.PresetPython, manager: config.PackageManagerUV, wantText: "uv sync --frozen"},
+		{name: "node", preset: "node", manager: "pnpm", wantText: "pnpm install --frozen-lockfile"},
+		{name: "ruby", preset: "ruby", wantText: "bundle install"},
+		{name: "rails postgres", preset: "rails", database: "postgres", wantText: "bin/setup --skip-server"},
+		{name: "rails sqlite", preset: "rails", database: "sqlite", wantText: "bin/setup --skip-server"},
+		{name: "python", preset: "python", manager: "uv", wantText: "uv sync --frozen"},
 	}
 
 	for _, tt := range tests {
@@ -33,8 +33,8 @@ func TestWriteGeneratesSupportedPresets(t *testing.T) {
 			t.Setenv("HOME", home)
 			t.Setenv("CODEX_HOME", "")
 			cfg, err := config.Normalize(config.Input{
-				Root: root, Preset: tt.preset, PackageManager: tt.manager,
-				Database: tt.database, AITools: []config.AITool{config.AIToolOpenCode, config.AIToolClaude, config.AIToolCodex},
+				Root: root, Preset: tt.preset, Addons: nonEmpty(tt.database), Options: packageManager(tt.preset, tt.manager),
+				AITools: []config.AITool{config.AIToolOpenCode, config.AIToolClaude, config.AIToolCodex},
 			})
 			if err != nil {
 				t.Fatalf("Normalize() error = %v", err)
@@ -52,7 +52,7 @@ func TestWriteGeneratesSupportedPresets(t *testing.T) {
 				t.Fatalf("devcontainer.json lacks shared user or Claude settings:\n%s", devcontainer)
 			}
 			dockerfile := readGenerated(t, root, "Dockerfile")
-			if tt.preset == config.PresetRails {
+			if tt.preset == "rails" {
 				if !strings.Contains(string(dockerfile), "FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04") ||
 					!strings.Contains(string(devcontainer), `"ghcr.io/rails/devcontainer/features/ruby:2"`) ||
 					!strings.Contains(string(devcontainer), `"version": "4.0"`) ||
@@ -60,11 +60,11 @@ func TestWriteGeneratesSupportedPresets(t *testing.T) {
 					!strings.Contains(string(devcontainer), "ghcr.io/rails/devcontainer/features/activestorage") {
 					t.Fatalf("Rails output lacks the official Ruby feature or required settings:\n%s\n%s", dockerfile, devcontainer)
 				}
-				if tt.database == config.DatabasePostgres && !strings.Contains(string(devcontainer), "ghcr.io/rails/devcontainer/features/postgres-client") {
+				if tt.database == "postgres" && !strings.Contains(string(devcontainer), "ghcr.io/rails/devcontainer/features/postgres-client") {
 					t.Fatalf("Rails PostgreSQL output lacks the PostgreSQL client feature:\n%s", devcontainer)
 				}
 			}
-			if tt.preset == config.PresetRuby {
+			if tt.preset == "ruby" {
 				if !strings.Contains(string(devcontainer), `"ghcr.io/rails/devcontainer/features/ruby:2"`) ||
 					!strings.Contains(string(devcontainer), `"version": "4.0"`) ||
 					!strings.Contains(string(devcontainer), "/home/vscode/.local/share/mise/shims") ||
@@ -91,14 +91,14 @@ func TestWriteGeneratesSupportedPresets(t *testing.T) {
 				}
 			}
 			compose := readGenerated(t, root, "compose.yaml")
-			if tt.database == config.DatabasePostgres {
+			if tt.database == "postgres" {
 				if !strings.Contains(string(compose), "condition: service_healthy") || !strings.Contains(string(compose), "image: postgres:18-trixie") || !strings.Contains(string(compose), "postgres-data:/var/lib/postgresql\n") {
 					t.Fatalf("compose.yaml lacks PostgreSQL health dependency:\n%s", compose)
 				}
 			} else if strings.Contains(string(compose), "postgres:") || strings.Contains(string(compose), "postgres-data") {
 				t.Fatalf("compose.yaml contains an unselected PostgreSQL service:\n%s", compose)
 			}
-			if tt.database == config.DatabaseSQLite {
+			if tt.database == "sqlite" {
 				if !strings.Contains(string(dockerfile), "libsqlite3-dev sqlite3") {
 					t.Fatalf("Dockerfile lacks SQLite packages:\n%s", dockerfile)
 				}
@@ -118,7 +118,7 @@ func TestWriteGeneratesSupportedPresets(t *testing.T) {
 func TestWriteOnlyReplacesRecognizedDirectoryWithForce(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", t.TempDir())
-	cfg, err := config.Normalize(config.Input{Root: root, Preset: config.PresetNode})
+	cfg, err := config.Normalize(config.Input{Root: root, Preset: "node"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,6 +137,16 @@ func TestWriteOnlyReplacesRecognizedDirectoryWithForce(t *testing.T) {
 	if err := Write(root, cfg, true); err == nil || !strings.Contains(err.Error(), "unrelated path") {
 		t.Fatalf("Write() error = %v, want unrelated-file refusal", err)
 	}
+	if err := os.Remove(filepath.Join(root, directoryName, "notes.txt")); err != nil {
+		t.Fatal(err)
+	}
+	// Definition copies are generated; other files in presets/ are not.
+	if err := os.WriteFile(filepath.Join(root, directoryName, "presets", "notes.txt"), []byte("keep me"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Write(root, cfg, true); err == nil || !strings.Contains(err.Error(), `unrelated path "presets/notes.txt"`) {
+		t.Fatalf("Write() error = %v, want unrelated-file refusal", err)
+	}
 
 	otherRoot := t.TempDir()
 	if err := os.Mkdir(filepath.Join(otherRoot, directoryName), 0o755); err != nil {
@@ -145,7 +155,7 @@ func TestWriteOnlyReplacesRecognizedDirectoryWithForce(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(otherRoot, directoryName, "projectsetup.json"), []byte(`{"generatedBy":"someone-else"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	otherCfg, err := config.Normalize(config.Input{Root: otherRoot, Preset: config.PresetNode})
+	otherCfg, err := config.Normalize(config.Input{Root: otherRoot, Preset: "node"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,27 +194,27 @@ printf '%s\n' 'mkdir -p "$HOME/.local/share/claude/versions"' 'printf "#!/usr/bi
 
 func TestPostCreateSkipsMissingDependencyFiles(t *testing.T) {
 	tests := []struct {
-		preset  config.Preset
-		manager config.PackageManager
+		preset  string
+		manager string
 	}{
-		{preset: config.PresetNode, manager: config.PackageManagerNPM},
-		{preset: config.PresetRuby},
-		{preset: config.PresetPython, manager: config.PackageManagerPip},
+		{preset: "node", manager: "npm"},
+		{preset: "ruby"},
+		{preset: "python", manager: "pip"},
 	}
 	for _, tt := range tests {
-		t.Run(string(tt.preset), func(t *testing.T) {
+		t.Run(tt.preset, func(t *testing.T) {
 			root := t.TempDir()
 			home := t.TempDir()
 			t.Setenv("HOME", home)
 			t.Setenv("CODEX_HOME", "")
-			cfg, err := config.Normalize(config.Input{Root: root, Preset: tt.preset, PackageManager: tt.manager, AITools: []config.AITool{}})
+			cfg, err := config.Normalize(config.Input{Root: root, Preset: tt.preset, Options: packageManager(tt.preset, tt.manager), AITools: []config.AITool{}})
 			if err != nil {
 				t.Fatal(err)
 			}
 			if err := Write(root, cfg, false); err != nil {
 				t.Fatal(err)
 			}
-			if tt.preset == config.PresetNode {
+			if tt.preset == "node" {
 				if err := os.WriteFile(filepath.Join(root, "package.json"), []byte("{}"), 0o644); err != nil {
 					t.Fatal(err)
 				}
@@ -219,6 +229,23 @@ func TestPostCreateSkipsMissingDependencyFiles(t *testing.T) {
 	}
 }
 
+func nonEmpty(values ...string) []string {
+	var result []string
+	for _, value := range values {
+		if value != "" {
+			result = append(result, value)
+		}
+	}
+	return result
+}
+
+func packageManager(preset, manager string) map[string]map[string]string {
+	if manager == "" {
+		return nil
+	}
+	return map[string]map[string]string{preset: {config.OptionPackageManager: manager}}
+}
+
 func readGenerated(t *testing.T, root, name string) []byte {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join(root, directoryName, filepath.FromSlash(name)))
@@ -229,7 +256,7 @@ func readGenerated(t *testing.T, root, name string) []byte {
 }
 
 func TestDockerfileRendersDefinitionRunSteps(t *testing.T) {
-	cfg, err := config.Normalize(config.Input{Root: t.TempDir(), Preset: config.PresetNode})
+	cfg, err := config.Normalize(config.Input{Root: t.TempDir(), Preset: "node"})
 	if err != nil {
 		t.Fatal(err)
 	}

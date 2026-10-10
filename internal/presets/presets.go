@@ -37,6 +37,11 @@ type Definition struct {
 	Detect      Detect            `toml:"detect"`
 	Fragment
 	Variants []Variant `toml:"variant"`
+
+	// Source names where the definition was loaded from: "builtin", "user",
+	// or the source recorded in a project manifest. Raw holds the exact file.
+	Source string `toml:"-"`
+	Raw    []byte `toml:"-"`
 }
 
 // Option is a value the user can set. Values must match Choices or Pattern.
@@ -206,6 +211,7 @@ func Parse(data []byte, origin string) (Definition, error) {
 	if problems := definition.problems(); len(problems) > 0 {
 		return Definition{}, fmt.Errorf("%s: invalid definition:\n  %s", origin, strings.Join(problems, "\n  "))
 	}
+	definition.Raw = bytes.Clone(data)
 	return definition, nil
 }
 
@@ -256,7 +262,7 @@ func (d Definition) problems() []string {
 		}
 		if option.Default == "" {
 			fail("%s: default is required", where)
-		} else if err := option.check(option.Default); err != nil {
+		} else if err := option.Check(option.Default); err != nil {
 			fail("%s: default: %v", where, err)
 		}
 		problems = append(problems, option.Detect.problems(where+".detect", d.Kind, option)...)
@@ -525,7 +531,8 @@ func (c Condition) problems(where string, options map[string]Option) []string {
 	return problems
 }
 
-func (o Option) check(value string) error {
+// Check reports whether value is acceptable for the option.
+func (o Option) Check(value string) error {
 	if !validOptionValue.MatchString(value) {
 		return fmt.Errorf("%q must match %s", value, validOptionValue)
 	}

@@ -6,68 +6,9 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/mpm/projectsetup/internal/presets"
 )
-
-const SchemaVersion = 1
-
-type Preset string
-
-const (
-	PresetNode   Preset = "node"
-	PresetRuby   Preset = "ruby"
-	PresetRails  Preset = "rails"
-	PresetPython Preset = "python"
-)
-
-// Presets returns every supported preset in display order.
-func Presets() []Preset {
-	return []Preset{PresetNode, PresetRuby, PresetRails, PresetPython}
-}
-
-func ParsePreset(value string) (Preset, error) {
-	preset := Preset(value)
-	if !preset.Valid() {
-		return "", fmt.Errorf("unsupported preset %q (expected %s)", value, DescribeChoices(Presets()))
-	}
-	return preset, nil
-}
-
-func (p Preset) Valid() bool {
-	return slices.Contains(Presets(), p)
-}
-
-type Database string
-
-const (
-	DatabaseNone     Database = "none"
-	DatabasePostgres Database = "postgres"
-	DatabaseSQLite   Database = "sqlite"
-)
-
-// DefaultDatabase is used when no database is selected.
-const DefaultDatabase = DatabaseNone
-
-// LegacyPostgresVersion is the major version generated before manifests
-// recorded postgresVersion.
-const LegacyPostgresVersion = "17"
-
-// Databases returns every supported database option in display order. The
-// options do not depend on the preset.
-func Databases() []Database {
-	return []Database{DatabaseNone, DatabasePostgres, DatabaseSQLite}
-}
-
-func ParseDatabase(value string) (Database, error) {
-	database := Database(value)
-	if !database.Valid() {
-		return "", fmt.Errorf("unsupported database %q (expected %s)", value, DescribeChoices(Databases()))
-	}
-	return database, nil
-}
-
-func (d Database) Valid() bool {
-	return slices.Contains(Databases(), d)
-}
 
 type AITool string
 
@@ -116,44 +57,6 @@ func AIHostDirectories(tools []AITool) []string {
 	return directories
 }
 
-type PackageManager string
-
-const (
-	PackageManagerNPM    PackageManager = "npm"
-	PackageManagerPNPM   PackageManager = "pnpm"
-	PackageManagerYarn   PackageManager = "yarn"
-	PackageManagerPip    PackageManager = "pip"
-	PackageManagerPoetry PackageManager = "poetry"
-	PackageManagerUV     PackageManager = "uv"
-)
-
-func ParsePackageManager(value string) (PackageManager, error) {
-	manager := PackageManager(value)
-	if !manager.Valid() {
-		return "", fmt.Errorf("unsupported package manager %q", value)
-	}
-	return manager, nil
-}
-
-func (p PackageManager) Valid() bool {
-	for _, preset := range Presets() {
-		if slices.Contains(PackageManagers(preset), p) {
-			return true
-		}
-	}
-	return false
-}
-
-// Supports reports whether p is acceptable for preset. The empty value is
-// supported only by valid presets without a package-manager choice.
-func (p PackageManager) Supports(preset Preset) bool {
-	managers := PackageManagers(preset)
-	if p == "" {
-		return preset.Valid() && len(managers) == 0
-	}
-	return slices.Contains(managers, p)
-}
-
 // DescribeChoices formats values as "a, b, or c" for messages and help text.
 func DescribeChoices[T ~string](values []T) string {
 	items := make([]string, len(values))
@@ -172,19 +75,22 @@ func DescribeChoices[T ~string](values []T) string {
 	}
 }
 
+// Config is the normalized configuration. Preset and Addons name
+// definitions validated against a registry; Definitions holds them in
+// contribution order, the preset first and then add-ons sorted by name.
 type Config struct {
-	SchemaVersion   int
-	ProjectName     string
-	Preset          Preset
-	Database        Database
-	AITools         []AITool
-	PackageManager  PackageManager
-	LanguageVersion string
-	PostgresVersion string
-	Ports           []int
-	SystemPackages  []string
-	Workspace       Workspace
-	Container       Container
+	ProjectName string
+	Preset      string
+	Addons      []string
+	// Options holds the effective value of every option of every selected
+	// definition, keyed by definition name and then option name.
+	Options        map[string]map[string]string
+	Definitions    []presets.Definition
+	AITools        []AITool
+	Ports          []int
+	SystemPackages []string
+	Workspace      Workspace
+	Container      Container
 }
 
 type Workspace struct {

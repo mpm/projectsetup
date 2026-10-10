@@ -5,17 +5,58 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/mpm/projectsetup/internal/config"
 	"github.com/mpm/projectsetup/internal/doctor"
 	"github.com/mpm/projectsetup/internal/generate"
+	"github.com/mpm/projectsetup/internal/presets"
 	"github.com/mpm/projectsetup/internal/validate"
 )
+
+// TestMain keeps tests independent of the user's definitions.
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "projectsetup-config-")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv(presets.ConfigDirEnv, dir)
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
+}
+
+func readManifest(t *testing.T, root string) config.Manifest {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, ".devcontainer", "projectsetup.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := config.ReadManifest(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return manifest
+}
+
+// writeSchema1Manifest turns a generated configuration into one written
+// before manifest schema 2, which had no definition copies.
+func writeSchema1Manifest(t *testing.T, root, manifest string) {
+	t.Helper()
+	devDir := filepath.Join(root, ".devcontainer")
+	if err := os.RemoveAll(filepath.Join(devDir, config.PresetsDir)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(devDir, "projectsetup.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestRunHelp(t *testing.T) {
 	var stdout bytes.Buffer
@@ -74,12 +115,9 @@ func TestRunInitDetectsRubyGem(t *testing.T) {
 	if err := runInit(root, []string{"--non-interactive", "--ai", "none"}, &bytes.Buffer{}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("runInit() error = %v", err)
 	}
-	manifest, err := os.ReadFile(filepath.Join(root, ".devcontainer", "projectsetup.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(manifest), `"preset": "ruby"`) || !strings.Contains(string(manifest), `"languageVersion": "3.2.6"`) {
-		t.Fatalf("Ruby manifest does not contain detected settings:\n%s", manifest)
+	manifest := readManifest(t, root)
+	if manifest.Preset.Name != "ruby" || manifest.Options["ruby"]["version"] != "3.2.6" {
+		t.Fatalf("Ruby manifest does not contain detected settings: %+v", manifest)
 	}
 }
 
@@ -128,8 +166,8 @@ func TestRunUpgradeConvertsLegacyGeneratedConfigurationToCompose(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", t.TempDir())
 	cfg, err := config.Normalize(config.Input{
-		Root: root, ProjectName: "legacy", Preset: config.PresetNode,
-		PackageManager: config.PackageManagerNPM, Ports: []int{3000}, AITools: []config.AITool{},
+		Root: root, ProjectName: "legacy", Preset: "node",
+		Options: map[string]map[string]string{"node": {"package_manager": "npm"}}, Ports: []int{3000}, AITools: []config.AITool{},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -176,7 +214,7 @@ func TestRunUpgradeAcceptsDetectedPatchVersionForConfiguredReleaseLine(t *testin
 	root := t.TempDir()
 	t.Setenv("HOME", t.TempDir())
 	cfg, err := config.Normalize(config.Input{
-		Root: root, ProjectName: "example", Preset: config.PresetRails, AITools: []config.AITool{},
+		Root: root, ProjectName: "example", Preset: "rails", AITools: []config.AITool{},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -204,13 +242,17 @@ func TestRunUpgradeRejectsHandWrittenConfiguration(t *testing.T) {
 	if err := os.Mkdir(devDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	manifest := `{"schemaVersion":1,"generatedBy":"someone-else"}`
-	if err := os.WriteFile(filepath.Join(devDir, "projectsetup.json"), []byte(manifest), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	err := runUpgrade(root, nil, &bytes.Buffer{}, &bytes.Buffer{})
-	if err == nil || !strings.Contains(err.Error(), "not recognized") {
-		t.Fatalf("runUpgrade() error = %v, want ownership refusal", err)
+	for _, manifest := range []string{
+		`{"schemaVersion":1,"database":"none","generatedBy":"someone-else"}`,
+		`{"schemaVersion":2,"generatedBy":"someone-else"}`,
+	} {
+		if err := os.WriteFile(filepath.Join(devDir, "projectsetup.json"), []byte(manifest), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		err := runUpgrade(root, nil, &bytes.Buffer{}, &bytes.Buffer{})
+		if err == nil || !strings.Contains(err.Error(), "not recognized") {
+			t.Fatalf("runUpgrade(%s) error = %v, want ownership refusal", manifest, err)
+		}
 	}
 }
 
@@ -238,7 +280,7 @@ func TestRunInitRejectsAmbiguousManagers(t *testing.T) {
 		}
 	}
 	err := runInit(root, []string{"--non-interactive"}, &bytes.Buffer{}, &bytes.Buffer{}, &bytes.Buffer{})
-	if err == nil || !strings.Contains(err.Error(), "multiple package managers detected") {
+	if err == nil || !strings.Contains(err.Error(), "multiple values detected for node.package_manager (npm, yarn); pass --set node.package_manager=VALUE") {
 		t.Fatalf("runInit() error = %v", err)
 	}
 }
@@ -273,7 +315,8 @@ func TestRunInitInteractiveResolvesAmbiguity(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	input := strings.NewReader("node\nyarn\nnone\nnone\n\ny\n")
+	// Preset, node.package_manager, node.version, add-ons, AI tools, confirmation.
+	input := strings.NewReader("node\nyarn\n\nnone\nnone\ny\n")
 	if err := runInit(root, nil, input, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("runInit() error = %v", err)
 	}
@@ -373,7 +416,7 @@ func TestUpgradeReplacesOnlyAISelection(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("HOME", t.TempDir())
 			t.Setenv("CODEX_HOME", "")
-			cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "keep-me", Preset: config.PresetPython, Database: config.DatabasePostgres, LanguageVersion: "3.12", PackageManager: config.PackageManagerUV, Ports: []int{8000}, SystemPackages: []string{"make"}})
+			cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "keep-me", Preset: "python", Addons: []string{"postgres"}, Options: map[string]map[string]string{"python": {"version": "3.12", "package_manager": "uv"}}, Ports: []int{8000}, SystemPackages: []string{"make"}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -628,7 +671,7 @@ func legacyDottedProject(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
 	t.Setenv("HOME", t.TempDir())
-	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "a-b", Preset: config.PresetNode, AITools: []config.AITool{}})
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "a-b", Preset: "node", AITools: []config.AITool{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -706,76 +749,124 @@ func TestRunInitForceRegeneratesLegacyInvalidProjectName(t *testing.T) {
 }
 
 const wantListOptionsJSON = `{
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "presets": [
     "node",
-    "ruby",
+    "python",
     "rails",
-    "python"
+    "ruby"
   ],
-  "packageManagers": {
-    "node": [
-      "npm",
-      "pnpm",
-      "yarn"
-    ],
-    "python": [
-      "pip",
-      "poetry",
-      "uv"
-    ],
-    "rails": [],
-    "ruby": []
-  },
-  "databases": [
-    "none",
+  "addons": [
     "postgres",
     "sqlite"
   ],
+  "definitions": {
+    "node": {
+      "name": "node",
+      "kind": "preset",
+      "version": "1.0.0",
+      "source": "builtin",
+      "description": "Node.js with npm, pnpm, or Yarn",
+      "options": {
+        "package_manager": {
+          "description": "Node.js package manager",
+          "default": "npm",
+          "choices": [
+            "npm",
+            "pnpm",
+            "yarn"
+          ]
+        },
+        "version": {
+          "description": "Node.js version",
+          "default": "26",
+          "pattern": "[0-9]+(\\.[0-9]+){0,2}([-+][a-zA-Z0-9.-]+)?"
+        }
+      }
+    },
+    "postgres": {
+      "name": "postgres",
+      "kind": "addon",
+      "version": "1.0.0",
+      "source": "builtin",
+      "description": "PostgreSQL sidecar with development-only credentials",
+      "options": {
+        "version": {
+          "description": "PostgreSQL major version",
+          "default": "18",
+          "pattern": "[1-9][0-9]*"
+        }
+      }
+    },
+    "python": {
+      "name": "python",
+      "kind": "preset",
+      "version": "1.0.0",
+      "source": "builtin",
+      "description": "Python with pip, Poetry, or uv",
+      "options": {
+        "package_manager": {
+          "description": "Python package manager",
+          "default": "pip",
+          "choices": [
+            "pip",
+            "poetry",
+            "uv"
+          ]
+        },
+        "version": {
+          "description": "Python version",
+          "default": "3.14",
+          "pattern": "[0-9]+(\\.[0-9]+){0,2}([-+][a-zA-Z0-9.-]+)?"
+        }
+      }
+    },
+    "rails": {
+      "name": "rails",
+      "kind": "preset",
+      "version": "1.0.0",
+      "source": "builtin",
+      "description": "Ruby on Rails with Bundler, Node, and Active Storage support",
+      "options": {
+        "version": {
+          "description": "Ruby version",
+          "default": "4.0",
+          "pattern": "[0-9]+(\\.[0-9]+){0,2}([-+][a-zA-Z0-9.-]+)?"
+        }
+      }
+    },
+    "ruby": {
+      "name": "ruby",
+      "kind": "preset",
+      "version": "1.0.0",
+      "source": "builtin",
+      "description": "Ruby with Bundler, for gems and non-Rails applications",
+      "options": {
+        "version": {
+          "description": "Ruby version",
+          "default": "4.0",
+          "pattern": "[0-9]+(\\.[0-9]+){0,2}([-+][a-zA-Z0-9.-]+)?"
+        }
+      }
+    },
+    "sqlite": {
+      "name": "sqlite",
+      "kind": "addon",
+      "version": "1.0.0",
+      "source": "builtin",
+      "description": "SQLite command-line tool and development headers in the app image",
+      "options": {}
+    }
+  },
   "aiTools": [
     "opencode",
     "claude",
     "codex"
   ],
-  "projectNamePattern": "^[a-z0-9][a-z0-9_-]*$",
-  "defaults": {
-    "node": {
-      "packageManager": "npm",
-      "languageVersion": "26",
-      "database": "none",
-      "postgresVersion": "18",
-      "aiTools": [
-        "opencode"
-      ]
-    },
-    "python": {
-      "packageManager": "pip",
-      "languageVersion": "3.14",
-      "database": "none",
-      "postgresVersion": "18",
-      "aiTools": [
-        "opencode"
-      ]
-    },
-    "rails": {
-      "packageManager": null,
-      "languageVersion": "4.0",
-      "database": "none",
-      "postgresVersion": "18",
-      "aiTools": [
-        "opencode"
-      ]
-    },
-    "ruby": {
-      "packageManager": null,
-      "languageVersion": "4.0",
-      "database": "none",
-      "postgresVersion": "18",
-      "aiTools": [
-        "opencode"
-      ]
-    }
-  }
+  "defaultAITools": [
+    "opencode"
+  ],
+  "projectNamePattern": "^[a-z0-9][a-z0-9_-]*$"
 }
 `
 
@@ -818,15 +909,20 @@ func TestRunInitListOptionsText(t *testing.T) {
 		t.Fatalf("runInit() error = %v", err)
 	}
 	for _, want := range []string{
-		"Presets: node, ruby, rails, python\n",
-		"  node: npm (default), pnpm, yarn\n",
-		"  ruby: none\n",
-		"  python: pip (default), poetry, uv\n",
-		"Databases (--database): none (default), postgres, sqlite\n",
+		"Presets (--preset): node, python, rails, ruby\n",
+		"Add-ons (--addon, repeatable): postgres, sqlite\n",
+		"Databases (--database, alias for --addon): none, postgres, sqlite\n",
+		"  node.package_manager: Node.js package manager: npm (default), pnpm, yarn\n",
+		"  node.version: Node.js version; default 26\n",
+		"  python.package_manager: Python package manager: pip (default), poetry, uv\n",
+		"  postgres.version: PostgreSQL major version; default 18\n",
 	} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout lacks %q:\n%s", want, stdout.String())
 		}
+	}
+	if strings.Contains(stdout.String(), "ruby.package_manager") {
+		t.Fatalf("stdout lists an option ruby does not have:\n%s", stdout.String())
 	}
 	if entries, err := os.ReadDir(root); err != nil || len(entries) != 0 {
 		t.Fatalf("listing options wrote files: %v %v", entries, err)
@@ -860,24 +956,36 @@ func TestListOptionsJSONRoundTripsWithInit(t *testing.T) {
 	if err := json.Unmarshal([]byte(wantListOptionsJSON), &options); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(options, config.ListOptions()) {
+	if !reflect.DeepEqual(options, config.ListOptions(presets.Builtin())) {
 		t.Fatalf("golden JSON does not match config.ListOptions()")
 	}
 	t.Setenv("HOME", t.TempDir())
 	for _, preset := range options.Presets {
-		managers := options.PackageManagers[preset]
-		if len(managers) == 0 {
-			managers = []config.PackageManager{""}
-		}
-		for _, manager := range managers {
-			for _, database := range options.Databases {
-				root := t.TempDir()
-				args := []string{"--non-interactive", "--preset", string(preset), "--database", string(database), "--ai", joinChoices(options.AITools, ",")}
-				if manager != "" {
-					args = append(args, "--package-manager", string(manager))
+		for _, addon := range append([]string{""}, options.Addons...) {
+			args := []string{"--non-interactive", "--preset", preset, "--ai", joinChoices(options.AITools, ",")}
+			definitions := []string{preset}
+			if addon != "" {
+				args = append(args, "--addon", addon)
+				definitions = append(definitions, addon)
+			}
+			// Every listed choice and default must be accepted.
+			var settings [][]string
+			for _, name := range definitions {
+				info := options.Definitions[name]
+				for _, option := range slices.Sorted(maps.Keys(info.Options)) {
+					details := info.Options[option]
+					for _, value := range append([]string{details.Default}, details.Choices...) {
+						settings = append(settings, []string{"--set", name + "." + option + "=" + value})
+					}
 				}
-				if err := runInit(root, args, strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
-					t.Errorf("runInit(%v) error = %v", args, err)
+			}
+			if len(settings) == 0 {
+				settings = [][]string{nil}
+			}
+			for _, setting := range settings {
+				root := t.TempDir()
+				if err := runInit(root, append(slices.Clone(args), setting...), strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+					t.Errorf("runInit(%v %v) error = %v", args, setting, err)
 				}
 			}
 		}
@@ -890,12 +998,12 @@ func TestListOptionsJSONRoundTripsWithInit(t *testing.T) {
 }
 
 // writeLegacyPostgresProject generates the PostgreSQL 17 configuration that
-// releases before postgresVersion existed produced, without that manifest field.
+// releases before postgresVersion existed produced, with their manifest.
 func writeLegacyPostgresProject(t *testing.T, root string) string {
 	t.Helper()
 	cfg, err := config.Normalize(config.Input{
-		Root: root, ProjectName: "legacy-db", Preset: config.PresetNode,
-		Database: config.DatabasePostgres, PostgresVersion: config.LegacyPostgresVersion, AITools: []config.AITool{},
+		Root: root, ProjectName: "legacy-db", Preset: "node", Addons: []string{"postgres"},
+		Options: map[string]map[string]string{"postgres": {"version": config.LegacyPostgresVersion}}, AITools: []config.AITool{},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -903,18 +1011,7 @@ func writeLegacyPostgresProject(t *testing.T, root string) string {
 	if err := generate.Write(root, cfg, false); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(root, ".devcontainer", "projectsetup.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	legacy := strings.Replace(string(data), "  \"postgresVersion\": \"17\",\n", "", 1)
-	if legacy == string(data) {
-		t.Fatalf("manifest has no postgresVersion to remove:\n%s", data)
-	}
-	if err := os.WriteFile(path, []byte(legacy), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeSchema1Manifest(t, root, `{"schemaVersion":1,"projectName":"legacy-db","preset":"node","database":"postgres","aiTools":[],"packageManager":"npm","languageVersion":"26","ports":[],"systemPackages":[],"generatedBy":"projectsetup"}`)
 	return filepath.Join(root, ".devcontainer")
 }
 
@@ -942,12 +1039,15 @@ func TestLegacyPostgresProjectKeepsVersion17(t *testing.T) {
 		t.Fatalf("runUpgrade() error = %v", err)
 	}
 	assertPostgresCompose(t, devDir, "postgres:17-bookworm", "/var/lib/postgresql/data")
-	manifest, err := os.ReadFile(filepath.Join(devDir, "projectsetup.json"))
-	if err != nil {
-		t.Fatal(err)
+	manifest := readManifest(t, root)
+	if manifest.SchemaVersion != config.SchemaVersion || manifest.Options["postgres"]["version"] != "17" {
+		t.Fatalf("upgrade did not record schema %d with PostgreSQL 17: %+v", config.SchemaVersion, manifest)
 	}
-	if !strings.Contains(string(manifest), `"postgresVersion": "17"`) {
-		t.Fatalf("upgrade did not record postgresVersion 17:\n%s", manifest)
+	if _, err := os.Stat(filepath.Join(devDir, config.PresetsDir, "postgres.toml")); err != nil {
+		t.Fatalf("upgrade did not write definition copies: %v", err)
+	}
+	if diagnostics := validate.Check(root, validate.Options{}); validate.ErrorCount(diagnostics) != 0 {
+		t.Fatalf("check after upgrade: %#v", diagnostics)
 	}
 }
 
@@ -965,6 +1065,9 @@ func TestRunInitPostgresVersion(t *testing.T) {
 		{name: "force keeps legacy version", legacy: true, args: []string{"--database", "postgres", "--force"}, wantImage: "postgres:17-bookworm", wantPath: "/var/lib/postgresql/data"},
 		{name: "force with explicit version", legacy: true, args: []string{"--database", "postgres", "--force", "--postgres-version", "18"}, wantImage: "postgres:18-trixie", wantPath: "/var/lib/postgresql"},
 		{name: "version requires postgres", args: []string{"--database", "none", "--postgres-version", "18"}, wantErr: `requires database "postgres"`},
+		{name: "set requires postgres", args: []string{"--set", "postgres.version=18"}, wantErr: `options are set for "postgres", which is not selected`},
+		{name: "addon and set", args: []string{"--addon", "postgres", "--set", "postgres.version=17"}, wantImage: "postgres:17-bookworm", wantPath: "/var/lib/postgresql/data"},
+		{name: "alias conflicts with set", args: []string{"--addon", "postgres", "--set", "postgres.version=17", "--postgres-version", "18"}, wantErr: "--postgres-version conflicts with postgres.version=17"},
 		{name: "invalid version", args: []string{"--database", "postgres", "--postgres-version", "18.1"}, wantErr: "major version"},
 	}
 	for _, tt := range tests {

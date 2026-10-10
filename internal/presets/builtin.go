@@ -30,6 +30,7 @@ var builtin = sync.OnceValues(func() (*Registry, error) {
 		if want := strings.TrimSuffix(entry.Name(), ".toml"); definition.Name != want {
 			return nil, fmt.Errorf("%s: name is %q; expected %q to match the file name", name, definition.Name, want)
 		}
+		definition.Source = SourceBuiltin
 		definitions = append(definitions, definition)
 	}
 	return NewRegistry(definitions...)

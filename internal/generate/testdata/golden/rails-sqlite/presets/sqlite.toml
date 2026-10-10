@@ -1,0 +1,8 @@
+schema = 1
+kind = "addon"
+name = "sqlite"
+version = "1.0.0"
+description = "SQLite command-line tool and development headers in the app image"
+
+[image]
+apt = ["libsqlite3-dev", "sqlite3"]

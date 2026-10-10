@@ -5,84 +5,121 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/mpm/projectsetup/internal/presets"
 )
+
+func definitions(names ...string) []presets.Definition {
+	result := make([]presets.Definition, len(names))
+	for i, name := range names {
+		result[i], _ = presets.Builtin().Lookup(name)
+	}
+	return result
+}
 
 func TestNormalize(t *testing.T) {
 	tests := []struct {
 		name    string
 		input   Input
 		want    Config
-		wantErr bool
+		wantErr string
 	}{
 		{
 			name: "node defaults and deterministic sets",
 			input: Input{
 				Root:           "/tmp/My Project",
-				Preset:         PresetNode,
+				Preset:         "node",
 				Ports:          []int{3000, 1024, 3000},
 				SystemPackages: []string{"libpq-dev", "curl", "libpq-dev"},
 			},
 			want: Config{
-				SchemaVersion: 1, ProjectName: "my-project", Preset: PresetNode,
-				Database: DatabaseNone, AITools: []AITool{AIToolOpenCode},
-				PackageManager: PackageManagerNPM, LanguageVersion: "26",
-				Ports: []int{1024, 3000}, SystemPackages: []string{"curl", "libpq-dev"},
+				ProjectName: "my-project", Preset: "node", Addons: []string{},
+				Options:     map[string]map[string]string{"node": {"package_manager": "npm", "version": "26"}},
+				Definitions: definitions("node"),
+				AITools:     []AITool{AIToolOpenCode},
+				Ports:       []int{1024, 3000}, SystemPackages: []string{"curl", "libpq-dev"},
 				Workspace: Workspace{HostPath: "/tmp/My Project", ContainerPath: "/workspaces/my-project"},
 				Container: Container{User: "vscode", Home: "/home/vscode", ComposeProjectName: "my-project", ServiceName: "app"},
 			},
 		},
 		{
-			name: "postgres configuration",
-			input: Input{Root: "/tmp/api", Preset: PresetPython, Database: DatabasePostgres,
-				AITools: []AITool{}, PackageManager: PackageManagerUV},
+			name: "add-ons are sorted and deduplicated",
+			input: Input{Root: "/tmp/api", Preset: "python", Addons: []string{"sqlite", "postgres", "sqlite"},
+				AITools: []AITool{}, Options: map[string]map[string]string{"python": {"package_manager": "uv"}, "postgres": {"version": " 17 "}}},
 			want: Config{
-				SchemaVersion: 1, ProjectName: "api", Preset: PresetPython,
-				Database: DatabasePostgres, AITools: []AITool{},
-				PackageManager: PackageManagerUV, LanguageVersion: "3.14", PostgresVersion: "18",
-				Ports: []int{}, SystemPackages: []string{},
+				ProjectName: "api", Preset: "python", Addons: []string{"postgres", "sqlite"},
+				Options: map[string]map[string]string{
+					"python":   {"package_manager": "uv", "version": "3.14"},
+					"postgres": {"version": "17"},
+				},
+				Definitions: definitions("python", "postgres", "sqlite"),
+				AITools:     []AITool{}, Ports: []int{}, SystemPackages: []string{},
 				Workspace: Workspace{HostPath: "/tmp/api", ContainerPath: "/workspaces/api"},
 				Container: Container{User: "vscode", Home: "/home/vscode", ComposeProjectName: "api", ServiceName: "app"},
 			},
 		},
 		{
 			name:  "ruby defaults",
-			input: Input{Root: "/tmp/gem", Preset: PresetRuby, AITools: []AITool{}},
+			input: Input{Root: "/tmp/gem", Preset: "ruby", AITools: []AITool{}},
 			want: Config{
-				SchemaVersion: 1, ProjectName: "gem", Preset: PresetRuby,
-				Database: DatabaseNone, AITools: []AITool{},
-				LanguageVersion: "4.0", Ports: []int{}, SystemPackages: []string{},
+				ProjectName: "gem", Preset: "ruby", Addons: []string{},
+				Options:     map[string]map[string]string{"ruby": {"version": "4.0"}},
+				Definitions: definitions("ruby"),
+				AITools:     []AITool{}, Ports: []int{}, SystemPackages: []string{},
 				Workspace: Workspace{HostPath: "/tmp/gem", ContainerPath: "/workspaces/gem"},
 				Container: Container{User: "vscode", Home: "/home/vscode", ComposeProjectName: "gem", ServiceName: "app"},
 			},
 		},
-		{
-			name:  "sqlite configuration",
-			input: Input{Root: "/tmp/app", Preset: PresetRails, Database: DatabaseSQLite, AITools: []AITool{}},
-			want: Config{
-				SchemaVersion: 1, ProjectName: "app", Preset: PresetRails,
-				Database: DatabaseSQLite, AITools: []AITool{},
-				LanguageVersion: "4.0", Ports: []int{}, SystemPackages: []string{},
-				Workspace: Workspace{HostPath: "/tmp/app", ContainerPath: "/workspaces/app"},
-				Container: Container{User: "vscode", Home: "/home/vscode", ComposeProjectName: "app", ServiceName: "app"},
-			},
-		},
-		{name: "rejects incompatible manager", input: Input{Root: "/tmp/api", Preset: PresetPython, PackageManager: PackageManagerNPM}, wantErr: true},
-		{name: "rejects manager for ruby", input: Input{Root: "/tmp/gem", Preset: PresetRuby, PackageManager: PackageManagerNPM}, wantErr: true},
-		{name: "rejects invalid port", input: Input{Root: "/tmp/api", Preset: PresetPython, Ports: []int{70000}}, wantErr: true},
-		{name: "rejects unsafe system package", input: Input{Root: "/tmp/api", Preset: PresetPython, SystemPackages: []string{"curl; false"}}, wantErr: true},
-		{name: "rejects unsafe language version", input: Input{Root: "/tmp/api", Preset: PresetRails, LanguageVersion: "3.3\nRUN false"}, wantErr: true},
+		{name: "rejects missing preset", input: Input{Root: "/tmp/api"}, wantErr: "preset is required"},
+		{name: "rejects unknown preset", input: Input{Root: "/tmp/api", Preset: "go"}, wantErr: `unsupported preset "go"`},
+		{name: "rejects add-on as preset", input: Input{Root: "/tmp/api", Preset: "postgres"}, wantErr: `unsupported preset "postgres"`},
+		{name: "rejects preset as add-on", input: Input{Root: "/tmp/api", Preset: "node", Addons: []string{"ruby"}}, wantErr: `unsupported add-on "ruby"`},
+		{name: "rejects incompatible manager", input: Input{Root: "/tmp/api", Preset: "python", Options: map[string]map[string]string{"python": {"package_manager": "npm"}}}, wantErr: `"npm" is not one of pip, poetry, uv`},
+		{name: "rejects manager for ruby", input: Input{Root: "/tmp/gem", Preset: "ruby", Options: map[string]map[string]string{"ruby": {"package_manager": "npm"}}}, wantErr: `ruby has no option "package_manager"`},
+		{name: "rejects options for unselected definition", input: Input{Root: "/tmp/app", Preset: "node", Options: map[string]map[string]string{"postgres": {"version": "18"}}}, wantErr: `options are set for "postgres", which is not selected`},
+		{name: "rejects invalid postgres version", input: Input{Root: "/tmp/app", Preset: "node", Addons: []string{"postgres"}, Options: map[string]map[string]string{"postgres": {"version": "18.1"}}}, wantErr: `option postgres.version (PostgreSQL major version): "18.1" does not match`},
+		{name: "rejects invalid port", input: Input{Root: "/tmp/api", Preset: "python", Ports: []int{70000}}, wantErr: "outside the valid range"},
+		{name: "rejects unsafe system package", input: Input{Root: "/tmp/api", Preset: "python", SystemPackages: []string{"curl; false"}}, wantErr: "not a valid apt package"},
+		{name: "rejects unsafe language version", input: Input{Root: "/tmp/api", Preset: "rails", Options: map[string]map[string]string{"rails": {"version": "3.3\nRUN false"}}}, wantErr: "option rails.version"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := Normalize(tt.input)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("Normalize() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("Normalize() error = %v, want containing %q", err, tt.wantErr)
+				}
+				return
 			}
-			if !tt.wantErr && !reflect.DeepEqual(got, tt.want) {
+			if err != nil {
+				t.Fatalf("Normalize() error = %v", err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("Normalize() = %#v, want %#v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestNormalizeUsesGivenRegistry(t *testing.T) {
+	custom, err := presets.Parse([]byte("schema = 1\nkind = \"preset\"\nname = \"custom\"\nversion = \"1.2.3\"\ndescription = \"d\"\n[image]\nbase = \"debian\"\n"), "custom.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err := presets.NewRegistry(custom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Normalize(Input{Root: "/tmp/app", Registry: registry, Preset: "custom"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Preset != "custom" || len(cfg.Options) != 0 {
+		t.Fatalf("Normalize() = %+v", cfg)
+	}
+	if _, err := Normalize(Input{Root: "/tmp/app", Registry: registry, Preset: "node"}); err == nil || !strings.Contains(err.Error(), "expected custom") {
+		t.Fatalf("Normalize(node) error = %v", err)
 	}
 }
 
@@ -187,7 +224,7 @@ func TestNormalizeProjectNameIsConsistent(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.input.Preset = PresetNode
+			tt.input.Preset = "node"
 			got, err := Normalize(tt.input)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("Normalize() error = %v, wantErr %v", err, tt.wantErr)
@@ -238,41 +275,5 @@ func TestCodexHostDirectory(t *testing.T) {
 	got, err := AIHostDirectory(".local/share/codex", "/host", func(string) string { return "/custom/state" })
 	if err != nil || got != "/host/.local/share/codex" {
 		t.Fatalf("installation directory = %q, %v", got, err)
-	}
-}
-
-func TestNormalizePostgresVersion(t *testing.T) {
-	tests := []struct {
-		name     string
-		database Database
-		version  string
-		want     string
-		wantErr  string
-	}{
-		{name: "default for postgres", database: DatabasePostgres, want: DefaultPostgresVersion()},
-		{name: "explicit major kept", database: DatabasePostgres, version: "17", want: "17"},
-		{name: "surrounding space trimmed", database: DatabasePostgres, version: " 18 ", want: "18"},
-		{name: "empty without postgres", database: DatabaseSQLite, want: ""},
-		{name: "minor version rejected", database: DatabasePostgres, version: "18.1", wantErr: "major version"},
-		{name: "tag rejected", database: DatabasePostgres, version: "18-alpine", wantErr: "major version"},
-		{name: "leading zero rejected", database: DatabasePostgres, version: "018", wantErr: "major version"},
-		{name: "version without postgres rejected", database: DatabaseNone, version: "18", wantErr: `requires database "postgres"`},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg, err := Normalize(Input{Root: "/tmp/app", Preset: PresetNode, Database: tt.database, PostgresVersion: tt.version})
-			if tt.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-					t.Fatalf("Normalize() error = %v, want containing %q", err, tt.wantErr)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			if cfg.PostgresVersion != tt.want {
-				t.Fatalf("PostgresVersion = %q, want %q", cfg.PostgresVersion, tt.want)
-			}
-		})
 	}
 }

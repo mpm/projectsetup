@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -13,29 +14,23 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mpm/projectsetup/internal/config"
 	"github.com/mpm/projectsetup/internal/presets"
 )
 
 type PresetResult struct {
-	Signals                  []string
-	LanguageVersion          string
-	PackageManagerCandidates []config.PackageManager
-	SuggestedDatabase        config.Database
+	Signals []string
+	// Options holds the detected values of options with detection rules:
+	// one value from value sources, or every matching choice. Options
+	// without a detected value have no entry.
+	Options map[string][]string
+	// SuggestedAddons are offered as defaults, never added silently.
+	SuggestedAddons []string
 }
 
 type Result struct {
-	Presets  []config.Preset
-	Details  map[config.Preset]PresetResult
+	Presets  []string
+	Details  map[string]PresetResult
 	Warnings []string
-}
-
-func (r Result) AmbiguousPreset() bool {
-	return len(r.Presets) > 1
-}
-
-func (p PresetResult) AmbiguousPackageManager() bool {
-	return len(p.PackageManagerCandidates) > 1
 }
 
 // builtins read values that a regular expression cannot read reliably. Their
@@ -44,7 +39,8 @@ var builtins = map[string]func(*project) (string, error){
 	"package-json-engines": packageJSONEngines,
 }
 
-func Detect(root string) (Result, error) {
+// Detect evaluates the detection rules of every preset in registry.
+func Detect(root string, registry *presets.Registry) (Result, error) {
 	root, err := filepath.Abs(root)
 	if err != nil {
 		return Result{}, fmt.Errorf("resolve project root: %w", err)
@@ -57,11 +53,10 @@ func Detect(root string) (Result, error) {
 		return Result{}, fmt.Errorf("project root %q is not a directory", root)
 	}
 
-	registry := presets.Builtin()
 	project := &project{root: root, files: map[string]projectFile{}}
-	result := Result{Details: make(map[config.Preset]PresetResult)}
-	warnings := map[config.Preset][]string{}
-	var superseded []config.Preset
+	result := Result{Details: make(map[string]PresetResult)}
+	warnings := map[string][]string{}
+	var superseded []string
 	for _, name := range registry.Names(presets.KindPreset) {
 		definition, _ := registry.Lookup(name)
 		detail, presetWarnings, found, err := detectPreset(project, definition)
@@ -71,17 +66,14 @@ func Detect(root string) (Result, error) {
 		if !found {
 			continue
 		}
-		preset := config.Preset(name)
-		result.Presets = append(result.Presets, preset)
-		result.Details[preset] = detail
-		warnings[preset] = presetWarnings
-		for _, other := range definition.Detect.Supersedes {
-			superseded = append(superseded, config.Preset(other))
-		}
+		result.Presets = append(result.Presets, name)
+		result.Details[name] = detail
+		warnings[name] = presetWarnings
+		superseded = append(superseded, definition.Detect.Supersedes...)
 	}
 	// A more specific preset, such as Rails, replaces the generic one it
 	// supersedes so that the project is not reported as ambiguous.
-	result.Presets = slices.DeleteFunc(result.Presets, func(preset config.Preset) bool {
+	result.Presets = slices.DeleteFunc(result.Presets, func(preset string) bool {
 		return slices.Contains(superseded, preset)
 	})
 	for _, preset := range superseded {
@@ -116,22 +108,16 @@ func detectPreset(p *project, definition presets.Definition) (PresetResult, []st
 	}
 
 	result := PresetResult{Signals: signals}
-	if option, ok := definition.Options[config.OptionVersion]; ok {
-		values, err := detectOption(p, option)
+	for _, name := range slices.Sorted(maps.Keys(definition.Options)) {
+		values, err := detectOption(p, definition.Options[name])
 		if err != nil {
 			return PresetResult{}, nil, false, err
 		}
 		if len(values) > 0 {
-			result.LanguageVersion = values[0]
-		}
-	}
-	if option, ok := definition.Options[config.OptionPackageManager]; ok {
-		values, err := detectOption(p, option)
-		if err != nil {
-			return PresetResult{}, nil, false, err
-		}
-		for _, value := range values {
-			result.PackageManagerCandidates = append(result.PackageManagerCandidates, config.PackageManager(value))
+			if result.Options == nil {
+				result.Options = map[string][]string{}
+			}
+			result.Options[name] = values
 		}
 	}
 	for _, suggestion := range rules.Suggest {
@@ -139,8 +125,8 @@ func detectPreset(p *project, definition presets.Definition) (PresetResult, []st
 		if err != nil {
 			return PresetResult{}, nil, false, err
 		}
-		if database := config.Database(suggestion.Addon); matched && database.Addon() != "" {
-			result.SuggestedDatabase = database
+		if matched && !slices.Contains(result.SuggestedAddons, suggestion.Addon) {
+			result.SuggestedAddons = append(result.SuggestedAddons, suggestion.Addon)
 		}
 	}
 	var warnings []string
@@ -161,8 +147,11 @@ func detectPreset(p *project, definition presets.Definition) (PresetResult, []st
 func detectOption(p *project, option presets.Option) ([]string, error) {
 	for _, source := range option.Detect.Sources {
 		value, err := p.value(source)
-		if err != nil || value != "" {
-			return []string{value}, err
+		if err != nil {
+			return nil, err
+		}
+		if value != "" {
+			return []string{value}, nil
 		}
 	}
 	var candidates []string

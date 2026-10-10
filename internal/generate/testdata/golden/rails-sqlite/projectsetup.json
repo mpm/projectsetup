@@ -1,12 +1,28 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "projectName": "rails-sqlite",
-  "preset": "rails",
-  "database": "sqlite",
+  "preset": {
+    "name": "rails",
+    "version": "1.0.0",
+    "source": "builtin",
+    "sha256": "63762b8f37cbf8ad7574a62421731f6b4dfe4d27ac2da5e4a89f44ad3a8c0e0b"
+  },
+  "addons": [
+    {
+      "name": "sqlite",
+      "version": "1.0.0",
+      "source": "builtin",
+      "sha256": "d4bb27de82cf109214a5c2c2a9ba1cb85ec040fab4225a3a0328c90e97c24ca3"
+    }
+  ],
+  "options": {
+    "rails": {
+      "version": "4.0"
+    }
+  },
   "aiTools": [
     "opencode"
   ],
-  "languageVersion": "4.0",
   "ports": [],
   "systemPackages": [],
   "generatedBy": "projectsetup"

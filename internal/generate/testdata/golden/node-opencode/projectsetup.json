@@ -1,13 +1,22 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "projectName": "node-app",
-  "preset": "node",
-  "database": "none",
+  "preset": {
+    "name": "node",
+    "version": "1.0.0",
+    "source": "builtin",
+    "sha256": "4cb8fa269ee5294185cce1a2a88ad7c589b82e4919939df72b033ed6e609d657"
+  },
+  "addons": [],
+  "options": {
+    "node": {
+      "package_manager": "npm",
+      "version": "26"
+    }
+  },
   "aiTools": [
     "opencode"
   ],
-  "packageManager": "npm",
-  "languageVersion": "26",
   "ports": [],
   "systemPackages": [],
   "generatedBy": "projectsetup"

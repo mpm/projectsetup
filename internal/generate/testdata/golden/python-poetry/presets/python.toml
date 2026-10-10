@@ -1,0 +1,68 @@
+schema = 1
+kind = "preset"
+name = "python"
+version = "1.0.0"
+description = "Python with pip, Poetry, or uv"
+
+[options.version]
+description = "Python version"
+default = "3.14"
+pattern = '[0-9]+(\.[0-9]+){0,2}([-+][a-zA-Z0-9.-]+)?'
+
+[options.version.detect]
+sources = [
+  { file = ".python-version" },
+  { file = "pyproject.toml", pattern = '''(?m)^\s*requires-python\s*=\s*["'][^"']*?(\d+(?:\.\d+){1,2})''' },
+]
+
+[options.package_manager]
+description = "Python package manager"
+default = "pip"
+choices = ["pip", "poetry", "uv"]
+
+[options.package_manager.detect.choices]
+pip = [{ file = "requirements.txt" }, { file = "requirements-dev.txt" }]
+poetry = [{ file = "poetry.lock" }, { file = "pyproject.toml", pattern = '(?m)^\s*\[tool\.poetry\]\s*$' }]
+uv = [{ file = "uv.lock" }]
+
+# Without match rules, any present signal detects the preset.
+[detect]
+signals = ["pyproject.toml", "requirements.txt", "requirements-dev.txt", "poetry.lock", "uv.lock", "Pipfile", ".python-version"]
+
+[[detect.warning]]
+message = "Pipfile detected, but Pipenv is not supported; select pip, poetry, or uv"
+match = [{ file = "Pipfile" }]
+
+[image]
+base = "mcr.microsoft.com/devcontainers/base:ubuntu-24.04"
+
+[features."ghcr.io/devcontainers/features/python:1"]
+version = "${option:version}"
+
+[setup]
+script = '''
+case "${option:package_manager}" in
+  uv)
+    command -v uv >/dev/null 2>&1 || python -m pip install --user uv
+    if [[ -f uv.lock ]]; then
+      uv sync --frozen
+    elif [[ -f pyproject.toml ]]; then
+      uv sync
+    fi
+    ;;
+  poetry)
+    command -v poetry >/dev/null 2>&1 || python -m pip install --user poetry
+    if [[ -f pyproject.toml ]]; then
+      poetry install
+    fi
+    ;;
+  pip)
+    if [[ -f requirements.txt ]]; then
+      python -m pip install -r requirements.txt
+    fi
+    if [[ -f requirements-dev.txt ]]; then
+      python -m pip install -r requirements-dev.txt
+    fi
+    ;;
+esac
+'''

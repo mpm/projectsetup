@@ -97,7 +97,7 @@ func Check(root string, options Options) []Diagnostic {
 		if err != nil {
 			add(Error, relative(root, manifestPath), "%v", err)
 		} else {
-			cfg, manifestValid = validateManifest(root, manifest, add)
+			cfg, manifestValid = validateManifest(root, devDir, manifest, add)
 		}
 	}
 	if manifestValid {
@@ -139,7 +139,7 @@ func Check(root string, options Options) []Diagnostic {
 
 	if manifestValid {
 		validateDockerfile(root, devDir, resolved, add)
-		validateProjectConventions(root, manifest, add)
+		validateProjectConventions(root, cfg, add)
 		validateCompose(root, devDir, cfg, resolved, add)
 	}
 	if options.External {
@@ -160,28 +160,26 @@ func Check(root string, options Options) []Diagnostic {
 }
 
 // validateManifest returns the normalized configuration and whether the
-// manifest is valid.
-func validateManifest(root string, manifest config.Manifest, add func(Severity, string, string, ...any)) (config.Config, bool) {
+// manifest is valid. Schema 1 manifests use the built-in definitions; later
+// schemas use the definition copies next to the manifest.
+func validateManifest(root, devDir string, manifest config.Manifest, add func(Severity, string, string, ...any)) (config.Config, bool) {
 	path := ".devcontainer/projectsetup.json"
 	valid := true
 	fail := func(format string, args ...any) { valid = false; add(Error, path, format, args...) }
-	if manifest.SchemaVersion != config.SchemaVersion {
-		fail("unsupported schemaVersion %d; expected %d", manifest.SchemaVersion, config.SchemaVersion)
-	}
-	if manifest.GeneratedBy != "projectsetup" {
-		fail("generatedBy must be %q", "projectsetup")
-	}
-	if !manifest.Preset.Valid() {
-		fail("unsupported preset %q", manifest.Preset)
-	}
-	if !manifest.Database.Valid() {
-		fail("unsupported database %q", manifest.Database)
+	if manifest.GeneratedBy != config.GeneratedBy {
+		fail("generatedBy must be %q", config.GeneratedBy)
 	}
 	if err := config.ValidateProjectName(manifest.ProjectName); err != nil {
 		fail("projectName: %v; regenerate with projectsetup init --force --name NAME", err)
 	}
-	if manifest.LanguageVersion == "" {
-		fail("languageVersion is required")
+	if manifest.Preset.Name == "" {
+		fail("preset is required")
+	}
+	if manifest.Addons == nil {
+		fail("addons is required; use an empty array when no add-ons are selected")
+	}
+	if manifest.Options == nil {
+		fail("options is required; use an empty object when no definition has options")
 	}
 	if manifest.AITools == nil {
 		fail("aiTools is required; use an empty array to disable AI tools")
@@ -202,9 +200,6 @@ func validateManifest(root string, manifest config.Manifest, add func(Severity, 
 		}
 		seenTools[tool] = true
 	}
-	if manifest.Preset.Valid() && !manifest.PackageManager.Supports(manifest.Preset) {
-		fail("package manager %q is not supported for preset %q", manifest.PackageManager, manifest.Preset)
-	}
 	for _, port := range manifest.Ports {
 		if port < 1 || port > 65535 {
 			fail("port %d is outside the valid range 1-65535", port)
@@ -215,9 +210,22 @@ func validateManifest(root string, manifest config.Manifest, add func(Severity, 
 	if !valid {
 		return config.Config{}, false
 	}
-	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: manifest.ProjectName, Preset: manifest.Preset, Database: manifest.Database, AITools: manifest.AITools, PackageManager: manifest.PackageManager, LanguageVersion: manifest.LanguageVersion, PostgresVersion: manifest.PostgresVersion, Ports: manifest.Ports, SystemPackages: manifest.SystemPackages})
+	registry := presets.Builtin()
+	if manifest.SchemaVersion != 1 {
+		var err error
+		presetsDir := filepath.Join(devDir, config.PresetsDir)
+		if registry, err = presets.LoadProject(presetsDir, manifest.Refs()); err != nil {
+			add(Error, relative(root, presetsDir), "load recorded definitions: %v", err)
+			return config.Config{}, false
+		}
+	}
+	cfg, err := config.Normalize(manifest.Input(root, registry))
 	if err != nil {
 		fail("manifest values are invalid: %v", err)
+		return config.Config{}, false
+	}
+	if !config.SameSelection(config.NewManifest(cfg), manifest) {
+		fail("manifest values are not normalized; every option of the selected definitions must be recorded; regenerate with projectsetup init --force")
 		return config.Config{}, false
 	}
 	return cfg, true
@@ -340,36 +348,56 @@ func validateDockerfile(root, devDir string, resolved presets.Resolved, add func
 	}
 }
 
-func validateProjectConventions(root string, manifest config.Manifest, add func(Severity, string, string, ...any)) {
-	detected, err := detect.Detect(root)
+// validateProjectConventions compares the configured preset options with
+// the values the preset's detection rules read from the project.
+func validateProjectConventions(root string, cfg config.Config, add func(Severity, string, string, ...any)) {
+	const manifestPath = ".devcontainer/projectsetup.json"
+	registry, err := presets.NewRegistry(cfg.Definitions...)
+	if err != nil {
+		add(Error, manifestPath, "load selected definitions: %v", err)
+		return
+	}
+	detected, err := detect.Detect(root, registry)
 	if err != nil {
 		add(Error, ".", "detect project conventions: %v", err)
 		return
 	}
-	detail, found := detected.Details[manifest.Preset]
+	detail, found := detected.Details[cfg.Preset]
 	if !found {
 		return
 	}
-	if detail.LanguageVersion != "" && !languageVersionsAgree(manifest.LanguageVersion, detail.LanguageVersion) {
-		add(Error, ".devcontainer/projectsetup.json", "languageVersion %q disagrees with detected project version %q", manifest.LanguageVersion, detail.LanguageVersion)
-	}
-	if len(detail.PackageManagerCandidates) > 1 {
-		if containsManager(detail.PackageManagerCandidates, manifest.PackageManager) {
-			add(Warning, ".", "multiple package manager lockfiles detected (%s); configured manager is %q", joinManagers(detail.PackageManagerCandidates), manifest.PackageManager)
-		} else {
-			add(Error, ".devcontainer/projectsetup.json", "packageManager %q does not match detected lockfile managers %s", manifest.PackageManager, joinManagers(detail.PackageManagerCandidates))
+	definition := cfg.Definitions[0]
+	for _, name := range sortedKeys(detail.Options) {
+		values := detail.Options[name]
+		configured := cfg.Options[cfg.Preset][name]
+		field := "options." + cfg.Preset + "." + name
+		if len(definition.Options[name].Detect.Sources) > 0 {
+			if !languageVersionsAgree(configured, values[0]) {
+				add(Error, manifestPath, "%s is %q but the project specifies %q", field, configured, values[0])
+			}
+			continue
 		}
-	} else if len(detail.PackageManagerCandidates) == 1 && detail.PackageManagerCandidates[0] != manifest.PackageManager {
-		add(Error, ".devcontainer/projectsetup.json", "packageManager %q disagrees with detected lockfile manager %q", manifest.PackageManager, detail.PackageManagerCandidates[0])
+		switch {
+		case len(values) > 1 && slices.Contains(values, configured):
+			add(Warning, ".", "project files match several values for %s (%s); configured value is %q", field, strings.Join(values, ", "), configured)
+		case len(values) > 1:
+			add(Error, manifestPath, "%s is %q but project files match %s", field, configured, strings.Join(values, ", "))
+		case values[0] != configured:
+			add(Error, manifestPath, "%s is %q but project files match %q", field, configured, values[0])
+		}
 	}
-	if detail.SuggestedDatabase == config.DatabasePostgres && manifest.Database != config.DatabasePostgres {
-		add(Warning, ".devcontainer/projectsetup.json", "project configuration appears to require PostgreSQL, but database is %q", manifest.Database)
+	for _, addon := range detail.SuggestedAddons {
+		if !slices.Contains(cfg.Addons, addon) {
+			add(Warning, manifestPath, "project configuration suggests add-on %q, which is not selected", addon)
+		}
 	}
 	for _, warning := range detected.Warnings {
 		add(Warning, ".", "%s", warning)
 	}
 }
 
+// languageVersionsAgree accepts a configured release line for a detected
+// patch version and the reverse.
 func languageVersionsAgree(configured, detected string) bool {
 	return configured == detected ||
 		strings.HasPrefix(configured, detected+".") ||
@@ -573,23 +601,6 @@ func mountField(mount, key string) string {
 		}
 	}
 	return ""
-}
-
-func joinManagers(managers []config.PackageManager) string {
-	values := make([]string, len(managers))
-	for i, manager := range managers {
-		values[i] = string(manager)
-	}
-	return strings.Join(values, ", ")
-}
-
-func containsManager(managers []config.PackageManager, target config.PackageManager) bool {
-	for _, manager := range managers {
-		if manager == target {
-			return true
-		}
-	}
-	return false
 }
 
 func expectedAIMounts(tools []config.AITool) []string {

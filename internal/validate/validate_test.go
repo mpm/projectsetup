@@ -28,7 +28,7 @@ func TestCheckAcceptsGeneratedConfiguration(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"engines":{"node":"26"}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: config.PresetNode, AITools: []config.AITool{}})
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: "node", AITools: []config.AITool{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestCheckAcceptsGeneratedConfiguration(t *testing.T) {
 func TestCheckAcceptsRailsConfigurationWithoutProjectSignals(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", t.TempDir())
-	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: config.PresetRails, AITools: []config.AITool{}})
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: "rails", AITools: []config.AITool{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestCheckAcceptsRubyConfiguration(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, ".ruby-version"), []byte("3.3.7\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: config.PresetRuby, LanguageVersion: "3.3.7", AITools: []config.AITool{}})
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: "ruby", Options: map[string]map[string]string{"ruby": {"version": "3.3.7"}}, AITools: []config.AITool{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestCheckAcceptsRubyConfiguration(t *testing.T) {
 func TestCheckRejectsMismatchedRubyFeature(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", t.TempDir())
-	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: config.PresetRuby, AITools: []config.AITool{}})
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: "ruby", AITools: []config.AITool{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestCheckRejectsMismatchedRubyFeature(t *testing.T) {
 func TestCheckRequiresSQLitePackages(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", t.TempDir())
-	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: config.PresetRails, Database: config.DatabaseSQLite, AITools: []config.AITool{}})
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: "rails", Addons: []string{"sqlite"}, AITools: []config.AITool{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,14 +124,14 @@ func TestCheckRequiresSQLitePackages(t *testing.T) {
 func TestCheckRejectsMismatchedRuntimeNames(t *testing.T) {
 	tests := []struct {
 		name        string
-		database    config.Database
+		addons      []string
 		file        string
 		old         string
 		replacement string
 		want        string
 	}{
 		{name: "compose project", file: "compose.yaml", old: "name: example", replacement: "name: other", want: `Compose project name is "other"; expected "example"`},
-		{name: "compose service", database: config.DatabasePostgres, file: "devcontainer.json", old: `"service": "app"`, replacement: `"service": "other"`, want: "must use compose.yaml service app"},
+		{name: "compose service", addons: []string{"postgres"}, file: "devcontainer.json", old: `"service": "app"`, replacement: `"service": "other"`, want: "must use compose.yaml service app"},
 		{name: "unselected postgres", file: "compose.yaml", old: "services:\n", replacement: "services:\n  postgres:\n    image: postgres:17\n", want: `Compose service "postgres" is not provided by the selected definitions`},
 	}
 
@@ -139,7 +139,7 @@ func TestCheckRejectsMismatchedRuntimeNames(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("HOME", t.TempDir())
-			cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: config.PresetNode, Database: tt.database, AITools: []config.AITool{}})
+			cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: "node", Addons: tt.addons, AITools: []config.AITool{}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -168,7 +168,7 @@ func TestCheckAggregatesIndependentFailures(t *testing.T) {
 	if err := os.WriteFile(packageJSON, []byte(`{"engines":{"node":"22"}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: config.PresetNode, LanguageVersion: "22", Ports: []int{80}, AITools: []config.AITool{}})
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: "node", Options: map[string]map[string]string{"node": {"version": "22"}}, Ports: []int{80}, AITools: []config.AITool{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func TestCheckAggregatesIndependentFailures(t *testing.T) {
 	}
 	assertDiagnostic(t, diagnostics, validate.Error, "containerUser and remoteUser")
 	assertDiagnostic(t, diagnostics, validate.Error, "not executable")
-	assertDiagnostic(t, diagnostics, validate.Error, "disagrees with detected project version")
+	assertDiagnostic(t, diagnostics, validate.Error, `options.node.version is "22" but the project specifies "20"`)
 	assertDiagnostic(t, diagnostics, validate.Error, "containerEnv.PATH must include /usr/bin")
 	assertDiagnostic(t, diagnostics, validate.Warning, "outside dworm's scanned range")
 }
@@ -215,14 +215,38 @@ func TestCheckRejectsUnsupportedManifestBeforeCrossFileChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 	diagnostics := validate.Check(root, validate.Options{})
-	assertDiagnostic(t, diagnostics, validate.Error, "unsupported schemaVersion")
-	assertDiagnostic(t, diagnostics, validate.Error, "generatedBy must be")
+	assertDiagnostic(t, diagnostics, validate.Error, "unsupported schemaVersion 99")
+}
+
+func TestCheckRejectsIncompleteOptions(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: "node", AITools: []config.AITool{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := generate.Write(root, cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, ".devcontainer", "projectsetup.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edited := strings.Replace(string(data), `"package_manager": "npm",`, "", 1)
+	if edited == string(data) {
+		t.Fatalf("manifest has no package_manager option:\n%s", data)
+	}
+	if err := os.WriteFile(path, []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	assertDiagnostic(t, validate.Check(root, validate.Options{}), validate.Error, "manifest values are not normalized")
 }
 
 func TestCheckBuildRunsAfterStaticValidation(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", t.TempDir())
-	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: config.PresetNode, AITools: []config.AITool{}})
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: "node", AITools: []config.AITool{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,7 +305,7 @@ func TestCodexMountsAndEnvironment(t *testing.T) {
 			root, home, state := t.TempDir(), t.TempDir(), t.TempDir()
 			t.Setenv("HOME", home)
 			t.Setenv("CODEX_HOME", state)
-			cfg, err := config.Normalize(config.Input{Root: root, Preset: config.PresetPython, AITools: []config.AITool{config.AIToolCodex}})
+			cfg, err := config.Normalize(config.Input{Root: root, Preset: "python", AITools: []config.AITool{config.AIToolCodex}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -364,7 +388,7 @@ func TestCheckAcceptsComposeFromEarlierReleases(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("CODEX_HOME", "")
-	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: config.PresetNode, Database: config.DatabasePostgres, AITools: []config.AITool{config.AIToolCodex}})
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: "node", Addons: []string{"postgres"}, AITools: []config.AITool{config.AIToolCodex}})
 	if err != nil {
 		t.Fatal(err)
 	}
