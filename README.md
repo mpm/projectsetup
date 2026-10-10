@@ -311,6 +311,8 @@ projectsetup preset remove NAME
 
 Every generated project gets a copy of the exact definition files it was generated from in `.devcontainer/presets/`. The manifest records each definition's name, version, source, and SHA-256 hash. `check` and `upgrade` use these copies, so a project keeps working on a machine that does not have its user or remote definitions, and changing a definition does not affect existing projects until you run `projectsetup upgrade --refresh-presets` there. Do not edit the copies: `check` reports a copy whose hash differs from the manifest.
 
+The [shared-image roadmap](SHARED_IMAGES_ROADMAP.md#schema-evolution-contract-decisions-completed) reserves definition schema 2 for an optional preinstalled-tool contract and retains manifest schema 2, with the declaration pinned in the preset snapshot. This is a planned format extension: the current CLI and editor schema still support definition schema 1 only. Existing definitions keep their current installation behavior; shared-image declarations will require the coordinated parser and generation work recorded in the roadmap.
+
 ### Writing a definition
 
 The easiest start is a copy of a similar built-in:

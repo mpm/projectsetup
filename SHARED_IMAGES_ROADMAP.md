@@ -1,6 +1,6 @@
 # Shared Toolchain Images: Implementation Roadmap
 
-Status: Phase 1 declaration design completed; executable shared-image support is not yet implemented.
+Status: Phase 1 declaration design and schema-evolution decisions completed; executable shared-image support is not yet implemented.
 
 This roadmap records the shared-image design discussed with the user. It is a handoff for a future implementation session. Read `AGENTS.md` and `HANDOFF.md` first, then this document. `HANDOFF.md` remains the contract for existing behavior; this roadmap describes proposed extensions.
 
@@ -81,7 +81,7 @@ This is a usage-driven example, not a mandatory inheritance tree. Do not require
 Implement the smallest typed extension that makes a custom shared-image preset reliable.
 
 - [x] Design declarations for preinstalled runtimes/tools and their versions/paths, including GitHub CLI and any core image prerequisites the generator will skip installing. See [Declaration contract](#declaration-contract-design-completed).
-- [ ] Decide definition and manifest schema evolution explicitly. Retain support for existing definition snapshots and manifests; default existing definitions to current installation behavior.
+- [x] Decide definition and manifest schema evolution explicitly. Retain support for existing definition snapshots and manifests; default existing definitions to current installation behavior. See [Schema evolution contract](#schema-evolution-contract-decisions-completed).
 - [ ] Extend parsing, registry resolution, normalization, editor schema, and options listing together.
 - [ ] Generate project Dockerfiles and Dev Container configuration without requesting installation of capabilities explicitly provided by the image.
 - [ ] Avoid redundant core apt installation for images that declare the required prerequisites. Preserve project-specific packages and root/user steps.
@@ -94,7 +94,7 @@ Acceptance: two projects can derive from the same shared image, run their expect
 
 ### Declaration contract (design completed)
 
-This section specifies the first Phase 1 item. It is an implementation contract for subsequent items, **not supported authoring syntax yet**. Current definition schema 1 rejects these fields. Definition/manifest schema numbers, compatibility handling, parser and editor-schema changes remain the next checklist work. No generated output or runtime behavior changes in this design step.
+This section specifies the first Phase 1 item. It is an implementation contract for subsequent items, **not supported authoring syntax yet**. Current definition schema 1 rejects these fields. Schema numbers and compatibility handling are decided in the schema evolution contract below; parser and editor-schema changes remain the next checklist work. No generated output or runtime behavior changes in these design steps.
 
 #### Shape and ownership
 
@@ -166,11 +166,39 @@ Definition validation checks shape, ownership, literals, paths, versions, and re
 
 Keep project version-file compatibility checks tied to reserved runtime identities rather than custom preset names or an assumed `options.version`. A fixed image's declared version is the comparison target. The later version-check item must implement that binding and the existing major/minor-versus-patch comparison conventions, without pretending that every Python requirement expression is an exact version. Selecting a different runtime requires selecting a different image/preset, not merely changing a runtime option.
 
-Snapshot the declaration with its preset so ordinary checks/upgrades remain offline and retain the image contract. Whether any additional manifest fields are needed is deliberately the next schema-evolution decision; do not add a second independently editable runtime source of truth.
+Snapshot the declaration with its preset so ordinary checks/upgrades remain offline and retain the image contract. The schema evolution decision below retains manifest schema 2 without additional runtime fields; do not add a second independently editable runtime source of truth.
 
 Later opt-in artifact verification must test declared executables, reported versions, and command lookup through non-login execution as `vscode`, as well as core prerequisites/user/home and effective inherited metadata. Custom tool keys have no inferred version-output parser; verification must report any unsupported version probe explicitly rather than claim full verification. A successful build or static check proves neither installed capabilities nor metadata safety.
 
 Implementation tests for the later checklist items should cover absent/empty contracts preserving legacy output, partial/all core package claims, explicit project package preservation, missing/invalid tool fields, illegal add-on/variant declarations, known installer conflicts across definitions, custom tools, deterministic/deduplicated PATH, fixed-version consistency, snapshot round trips, and the `gh` feature present/absent cases. Keep these Docker-independent; actual artifact checks remain opt-in.
+
+### Schema evolution contract (decisions completed)
+
+This section completes the second Phase 1 item. It defines the implementation boundary for the following parsing/resolution item; it does not enable shared-image declarations in the current CLI.
+
+#### Definition format
+
+- Introduce **definition schema 2** for `image.preinstalled`, using exactly the declaration contract above. Files using the declaration must set `schema = 2`, including an explicitly empty `[image.preinstalled]` table. Schema 1 continues to reject the field rather than silently ignoring image claims.
+- The implementation will read **definition schemas 1 and 2**, including mixed-schema preset/add-on selections. Schema 2 retains all existing fields and contribution semantics and adds only the optional top-level preset image contract. Add-ons and variants cannot declare it, even if empty. Unknown fields and unsupported schema numbers remain errors; do not infer a schema from field presence or fall back to schema 1.
+- Absence of `image.preinstalled` in either supported schema means no installed-capability claims. In schema 2, an empty table or a contract whose lists/maps are all empty likewise makes no claims and preserves existing core apt installation, the GitHub CLI feature request, definition installers, and PATH rendering. An empty or omitted `core_packages` makes no package claims; an empty or omitted `tools` makes no tool claims, independently of the other member. Never infer installed capabilities from `image.base`, a preset name, or a definition's version.
+- Represent presence with an optional `*Preinstalled` on `Image`, so validation can distinguish an absent contract from an empty declaration in forbidden schema/ownership positions. Its members and validation rules remain those in the declaration contract; this is not a new installation-policy enum or user option.
+- Keep existing built-ins at `schema = 1` and retain their raw bytes and hashes. Do not mechanically bump their definition release `version` or schema. A definition author explicitly adopting schema 2 changes the raw snapshot/hash; the definition release version remains separate from the format version.
+- Extend `schema/preset.schema.json` in the next item to accept both formats and enforce schema/ownership restrictions. The parser and editor schema must agree. Keep the currently published schema and parser at schema 1 until that coordinated implementation is ready; merely accepting schema 2 now would misleadingly advertise support.
+
+#### Manifest and snapshots
+
+- Keep **manifest schema 2** and its current JSON shape. Continue reading **manifest schemas 1 and 2**; no schema 3 or new manifest fields are needed for this declaration.
+- The manifest's existing preset reference (`name`, definition release `version`, `source`, and `sha256`) pins the exact TOML snapshot, including its format number, base reference, and preinstalled contract. Do not copy installed tools, versions, paths, core-package claims, or the base reference into independently editable manifest fields. Do not add a definition-schema field to `Ref`: the pinned file already supplies it.
+- Load and validate schema 2 manifests against their recorded snapshots offline. Ordinary `check` and `upgrade` retain schema 1 snapshots without converting, reserializing, or enriching them; future schema 2 snapshots must also retain their exact bytes and hashes. Regeneration still writes manifest schema 2 and preserves recorded options and selections.
+- Manifest schema 1 retains its existing built-in conversion, including PostgreSQL 17 when no version was recorded. It does not gain preinstalled claims. Explicit `upgrade` still writes manifest schema 2 and snapshots; do not silently switch legacy projects to shared images.
+- `upgrade --refresh-presets` remains the explicit way to adopt registry definitions and their image contracts. Validate the original manifest and snapshots before refresh, preserve recorded option values, and fill defaults only for newly added options as today. `init --force` retains its existing explicit replacement and add-on-option preservation semantics. No automatic migration, image lookup, or network resolution is added.
+- Older projectsetup binaries may parse the unchanged manifest but must reject an unsupported schema 2 definition snapshot (or its unknown declaration fields). This fail-closed behavior is intentional: an older binary must not regenerate a shared-image project while discarding its installation contract. A manifest bump would duplicate the definition format gate without adding source data.
+
+#### Other versioned formats and verification
+
+- Remote indexes and `sources.toml` remain at their existing independent schema 1; their paths, source records, and digest pinning already accommodate either definition format. Neither is a definition schema or a manifest schema.
+- `init --list-options --json` remains at **listing schema 2**. Installed-capability declarations are fixed snapshot data, not configurable options. Any additive declaration information exposed by the next listing implementation must be derived from the same typed definition and follow the listing's existing additive-field policy; do not synthesize runtime options or duplicate editable state.
+- Existing tests cover strict schema/unknown-field rejection, manifest schema 1 conversion and schema 2 round trips, snapshot hash/version checks, and legacy golden output. Run them for this decision step. The following implementation item must add dual-definition-schema acceptance/rejection, absent/empty-contract compatibility, mixed selections, and schema 2 snapshot/manifest round trips before claiming parser support. Subsequent generation items must demonstrate byte-identical legacy output and the declared installation choices.
 
 ## Phase 2: Explicit ownership policy
 
