@@ -45,7 +45,7 @@ func TestLoadAddsUserDefinitions(t *testing.T) {
 	t.Setenv(ConfigDirEnv, config)
 	dir := filepath.Join(config, "presets")
 	writeDefinition(t, dir, "custom.toml", definitionText("preset", "custom"))
-	writeDefinition(t, dir, "redis.toml", definitionText("addon", "redis"))
+	writeDefinition(t, dir, "memcached.toml", definitionText("addon", "memcached"))
 	writeDefinition(t, dir, "README.md", "not a definition")
 	if err := os.Mkdir(filepath.Join(dir, "drafts"), 0o755); err != nil {
 		t.Fatal(err)
@@ -58,7 +58,7 @@ func TestLoadAddsUserDefinitions(t *testing.T) {
 	if got := registry.Names(KindPreset); !reflect.DeepEqual(got, []string{"custom", "node", "python", "rails", "ruby"}) {
 		t.Errorf("presets = %v", got)
 	}
-	if got := registry.Names(KindAddon); !reflect.DeepEqual(got, []string{"postgres", "redis", "sqlite"}) {
+	if got := registry.Names(KindAddon); !reflect.DeepEqual(got, []string{"go", "memcached", "postgres", "redis", "rust", "sqlite"}) {
 		t.Errorf("add-ons = %v", got)
 	}
 	custom, _ := registry.Lookup("custom")
@@ -168,7 +168,7 @@ func TestDefinitionInfo(t *testing.T) {
 	for _, info := range infos {
 		names = append(names, info.Name)
 	}
-	if !reflect.DeepEqual(names, []string{"node", "python", "rails", "ruby", "postgres", "sqlite"}) {
+	if !reflect.DeepEqual(names, []string{"node", "python", "rails", "ruby", "go", "postgres", "redis", "rust", "sqlite"}) {
 		t.Fatalf("Infos() order = %v", names)
 	}
 }

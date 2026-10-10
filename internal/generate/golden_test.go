@@ -87,6 +87,26 @@ var goldenCases = []goldenCase{
 		},
 	},
 	{
+		name: "ruby-go",
+		input: config.Input{
+			ProjectName: "ruby-go", Preset: "ruby", Addons: []string{"go"},
+		},
+	},
+	{
+		name: "node-rust",
+		input: config.Input{
+			ProjectName: "node-rust", Preset: "node", Addons: []string{"rust"},
+			Options: map[string]map[string]string{"node": {"package_manager": "npm"}},
+		},
+	},
+	{
+		name: "python-redis",
+		input: config.Input{
+			ProjectName: "python-redis", Preset: "python", Addons: []string{"redis"},
+			Options: map[string]map[string]string{"python": {"package_manager": "pip"}},
+		},
+	},
+	{
 		name: "python-poetry",
 		input: config.Input{
 			ProjectName: "python-poetry", Preset: "python",
@@ -185,7 +205,7 @@ func TestGoldenDevcontainerConfigurations(t *testing.T) {
 
 func TestBuildPresetFixtures(t *testing.T) {
 	if os.Getenv("PROJECTSETUP_BUILD_TESTS") != "1" {
-		t.Skip("set PROJECTSETUP_BUILD_TESTS=1 to build one fixture per preset")
+		t.Skip("set PROJECTSETUP_BUILD_TESTS=1 to build one fixture per preset and add-on")
 	}
 	devcontainer, err := exec.LookPath("devcontainer")
 	if err != nil {
@@ -195,7 +215,7 @@ func TestBuildPresetFixtures(t *testing.T) {
 		t.Fatal("docker is not installed")
 	}
 
-	for _, name := range []string{"node-opencode", "ruby-opencode", "rails-opencode", "python-pip"} {
+	for _, name := range []string{"node-opencode", "ruby-opencode", "rails-opencode", "python-pip", "ruby-go", "node-rust", "python-redis"} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
 			if err := replaceTree(filepath.Join(root, directoryName), filepath.Join("testdata", "golden", name)); err != nil {
@@ -211,7 +231,7 @@ func TestBuildPresetFixtures(t *testing.T) {
 
 func TestSmokePresetFixtures(t *testing.T) {
 	if os.Getenv("PROJECTSETUP_SMOKE_TESTS") != "1" {
-		t.Skip("set PROJECTSETUP_SMOKE_TESTS=1 to create and smoke-test one container per preset")
+		t.Skip("set PROJECTSETUP_SMOKE_TESTS=1 to create and smoke-test one container per preset and add-on")
 	}
 	devcontainer, err := exec.LookPath("devcontainer")
 	if err != nil {
@@ -222,7 +242,19 @@ func TestSmokePresetFixtures(t *testing.T) {
 		t.Fatal("docker is not installed")
 	}
 
-	for _, name := range []string{"node-opencode", "ruby-opencode", "rails-opencode", "python-pip"} {
+	// Add-on checks run like dworm exec: docker exec without a login shell,
+	// so tools must be on the containerEnv PATH.
+	fixtures := []struct{ name, check string }{
+		{"node-opencode", ""},
+		{"ruby-opencode", ""},
+		{"rails-opencode", ""},
+		{"python-pip", ""},
+		{"ruby-go", `go version && ruby --version`},
+		{"node-rust", `cargo --version && rustc --version && node --version`},
+		{"python-redis", `test "$(redis-cli -u "$REDIS_URL" ping)" = PONG`},
+	}
+	for _, fixture := range fixtures {
+		name := fixture.name
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
 			home := t.TempDir()
@@ -244,6 +276,14 @@ func TestSmokePresetFixtures(t *testing.T) {
 				ContainerID string `json:"containerId"`
 			}
 			parseErr := json.Unmarshal(output, &result)
+			// Sidecars, the network, and volumes belong to the fixture's
+			// Compose project.
+			t.Cleanup(func() {
+				down := exec.Command(docker, "compose", "-f", filepath.Join(root, directoryName, "compose.yaml"), "down", "--volumes")
+				if output, err := down.CombinedOutput(); err != nil {
+					t.Errorf("remove smoke-test Compose project: %v\n%s", err, output)
+				}
+			})
 			if result.ContainerID != "" {
 				t.Cleanup(func() {
 					if output, err := exec.Command(docker, "rm", "-f", result.ContainerID).CombinedOutput(); err != nil {
@@ -266,6 +306,13 @@ func TestSmokePresetFixtures(t *testing.T) {
 			smoke.Env = append(os.Environ(), "HOME="+home)
 			if output, err := smoke.CombinedOutput(); err != nil {
 				t.Fatalf("smoke test container: %v\n%s", err, output)
+			}
+			if fixture.check != "" {
+				workspace := "/workspaces/" + name
+				check := exec.Command(docker, "exec", "-u", "vscode", "-w", workspace, result.ContainerID, "bash", "-c", fixture.check)
+				if output, err := check.CombinedOutput(); err != nil {
+					t.Fatalf("add-on check %q: %v\n%s", fixture.check, err, output)
+				}
 			}
 		})
 	}

@@ -1,0 +1,29 @@
+{
+  "name": "ruby-go",
+  "dockerComposeFile": "compose.yaml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/ruby-go",
+  "containerUser": "vscode",
+  "remoteUser": "vscode",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/go:1": {
+      "version": "1.27"
+    },
+    "ghcr.io/rails/devcontainer/features/ruby:2": {
+      "usePrecompiledRubies": true,
+      "version": "4.0"
+    }
+  },
+  "containerEnv": {
+    "PATH": "/home/vscode/.local/bin:/home/vscode/.opencode/bin:/home/vscode/.local/share/mise/shims:/usr/local/go/bin:/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  },
+  "mounts": [
+    "source=${localEnv:HOME}/.config/opencode,target=/home/vscode/.config/opencode,type=bind",
+    "source=${localEnv:HOME}/.local/share/opencode,target=/home/vscode/.local/share/opencode,type=bind",
+    "source=${localEnv:HOME}/.opencode,target=/home/vscode/.opencode,type=bind",
+    "source=${localEnv:HOME}/.cache/opencode,target=/home/vscode/.cache/opencode,type=bind"
+  ],
+  "postCreateCommand": ".devcontainer/scripts/post-create.sh",
+  "shutdownAction": "stopCompose"
+}

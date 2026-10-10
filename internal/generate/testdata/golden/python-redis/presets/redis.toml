@@ -1,0 +1,28 @@
+schema = 1
+kind = "addon"
+name = "redis"
+version = "1.0.0"
+description = "Redis sidecar with persistent data"
+
+[options.version]
+description = "Redis version"
+default = "8"
+pattern = '[1-9][0-9]*(\.[0-9]+)?'
+
+[image]
+apt = ["redis-tools"]
+
+[container.env]
+REDIS_URL = "redis://redis:6379"
+
+[services.redis]
+image = "redis:${option:version}-trixie"
+restart = "unless-stopped"
+app_depends_on = "service_healthy"
+volumes = { redis-data = "/data" }
+
+[services.redis.healthcheck]
+test = ["CMD", "redis-cli", "ping"]
+interval = "5s"
+timeout = "5s"
+retries = 10

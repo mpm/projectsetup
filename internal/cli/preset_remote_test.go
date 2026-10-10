@@ -16,7 +16,7 @@ import (
 
 const (
 	remotePreset = "schema = 1\nkind = \"preset\"\nname = \"custom\"\nversion = \"1.0.0\"\ndescription = \"Remote preset\"\n\n[image]\nbase = \"mcr.microsoft.com/devcontainers/base:ubuntu-24.04\"\n"
-	remoteAddon  = "schema = 1\nkind = \"addon\"\nname = \"redis\"\nversion = \"1.0.0\"\ndescription = \"Remote add-on\"\n\n[container.env]\nREDIS_URL = \"redis://redis:6379\"\n"
+	remoteAddon  = "schema = 1\nkind = \"addon\"\nname = \"memcached\"\nversion = \"1.0.0\"\ndescription = \"Remote add-on\"\n\n[container.env]\nREDIS_URL = \"memcached://memcached:6379\"\n"
 )
 
 // remoteServer serves files over HTTPS to the preset commands. Tests change
@@ -50,18 +50,18 @@ func TestRemoteDefinitionLifecycle(t *testing.T) {
 	userDir := useConfigDir(t)
 	t.Setenv("HOME", t.TempDir())
 	files := map[string]string{
-		"/set/index.toml":        "schema = 1\ndefinitions = [\"custom.toml\", \"addons/redis.toml\"]\n",
-		"/set/custom.toml":       remotePreset,
-		"/set/addons/redis.toml": remoteAddon,
+		"/set/index.toml":            "schema = 1\ndefinitions = [\"custom.toml\", \"addons/memcached.toml\"]\n",
+		"/set/custom.toml":           remotePreset,
+		"/set/addons/memcached.toml": remoteAddon,
 	}
 	base := remoteServer(t, files)
-	redisURL := base + "/set/addons/redis.toml"
+	memcachedURL := base + "/set/addons/memcached.toml"
 
 	stdout, err := runPresetInput(t, "n\n", "add", base+"/set/index.toml")
 	if err == nil || !strings.Contains(err.Error(), "installation cancelled") {
 		t.Fatalf("declined add: %v", err)
 	}
-	if !strings.Contains(stdout, "==> addon redis 1.0.0 from "+redisURL) || !strings.Contains(stdout, `REDIS_URL = "redis://redis:6379"`) || !strings.Contains(stdout, "forwarded SSH agent") {
+	if !strings.Contains(stdout, "==> addon memcached 1.0.0 from "+memcachedURL) || !strings.Contains(stdout, `REDIS_URL = "memcached://memcached:6379"`) || !strings.Contains(stdout, "forwarded SSH agent") {
 		t.Fatalf("add did not show the definitions:\n%s", stdout)
 	}
 	if entries, _ := os.ReadDir(filepath.Dir(userDir)); len(entries) != 0 {
@@ -71,21 +71,21 @@ func TestRemoteDefinitionLifecycle(t *testing.T) {
 	if _, err := runPresetInput(t, "y\n", "add", base+"/set/index.toml"); err != nil {
 		t.Fatalf("add: %v", err)
 	}
-	if _, err := runPresetInput(t, "", "add", "--yes", redisURL); err == nil || !strings.Contains(err.Error(), `"redis" is already installed from `+redisURL) {
+	if _, err := runPresetInput(t, "", "add", "--yes", memcachedURL); err == nil || !strings.Contains(err.Error(), `"memcached" is already installed from `+memcachedURL) {
 		t.Fatalf("second add: %v", err)
 	}
 	stdout, err = runPresetInput(t, "", "list")
-	if err != nil || !strings.Contains(stdout, redisURL) {
+	if err != nil || !strings.Contains(stdout, memcachedURL) {
 		t.Fatalf("list = %q, %v", stdout, err)
 	}
 
 	// Projects record the URL as source and check without the network.
 	root := t.TempDir()
-	if err := runInit(root, []string{"--non-interactive", "--preset", "custom", "--addon", "redis", "--ai", "none"}, &bytes.Buffer{}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+	if err := runInit(root, []string{"--non-interactive", "--preset", "custom", "--addon", "memcached", "--ai", "none"}, &bytes.Buffer{}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("init: %v", err)
 	}
 	manifest := readManifest(t, root)
-	if manifest.Preset.Source != base+"/set/custom.toml" || len(manifest.Addons) != 1 || manifest.Addons[0].Source != redisURL {
+	if manifest.Preset.Source != base+"/set/custom.toml" || len(manifest.Addons) != 1 || manifest.Addons[0].Source != memcachedURL {
 		t.Fatalf("manifest = %+v", manifest)
 	}
 	if diagnostics := validate.Check(root, validate.Options{}); validate.ErrorCount(diagnostics) != 0 {
@@ -93,17 +93,17 @@ func TestRemoteDefinitionLifecycle(t *testing.T) {
 	}
 
 	stdout, err = runPresetInput(t, "", "update")
-	if err != nil || !strings.Contains(stdout, "custom 1.0.0 is up to date.") || !strings.Contains(stdout, "redis 1.0.0 is up to date.") {
+	if err != nil || !strings.Contains(stdout, "custom 1.0.0 is up to date.") || !strings.Contains(stdout, "memcached 1.0.0 is up to date.") {
 		t.Fatalf("update without changes = %q, %v", stdout, err)
 	}
 
-	installed := filepath.Join(userDir, "redis.toml")
-	files["/set/addons/redis.toml"] = strings.Replace(remoteAddon, `version = "1.0.0"`, `version = "1.1.0"`, 1)
-	stdout, err = runPresetInput(t, "n\n", "update", "redis")
+	installed := filepath.Join(userDir, "memcached.toml")
+	files["/set/addons/memcached.toml"] = strings.Replace(remoteAddon, `version = "1.0.0"`, `version = "1.1.0"`, 1)
+	stdout, err = runPresetInput(t, "n\n", "update", "memcached")
 	if err == nil || !strings.Contains(err.Error(), "update cancelled") {
 		t.Fatalf("declined update: %v", err)
 	}
-	wantDiff := "--- " + installed + "\n+++ " + redisURL + "\n@@ -1,7 +1,7 @@\n schema = 1\n kind = \"addon\"\n name = \"redis\"\n-version = \"1.0.0\"\n+version = \"1.1.0\"\n"
+	wantDiff := "--- " + installed + "\n+++ " + memcachedURL + "\n@@ -1,7 +1,7 @@\n schema = 1\n kind = \"addon\"\n name = \"memcached\"\n-version = \"1.0.0\"\n+version = \"1.1.0\"\n"
 	if !strings.Contains(stdout, wantDiff) {
 		t.Fatalf("update diff:\n%s\nwant containing:\n%s", stdout, wantDiff)
 	}
@@ -120,32 +120,32 @@ func TestRemoteDefinitionLifecycle(t *testing.T) {
 		t.Fatalf("failed update changed %s", installed)
 	}
 
-	stdout, err = runPresetInput(t, "", "update", "--yes", "redis")
-	if err != nil || !strings.Contains(stdout, "Updated redis to 1.1.0.") {
+	stdout, err = runPresetInput(t, "", "update", "--yes", "memcached")
+	if err != nil || !strings.Contains(stdout, "Updated memcached to 1.1.0.") {
 		t.Fatalf("update = %q, %v", stdout, err)
 	}
 	registry, err := presets.Load()
 	if err != nil {
 		t.Fatalf("Load() after update: %v", err)
 	}
-	if redis, _ := registry.Lookup("redis"); redis.Version != "1.1.0" || redis.Source != redisURL {
-		t.Fatalf("redis = %+v", redis.Ref())
+	if memcached, _ := registry.Lookup("memcached"); memcached.Version != "1.1.0" || memcached.Source != memcachedURL {
+		t.Fatalf("memcached = %+v", memcached.Ref())
 	}
 	sources, err := presets.ReadSources()
-	if source, _ := sources.Lookup("redis"); err != nil || source.Fetched != presetNow() {
+	if source, _ := sources.Lookup("memcached"); err != nil || source.Fetched != presetNow() {
 		t.Fatalf("sources = %+v, %v", sources, err)
 	}
 
 	// A remote definition edited in place is restored by update.
-	editFile(t, installed, "redis://redis:6379", "redis://other:6379")
+	editFile(t, installed, "memcached://memcached:6379", "memcached://other:6379")
 	if _, _, err := runPresetCommand(t, "list"); err == nil || !strings.Contains(err.Error(), "cannot be edited in place") {
 		t.Fatalf("list with edited remote definition: %v", err)
 	}
-	if _, err := runPresetInput(t, "", "update", "--yes", "redis"); err != nil {
+	if _, err := runPresetInput(t, "", "update", "--yes", "memcached"); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
 
-	if stdout, err = runPresetInput(t, "", "remove", "redis"); err != nil || !strings.Contains(stdout, "Removed redis.") {
+	if stdout, err = runPresetInput(t, "", "remove", "memcached"); err != nil || !strings.Contains(stdout, "Removed memcached.") {
 		t.Fatalf("remove = %q, %v", stdout, err)
 	}
 	if _, err := os.Stat(installed); !os.IsNotExist(err) {
@@ -163,13 +163,13 @@ func TestRemoteDefinitionLifecycle(t *testing.T) {
 func TestRemoteCommandsRejectInvalidRequests(t *testing.T) {
 	userDir := useConfigDir(t)
 	base := remoteServer(t, map[string]string{
-		"/node.toml":  strings.Replace(remotePreset, `name = "custom"`, `name = "node"`, 1),
-		"/redis.toml": remoteAddon,
+		"/node.toml":      strings.Replace(remotePreset, `name = "custom"`, `name = "node"`, 1),
+		"/memcached.toml": remoteAddon,
 	})
 	if err := os.MkdirAll(userDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(userDir, "redis.toml"), []byte(remoteAddon), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(userDir, "memcached.toml"), []byte(remoteAddon), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	tests := []struct {
@@ -177,13 +177,13 @@ func TestRemoteCommandsRejectInvalidRequests(t *testing.T) {
 		want string
 	}{
 		{[]string{"add", "--yes", base + "/node.toml"}, `"node" is a built-in definition name`},
-		{[]string{"add", "--yes", base + "/redis.toml"}, "user definition " + filepath.Join(userDir, "redis.toml") + " already exists"},
-		{[]string{"add", "--yes", "http://example.com/redis.toml"}, "only https:// URLs are supported"},
+		{[]string{"add", "--yes", base + "/memcached.toml"}, "user definition " + filepath.Join(userDir, "memcached.toml") + " already exists"},
+		{[]string{"add", "--yes", "http://example.com/memcached.toml"}, "only https:// URLs are supported"},
 		{[]string{"add", "--yes"}, "expects 1 argument(s), got 0"},
 		{[]string{"update", "a", "b"}, "expects at most 1 argument(s), got 2"},
 		{[]string{"update", "node"}, `"node" is a built-in definition`},
-		{[]string{"update", "redis"}, `"redis" is not a remote definition`},
-		{[]string{"remove", "redis"}, `"redis" is not a remote definition`},
+		{[]string{"update", "memcached"}, `"memcached" is not a remote definition`},
+		{[]string{"remove", "memcached"}, `"memcached" is not a remote definition`},
 	}
 	for _, tt := range tests {
 		_, err := runPresetInput(t, "", tt.args...)

@@ -161,7 +161,7 @@ func TestPresetListJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &infos); err != nil {
 		t.Fatalf("parse %q: %v", stdout, err)
 	}
-	if len(infos) != 6 || infos[0].Name != "node" || infos[4].Name != "postgres" || infos[4].Kind != presets.KindAddon {
+	if len(infos) != 9 || infos[0].Name != "node" || infos[5].Name != "postgres" || infos[5].Kind != presets.KindAddon {
 		t.Fatalf("infos = %+v", infos)
 	}
 }
@@ -174,7 +174,7 @@ func TestPresetEjectRejectsInvalidRequests(t *testing.T) {
 	}{
 		{[]string{"eject", "node"}, "requires --as NEW"},
 		{[]string{"eject", "--as", "x"}, "expects 1 argument(s), got 0"},
-		{[]string{"eject", "go", "--as", "mygo"}, `unknown definition "go"`},
+		{[]string{"eject", "zig", "--as", "myzig"}, `unknown definition "zig"`},
 		{[]string{"eject", "node", "--as", "ruby"}, `definition "ruby" already exists`},
 		{[]string{"eject", "node", "--as", "My-Node"}, `name "My-Node" must match`},
 		{[]string{"show", "missing"}, `unknown definition "missing"`},

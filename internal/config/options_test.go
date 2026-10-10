@@ -11,7 +11,7 @@ import (
 
 func TestListOptionsValuesAreAcceptedByNormalize(t *testing.T) {
 	options := ListOptions(presets.Builtin())
-	if !reflect.DeepEqual(options.Presets, []string{"node", "python", "rails", "ruby"}) || !reflect.DeepEqual(options.Addons, []string{"postgres", "sqlite"}) {
+	if !reflect.DeepEqual(options.Presets, []string{"node", "python", "rails", "ruby"}) || !reflect.DeepEqual(options.Addons, []string{"go", "postgres", "redis", "rust", "sqlite"}) {
 		t.Fatalf("ListOptions() presets = %v, addons = %v", options.Presets, options.Addons)
 	}
 	for _, preset := range options.Presets {

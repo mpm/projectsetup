@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 2,
+  "projectName": "ruby-go",
+  "preset": {
+    "name": "ruby",
+    "version": "1.0.0",
+    "source": "builtin",
+    "sha256": "43dd5a5a8348b80d8ff3630718ab75f01c3814893f39da22fb28f40ce80f40a7"
+  },
+  "addons": [
+    {
+      "name": "go",
+      "version": "1.0.0",
+      "source": "builtin",
+      "sha256": "d14e38fb75ad930d598e5b74b9bc751315e44ef78af017a78e48a61dc2be5a7f"
+    }
+  ],
+  "options": {
+    "go": {
+      "version": "1.27"
+    },
+    "ruby": {
+      "version": "4.0"
+    }
+  },
+  "aiTools": [
+    "opencode"
+  ],
+  "ports": [],
+  "systemPackages": [],
+  "generatedBy": "projectsetup"
+}

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 2,
+  "projectName": "python-redis",
+  "preset": {
+    "name": "python",
+    "version": "1.0.0",
+    "source": "builtin",
+    "sha256": "bce189dcb22725e4cd9acfcd49f5875e7bb9ad12a241404732830a25cacfc8bf"
+  },
+  "addons": [
+    {
+      "name": "redis",
+      "version": "1.0.0",
+      "source": "builtin",
+      "sha256": "1aebece60873ca722311420168ff492ab6e7170e380f1d23dc24459c0ad86807"
+    }
+  ],
+  "options": {
+    "python": {
+      "package_manager": "pip",
+      "version": "3.14"
+    },
+    "redis": {
+      "version": "8"
+    }
+  },
+  "aiTools": [
+    "opencode"
+  ],
+  "ports": [],
+  "systemPackages": [],
+  "generatedBy": "projectsetup"
+}

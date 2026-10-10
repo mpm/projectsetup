@@ -18,13 +18,13 @@ func TestParseLocation(t *testing.T) {
 		want Location
 		err  string
 	}{
-		{spec: "https://example.com/presets/redis.toml", want: Location{URL: "https://example.com/presets/redis.toml"}},
+		{spec: "https://example.com/presets/memcached.toml", want: Location{URL: "https://example.com/presets/memcached.toml"}},
 		{spec: "github:acme/presets", want: Location{URL: "https://raw.githubusercontent.com/acme/presets/HEAD/index.toml"}},
-		{spec: "github:acme/presets/addons/redis.toml@v1.2", want: Location{URL: "https://raw.githubusercontent.com/acme/presets/v1.2/addons/redis.toml", Ref: "v1.2"}},
+		{spec: "github:acme/presets/addons/memcached.toml@v1.2", want: Location{URL: "https://raw.githubusercontent.com/acme/presets/v1.2/addons/memcached.toml", Ref: "v1.2"}},
 		{spec: "github:acme/presets/addons@release/2", want: Location{URL: "https://raw.githubusercontent.com/acme/presets/release/2/addons/index.toml", Ref: "release/2"}},
-		{spec: "http://example.com/redis.toml", err: "only https:// URLs are supported"},
-		{spec: "https://user:secret@example.com/redis.toml", err: "credentials in URLs are not supported"},
-		{spec: "redis.toml", err: "expected an https:// URL or github:"},
+		{spec: "http://example.com/memcached.toml", err: "only https:// URLs are supported"},
+		{spec: "https://user:secret@example.com/memcached.toml", err: "credentials in URLs are not supported"},
+		{spec: "memcached.toml", err: "expected an https:// URL or github:"},
 		{spec: "github:acme", err: "owner and repository are required"},
 		{spec: "github:acme/presets/../secrets.toml", err: "must be a clean relative path"},
 		{spec: "github:acme/presets/a//b.toml", err: "must be a clean relative path"},
@@ -66,20 +66,20 @@ func serve(t *testing.T, files map[string]string) (Fetcher, string) {
 }
 
 func TestFetchSingleDefinition(t *testing.T) {
-	fetcher, base := serve(t, map[string]string{"/redis.toml": definitionText("addon", "redis")})
-	fetched, err := fetcher.Fetch(context.Background(), Location{URL: base + "/redis.toml"})
+	fetcher, base := serve(t, map[string]string{"/memcached.toml": definitionText("addon", "memcached")})
+	fetched, err := fetcher.Fetch(context.Background(), Location{URL: base + "/memcached.toml"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(fetched) != 1 || fetched[0].URL != base+"/redis.toml" || fetched[0].Definition.Name != "redis" || fetched[0].Definition.Source != base+"/redis.toml" {
+	if len(fetched) != 1 || fetched[0].URL != base+"/memcached.toml" || fetched[0].Definition.Name != "memcached" || fetched[0].Definition.Source != base+"/memcached.toml" {
 		t.Fatalf("Fetch() = %+v", fetched)
 	}
 }
 
 func TestFetchIndex(t *testing.T) {
 	fetcher, base := serve(t, map[string]string{
-		"/set/index.toml":        "schema = 1\ndefinitions = [\"redis.toml\", \"langs/custom.toml\"]\n",
-		"/set/redis.toml":        definitionText("addon", "redis"),
+		"/set/index.toml":        "schema = 1\ndefinitions = [\"memcached.toml\", \"langs/custom.toml\"]\n",
+		"/set/memcached.toml":    definitionText("addon", "memcached"),
 		"/set/langs/custom.toml": definitionText("preset", "custom"),
 	})
 	fetched, err := fetcher.Fetch(context.Background(), Location{URL: base + "/set/index.toml"})
@@ -90,7 +90,7 @@ func TestFetchIndex(t *testing.T) {
 	for _, item := range fetched {
 		urls = append(urls, item.URL)
 	}
-	if want := []string{base + "/set/redis.toml", base + "/set/langs/custom.toml"}; !reflect.DeepEqual(urls, want) {
+	if want := []string{base + "/set/memcached.toml", base + "/set/langs/custom.toml"}; !reflect.DeepEqual(urls, want) {
 		t.Fatalf("URLs = %v, want %v", urls, want)
 	}
 }
@@ -101,13 +101,13 @@ func TestFetchRejectsInvalidRemoteFiles(t *testing.T) {
 		"/large.toml":         definitionText("addon", "large") + "# " + strings.Repeat("x", MaxRemoteFileSize) + "\n",
 		"/broken.toml":        "schema = ",
 		"/cache.toml":         invalidAddon,
-		"/redis.toml":         definitionText("addon", "redis"),
-		"/bad/index.toml":     "schema = 1\ndefinitions = [\"../redis.toml\", \"https://example.com/x.toml\", \"a.toml\", \"a.toml\", \"index.toml\"]\n",
+		"/memcached.toml":     definitionText("addon", "memcached"),
+		"/bad/index.toml":     "schema = 1\ndefinitions = [\"../memcached.toml\", \"https://example.com/x.toml\", \"a.toml\", \"a.toml\", \"index.toml\"]\n",
 		"/empty/index.toml":   "schema = 2\ndefinitions = []\n",
 		"/unknown/index.toml": "schema = 1\nfiles = []\n",
 		"/dup/index.toml":     "schema = 1\ndefinitions = [\"a.toml\", \"b.toml\", \"missing.toml\"]\n",
-		"/dup/a.toml":         definitionText("addon", "redis"),
-		"/dup/b.toml":         definitionText("addon", "redis"),
+		"/dup/a.toml":         definitionText("addon", "memcached"),
+		"/dup/b.toml":         definitionText("addon", "memcached"),
 	})
 	tests := []struct {
 		path string
@@ -117,11 +117,11 @@ func TestFetchRejectsInvalidRemoteFiles(t *testing.T) {
 		{"/large.toml", []string{"larger than 64 KiB"}},
 		{"/broken.toml", []string{"/broken.toml:1"}},
 		{"/cache.toml", []string{`service "cache" has no image`}},
-		{"/redirect" + "http://example.com/redis.toml", []string{"only https:// URLs are supported"}},
-		{"/bad/index.toml", []string{`entry "../redis.toml"`, `entry "https://example.com/x.toml"`, `entry "a.toml" is listed more than once`, `entry "index.toml"`}},
+		{"/redirect" + "http://example.com/memcached.toml", []string{"only https:// URLs are supported"}},
+		{"/bad/index.toml", []string{`entry "../memcached.toml"`, `entry "https://example.com/x.toml"`, `entry "a.toml" is listed more than once`, `entry "index.toml"`}},
 		{"/empty/index.toml", []string{"schema is 2", "definitions must list 1 to 64 files"}},
 		{"/unknown/index.toml", []string{"parse index", "files"}},
-		{"/dup/index.toml", []string{`definition "redis" is also provided by`, "missing.toml: server returned 404"}},
+		{"/dup/index.toml", []string{`definition "memcached" is also provided by`, "missing.toml: server returned 404"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
@@ -137,7 +137,7 @@ func TestFetchRejectsInvalidRemoteFiles(t *testing.T) {
 		})
 	}
 	// An HTTPS redirect is followed.
-	if _, err := fetcher.Fetch(context.Background(), Location{URL: base + "/redirect/redis.toml"}); err != nil {
+	if _, err := fetcher.Fetch(context.Background(), Location{URL: base + "/redirect/memcached.toml"}); err != nil {
 		t.Fatalf("Fetch() through HTTPS redirect: %v", err)
 	}
 }
@@ -165,12 +165,12 @@ func TestSourcesRoundTripAndPinning(t *testing.T) {
 	if sources, err := ReadSources(); err != nil || len(sources.Definitions) != 0 {
 		t.Fatalf("ReadSources() without file = %+v, %v", sources, err)
 	}
-	text := definitionText("addon", "redis")
-	writeDefinition(t, dir, "redis.toml", text)
-	redis, _ := Parse([]byte(text), "redis.toml")
+	text := definitionText("addon", "memcached")
+	writeDefinition(t, dir, "memcached.toml", text)
+	memcached, _ := Parse([]byte(text), "memcached.toml")
 	fetched := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
 	var sources Sources
-	sources.Set(RemoteSource{Name: "redis", URL: "https://example.com/redis.toml", SHA256: redis.SHA256(), Fetched: fetched})
+	sources.Set(RemoteSource{Name: "memcached", URL: "https://example.com/memcached.toml", SHA256: memcached.SHA256(), Fetched: fetched})
 	sources.Set(RemoteSource{Name: "go", URL: "https://example.com/go.toml", Ref: "v1", SHA256: strings.Repeat("0", 64), Fetched: fetched})
 	if err := WriteSources(sources); err != nil {
 		t.Fatal(err)
@@ -192,12 +192,12 @@ func TestSourcesRoundTripAndPinning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded, _ := registry.Lookup("redis"); loaded.Source != "https://example.com/redis.toml" {
+	if loaded, _ := registry.Lookup("memcached"); loaded.Source != "https://example.com/memcached.toml" {
 		t.Fatalf("remote source = %q", loaded.Source)
 	}
 
-	writeDefinition(t, dir, "redis.toml", text+"# edited\n")
-	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "remote definitions cannot be edited in place, run projectsetup preset update redis") {
+	writeDefinition(t, dir, "memcached.toml", text+"# edited\n")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "remote definitions cannot be edited in place, run projectsetup preset update memcached") {
 		t.Fatalf("Load() with edited remote definition: %v", err)
 	}
 }
@@ -207,13 +207,13 @@ func TestReadSourcesRejectsInvalidRecords(t *testing.T) {
 	t.Setenv(ConfigDirEnv, config)
 	content := `[[definition]]
 name = "Redis"
-url = "http://example.com/redis.toml"
+url = "http://example.com/memcached.toml"
 sha256 = "abc"
 fetched = 2026-10-10T12:00:00Z
 
 [[definition]]
 name = "Redis"
-url = "https://example.com/redis.toml"
+url = "https://example.com/memcached.toml"
 sha256 = "` + strings.Repeat("a", 64) + `"
 fetched = 2026-10-10T12:00:00Z
 `

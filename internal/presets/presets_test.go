@@ -412,12 +412,12 @@ func TestBuiltinDefinitions(t *testing.T) {
 	if got, want := registry.Names(KindPreset), []string{"node", "python", "rails", "ruby"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("built-in presets = %v, want %v", got, want)
 	}
-	if got, want := registry.Names(KindAddon), []string{"postgres", "sqlite"}; !reflect.DeepEqual(got, want) {
+	if got, want := registry.Names(KindAddon), []string{"go", "postgres", "redis", "rust", "sqlite"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("built-in add-ons = %v, want %v", got, want)
 	}
 	project := Project{Name: "demo", Home: "/home/vscode", Workspace: "/workspaces/demo"}
 	for _, preset := range registry.Names(KindPreset) {
-		for _, addons := range [][]string{nil, {"postgres"}, {"sqlite"}} {
+		for _, addons := range [][]string{nil, {"postgres"}, {"sqlite"}, {"go"}, {"rust"}, {"redis"}, {"go", "postgres", "redis", "rust", "sqlite"}} {
 			if _, err := registry.Resolve(Selection{Preset: preset, Addons: addons, Project: project}); err != nil {
 				t.Errorf("Resolve(%s, %v) error = %v", preset, addons, err)
 			}

@@ -1,0 +1,18 @@
+schema = 1
+kind = "addon"
+name = "rust"
+version = "1.0.0"
+description = "Rust toolchain with rustup and Cargo in the app image"
+
+[options.version]
+description = "Rust version"
+default = "1.99"
+pattern = '[0-9]+(\.[0-9]+){1,2}'
+
+[features."ghcr.io/devcontainers/features/rust:1"]
+version = "${option:version}"
+
+# The feature puts Cargo on PATH through containerEnv, which the generated
+# containerEnv.PATH replaces; dworm exec needs it listed here.
+[container]
+path = ["/usr/local/cargo/bin"]

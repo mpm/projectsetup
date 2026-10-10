@@ -35,7 +35,7 @@ Explicitly out of scope for the first version:
 - Arbitrary YAML or JSON fragments; presets use the constrained schema in [Preset System](#preset-system)
 - Automatic migration of hand-written Dev Containers
 - Automatic migrations of previously generated configurations; the explicit `upgrade` command reads supported older manifest schemas and writes the current one
-- Databases other than SQLite and PostgreSQL
+- Databases other than SQLite and PostgreSQL; the Redis add-on from the preset system roadmap is the one additional sidecar
 - Alpine or other musl-based images
 - Windows containers
 - Full application generators such as `rails new`
@@ -448,6 +448,14 @@ Do not forward the PostgreSQL sidecar port merely for `dworm`: `dworm` scans onl
 
 Application-specific database names and framework configuration are not rewritten in v1. `check` should warn when a detected application configuration appears incompatible.
 
+## Go, Rust, and Redis Add-ons
+
+- `go` installs the official Go feature with an explicit `version` option (default `1.27`) and adds `/usr/local/go/bin` and `/go/bin` to `containerEnv.PATH`.
+- `rust` installs the official Rust feature with an explicit `version` option (default `1.99`) and adds `/usr/local/cargo/bin` to `containerEnv.PATH`.
+- `redis` adds a `redis` sidecar (`redis:VERSION-trixie`, default version `8`) with a `redis-cli ping` health check and the `redis-data` named volume at `/data`, installs `redis-tools` in the app image, and sets `REDIS_URL=redis://redis:6379`. Like PostgreSQL, its port is not published.
+
+The generated `containerEnv.PATH` replaces PATH changes that features make through their own `containerEnv`, so every add-on that installs a feature lists its PATH entries. The opt-in smoke test checks them through a non-login `docker exec`, as `dworm exec` runs commands.
+
 ## SQLite Capability
 
 When selected, install `sqlite3` and `libsqlite3-dev` in the primary application image. Do not add a SQLite Compose service, dependency, volume, or database environment variables. Application-specific database paths and framework configuration are not rewritten.
@@ -629,6 +637,7 @@ Render representative configurations and compare the full directory tree against
 - Python with pip, OpenCode, no database
 - Python with uv, OpenCode and Claude, PostgreSQL
 - Python with Poetry
+- Ruby with Go, Node with Rust, and Python with Redis
 
 Golden tests must verify executable file modes as well as contents.
 
@@ -866,8 +875,8 @@ Each phase ends with `go test ./...`, `go vet ./...`, and gofmt passing.
 
 ### Phase 6: New built-in add-ons
 
-- [ ] Add `go`, `rust`, and `redis` add-ons, each with the PATH entries its feature needs, because the generated `containerEnv.PATH` replaces feature PATH changes.
-- [ ] Add golden fixtures and an opt-in build test per add-on.
+- [x] Add `go`, `rust`, and `redis` add-ons, each with the PATH entries its feature needs, because the generated `containerEnv.PATH` replaces feature PATH changes.
+- [ ] Add golden fixtures (`ruby-go`, `node-rust`, `python-redis`) and an opt-in build and smoke test per add-on. Fixtures and tests exist; the container runs still need to pass.
 
 ### Phase 7: Documentation and release
 

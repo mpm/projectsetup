@@ -757,10 +757,27 @@ const wantListOptionsJSON = `{
     "ruby"
   ],
   "addons": [
+    "go",
     "postgres",
+    "redis",
+    "rust",
     "sqlite"
   ],
   "definitions": {
+    "go": {
+      "name": "go",
+      "kind": "addon",
+      "version": "1.0.0",
+      "source": "builtin",
+      "description": "Go toolchain in the app image",
+      "options": {
+        "version": {
+          "description": "Go version",
+          "default": "1.27",
+          "pattern": "[0-9]+(\\.[0-9]+){1,2}"
+        }
+      }
+    },
     "node": {
       "name": "node",
       "kind": "preset",
@@ -835,6 +852,20 @@ const wantListOptionsJSON = `{
         }
       }
     },
+    "redis": {
+      "name": "redis",
+      "kind": "addon",
+      "version": "1.0.0",
+      "source": "builtin",
+      "description": "Redis sidecar with persistent data",
+      "options": {
+        "version": {
+          "description": "Redis version",
+          "default": "8",
+          "pattern": "[1-9][0-9]*(\\.[0-9]+)?"
+        }
+      }
+    },
     "ruby": {
       "name": "ruby",
       "kind": "preset",
@@ -846,6 +877,20 @@ const wantListOptionsJSON = `{
           "description": "Ruby version",
           "default": "4.0",
           "pattern": "[0-9]+(\\.[0-9]+){0,2}([-+][a-zA-Z0-9.-]+)?"
+        }
+      }
+    },
+    "rust": {
+      "name": "rust",
+      "kind": "addon",
+      "version": "1.0.0",
+      "source": "builtin",
+      "description": "Rust toolchain with rustup and Cargo in the app image",
+      "options": {
+        "version": {
+          "description": "Rust version",
+          "default": "1.99",
+          "pattern": "[0-9]+(\\.[0-9]+){1,2}"
         }
       }
     },
@@ -910,7 +955,8 @@ func TestRunInitListOptionsText(t *testing.T) {
 	}
 	for _, want := range []string{
 		"Presets (--preset): node, python, rails, ruby\n",
-		"Add-ons (--addon, repeatable): postgres, sqlite\n",
+		"Add-ons (--addon, repeatable): go, postgres, redis, rust, sqlite\n",
+		"  redis.version: Redis version; default 8\n",
 		"Databases (--database, alias for --addon): none, postgres, sqlite\n",
 		"  node.package_manager: Node.js package manager: npm (default), pnpm, yarn\n",
 		"  node.version: Node.js version; default 26\n",

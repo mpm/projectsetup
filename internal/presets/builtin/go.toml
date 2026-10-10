@@ -1,0 +1,18 @@
+schema = 1
+kind = "addon"
+name = "go"
+version = "1.0.0"
+description = "Go toolchain in the app image"
+
+[options.version]
+description = "Go version"
+default = "1.27"
+pattern = '[0-9]+(\.[0-9]+){1,2}'
+
+[features."ghcr.io/devcontainers/features/go:1"]
+version = "${option:version}"
+
+# The feature puts these on PATH through containerEnv, which the generated
+# containerEnv.PATH replaces; dworm exec needs them listed here.
+[container]
+path = ["/usr/local/go/bin", "/go/bin"]
