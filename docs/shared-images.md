@@ -1,6 +1,6 @@
 # Consume a digest-pinned shared toolchain
 
-This walkthrough uses an independently built Node toolchain artifact from two projects. It covers the supported definition schema 2 consumption contract. It does not build or publish an image family; recipes and layer measurements remain later [roadmap work](../SHARED_IMAGES_ROADMAP.md).
+This walkthrough uses an independently built Node toolchain artifact from two projects. It covers the supported definition schema 2 consumption contract. For a buildable customizable family, use the [local reference workflow](image-family.md); its [recorded acceptance](image-family-evidence.md) contains actual artifact IDs and layer measurements. This digest-pinned walkthrough itself uses illustrative artifact values.
 
 ## Prepare the artifact
 
@@ -112,7 +112,7 @@ dworm exec -- npm --version
 dworm exec -- gh --version
 ```
 
-First startup runs the normal post-create script, including `npm ci` when both files exist. No application server starts automatically. Actual startup uses host workspace mounts and, in this portable example, Dev Container UID adjustment. Fixed-ID consumption is available through the contract below. Host mount access and AI first-run behavior still require startup verification. Do not treat this walkthrough as proof of safe shared-home ownership or measured two-project layer savings; measured two-project layer and ownership acceptance remains in Phase 3.
+First startup runs the normal post-create script, including `npm ci` when both files exist. No application server starts automatically. Actual startup uses host workspace mounts and, in this portable example, Dev Container UID adjustment. Fixed-ID consumption is available through the contract below. Host mount access and AI first-run behavior still require startup verification. This illustrative walkthrough is not measured evidence. See the separate [two-project acceptance](image-family-evidence.md) for real fixed-ID startup and layer measurements.
 
 ## Establish fixed IDs before installing toolchains
 
@@ -153,7 +153,7 @@ ENV HOME=/home/vscode
 USER vscode
 ```
 
-Do not use this fragment to renumber an existing populated toolchain; rebuild it from the account-establishment stage. Account collisions fail with an owner and remedy rather than deleting unrelated users/groups. Verify supplementary group membership and sudo configuration for your chosen base. The consumer Dockerfile asserts existing IDs before its installation steps and never mutates accounts; `check --runtime` verifies final numeric IDs. Fixed consumption disables Dev Container UID adjustment, avoiding that mechanism's home-copying layer. Actual savings still need the Phase 3 measurements.
+Do not use this fragment to renumber an existing populated toolchain; rebuild it from the account-establishment stage. Account collisions fail with an owner and remedy rather than deleting unrelated users/groups. Verify supplementary group membership and sudo configuration for your chosen base. The consumer Dockerfile asserts existing IDs before its installation steps and never mutates accounts; `check --runtime` verifies final numeric IDs. Fixed consumption disables Dev Container UID adjustment, avoiding that mechanism's home-copying layer. The separate [Phase 3 measurements](image-family-evidence.md) confirm matching-ID startup without an additional UID-adjustment layer.
 
 AI mounts remain outside the artifact. The shared installer creates/repairs only exact unmounted container parent directories. It checks mounted sources and nested entries for access, never recursively chowns them, and reports the host source requiring repair. Correct access deliberately on the host or choose a compatible image; do not run recursive ownership repair across credentials, caches, or history.
 

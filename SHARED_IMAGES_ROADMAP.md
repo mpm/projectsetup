@@ -1,6 +1,6 @@
 # Shared Toolchain Images: Implementation Roadmap
 
-Status: Phase 1 implementation and digest-pinned end-to-end consumption documentation completed. Ownership policy, measured two-project shared-layer acceptance, and the explicit host-integrations extension remain pending. Schedule host integrations alongside or immediately after Phase 2.
+Status: Phases 1–3 and the explicit host-integrations extension are complete, including measured local two-project acceptance. Phase 4 was evaluated and is deferred because its conditional need is not established; it is not required for this reference family. Exact PostgreSQL reference work is tracked in Phase 5.
 
 This roadmap records the shared-image design discussed with the user. It is a handoff for a future implementation session. Read `AGENTS.md` and `HANDOFF.md` first, then this document. `HANDOFF.md` remains the contract for existing behavior; this roadmap describes proposed extensions.
 
@@ -261,7 +261,7 @@ The generated Dockerfile asserts the existing base `vscode` UID/GID before insta
 
 Implementation verification: `gofmt`, `go test ./...`, and `go vet ./...` pass, including 16 golden trees and available real Compose/read-configuration checks. Tests cover parser/editor agreement, ID/mode/schema gates, portable compatibility, snapshot regeneration, atomic mismatch rejection, Linux/macOS host policy, source access, fixed merged metadata, and ownership-only runtime probes. `TestFixedOwnershipIntegration` passes against the local `ps-lang-node-app:latest` artifact (vscode 1000:1000, gh 2.101.0), deriving/removing only test-owned images and containers. It verifies final runtime identity, fixed merged policy, mismatched artifact build rejection, first-run fake Codex installation with initially absent/root-owned parents beside a read-only nested bind, unchanged nested state, and actionable unwritable AI mount errors. Invocation used `BUILDX_BAKE_ENTITLEMENTS_FS=0 PROJECTSETUP_OWNERSHIP_TESTS=1 PROJECTSETUP_OWNERSHIP_BASE=ps-lang-node-app:latest`; the entitlement override permits this isolated test's CLI-generated temporary Dockerfile with the installed Compose/Bake versions and does not change host configuration. Ordinary tests retain Docker-independent coverage; real macOS sharing has not been exercised here.
 
-Measured acceptance remains pending: demonstrate that matching fixed-ID consumers avoid toolchain-copying UID-adjustment layers. Phase 3 must report real two-project layer measurements separately from writable containers and volumes; this checklist is not evidence of measured savings.
+Measured acceptance is complete in Phase 3: two real matching fixed-ID consumers use their built Compose images directly, without UID-adjustment/home-copy layers. See [recorded evidence](docs/image-family-evidence.md) for shared-layer accounting and separate writable-container/volume measurements.
 
 ## Extension alongside or after Phase 2: Explicit host integrations
 
@@ -288,27 +288,29 @@ Real `TestWaylandIntegration` passes with `PROJECTSETUP_WAYLAND_TESTS=1 PROJECTS
 
 ## Phase 3: Reference recipes and the user's image family
 
-- [ ] Provide a small documented reference recipe/workflow, using custom definitions for the user's CLI bundles and variants.
-- [ ] Verify chosen runtime releases, base-image references, architecture support, and feature installer pins before building.
-- [ ] Build the foundation once and derive useful variants from the actual shared parent artifacts.
-- [ ] Install common CLIs once; keep expensive specialist dependencies scoped to their consumers.
-- [ ] Keep compiler/package caches out of final layers. Clean temporary build data in the same layer, or use suitable cache mounts/multi-stage builds.
-- [ ] Ensure image metadata excludes project-specific mounts, credentials, lifecycle scripts, and dependency installation.
-- [ ] Record immutable references and demonstrate consuming presets with appropriate dependency setup.
-- [ ] Document explicit image updates, definition refresh, configuration regeneration, and container recreation. Plain `upgrade` must not silently move projects to new artifacts.
-- [ ] Measure shared layers and UID-adjustment behavior using two representative projects. Report image savings separately from writable container/volume usage.
+- [x] Provide a small documented reference recipe/workflow, using custom definitions for the user's CLI bundles and variants.
+- [x] Verify chosen runtime releases, base-image references, architecture support, and feature installer pins before building.
+- [x] Build the foundation once and derive useful variants from the actual shared parent artifacts.
+- [x] Install common CLIs once; keep expensive specialist dependencies scoped to their consumers.
+- [x] Keep compiler/package caches out of final layers. Clean temporary build data in the same layer, or use suitable cache mounts/multi-stage builds.
+- [x] Ensure image metadata excludes project-specific mounts, credentials, lifecycle scripts, and dependency installation.
+- [x] Record immutable references and demonstrate consuming presets with appropriate dependency setup.
+- [x] Document explicit image updates, definition refresh, configuration regeneration, and container recreation. Plain `upgrade` must not silently move projects to new artifacts.
+- [x] Measure shared layers and UID-adjustment behavior using two representative projects. Report image savings separately from writable container/volume usage.
+
+Implementation and evidence: [the local image-family workflow](docs/image-family.md), [reference recipes/scripts](examples/shared-images/), and [recorded acceptance](docs/image-family-evidence.md) provide a clean Debian foundation, Node child and scoped native child. Upstream base manifest, amd64 support and binary checksums were verified before builds; no features/installers require locks in these direct-archive recipes. Local content IDs and integrity-guarded tags are explicitly distinguished from repository digests. Two actual projects with jq/ripgrep share six prefix layers (five actual parent layers plus the identical empty ID-assertion layer), saving 427,675,136 bytes in uncompressed layer-tar union accounting relative to independent copies. This is not reclaimed daemon disk space. Each startup image ID equals its built Compose image ID; writable usage is separately 1,469,269/1,469,253 bytes, with only fixture workspace binds and zero volumes. Both execute npm dependency setup and non-login Node/npm/gh checks as matching vscode 1000:1000. Only owned fixture stacks were removed; artifacts/cache remain. Required Go tests/vet, shell/Python checks, real Compose/read-configuration/build/runtime/startup checks, collision/lock-mismatch failures, and offline snapshot upgrade passed. No Go/golden changes or unavailable required checks.
 
 Acceptance: a reusable, versioned family can be built locally or published to the user's registry and consumed by ordinary projectsetup presets. Maintenance of an official published projectsetup catalog is a later decision, not a prerequisite.
 
 ## Phase 4: Image build/export workflow, if needed
 
-After consumption works, determine whether separately maintained recipes are causing duplication or drift. If justified, add an explicit image-build/export workflow that reuses definition installation contributions.
+Evaluated after Phase 3: **not currently justified; conditional implementation deferred.** Three small recipes derive from actual parents and use pinned direct archives, with one consumer-definition generator. There is no duplicated feature-installation machinery or demonstrated drift to resolve. The [decision](docs/image-family.md#buildexport-decision) retains the reference workflow; no first-class image-build/export command is claimed or required to complete this roadmap’s present scope. Revisit when multiple maintained families duplicate definition installation contributions or feature locks. The following are requirements for that future conditional work, not unfinished acceptance requirements for Phase 3:
 
-- [ ] Separate image-build inputs from project initialization inputs in the typed model.
-- [ ] Reuse runtime/tool installation definitions while excluding sidecars, workspace mounts, AI credentials/state, and application dependency setup.
-- [ ] Keep image output deterministic and feature locks associated with the image recipe.
-- [ ] Record provenance: contributing definitions/options, runtime versions, architecture, user IDs, and resulting artifact references.
-- [ ] Support explicit local builds; make any publishing explicit. Avoid automatic remote builds or a hidden combinatorial image catalog.
+- Deferred: Separate image-build inputs from project initialization inputs in the typed model.
+- Deferred: Reuse runtime/tool installation definitions while excluding sidecars, workspace mounts, AI credentials/state, and application dependency setup.
+- Deferred: Keep image output deterministic and feature locks associated with the image recipe.
+- Deferred: Record provenance: contributing definitions/options, runtime versions, architecture, user IDs, and resulting artifact references.
+- Deferred: Support explicit local builds; make any publishing explicit. Avoid automatic remote builds or a hidden combinatorial image catalog.
 
 Image build/export command names and TOML field names are intentionally undecided. Phase 1's preinstalled declaration fields are implemented and documented above; they describe artifact consumption, not a build/export command.
 

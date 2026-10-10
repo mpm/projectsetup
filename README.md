@@ -381,7 +381,7 @@ Omit `image.ownership` for portable behavior: Dev Container UID adjustment remai
 
 #### Fixed runtime versions and project pins
 
-For a complete consuming preset, two project configurations, explicit artifact verification, and offline upgrade/refresh instructions, see [Consume a digest-pinned shared toolchain](docs/shared-images.md). Its artifact values are illustrative; replace them with verified values from your own image.
+For a complete consuming preset, two project configurations, explicit artifact verification, and offline upgrade/refresh instructions, see [Consume a digest-pinned shared toolchain](docs/shared-images.md). Its artifact values are illustrative; replace them with verified values from your own image. For buildable custom bundles, fixed-ID consumers, explicit updates and measured layer sharing, see the [local image-family workflow](docs/image-family.md) and [recorded acceptance](docs/image-family-evidence.md).
 
 Nonempty preinstalled claims require a **literal `image.base`**, without option/project placeholders or shell expansion. Configurable image-family selection is not supported: use a separate preset per fixed artifact. Normal checks and upgrades use the snapshotted image/declarations offline; changing the artifact requires explicitly selecting another preset or refreshing its definition.
 

@@ -1,0 +1,170 @@
+{
+  "date": "2026-10-11 Europe/Berlin (2026-10-10 UTC during run)",
+  "platform": "linux/amd64",
+  "docker": "29.9.0",
+  "compose": "5.6.0",
+  "devcontainerCLI": "0.89.0",
+  "ownership": {
+    "user": "vscode",
+    "uid": 1000,
+    "gid": 1000,
+    "updateRemoteUserUID": false
+  },
+  "family": [
+    {
+      "variant": "foundation",
+      "id": "sha256:61e40924be95ef8c41b2b3905446aadf9283c5ecf7facc32f6d1e02ef5fe6f1a",
+      "localTags": [
+        "local/projectsetup-reference-1791673398-429480-foundation:1",
+        "local/projectsetup-reference-1791673717-455282-foundation:1",
+        "local/projectsetup-reference-1791673852-457111-foundation:1"
+      ],
+      "repositoryDigests": [],
+      "sizeBytes": 232675331,
+      "layers": [
+        "sha256:e58989146fcec76699871403b9897b5c014af1ccd85f5a9300a215e7975525d7",
+        "sha256:1ad7cf4f500b4407cc2b7e10126e1aeb5eba25826bb7b8fdb8f295e51959b930",
+        "sha256:b5c63628d8f2eea385be5f6cf78f3b4722c4e78b57e573fa8914d82701bde6e6",
+        "sha256:952b3e31b68016301b668e61b120df8b07ae39a5896c5e15fc1007fb10f54bbe"
+      ],
+      "imageUser": "vscode",
+      "volumes": null,
+      "devcontainerMetadata": null
+    },
+    {
+      "variant": "node",
+      "id": "sha256:dba1a8ffea93d401d4b7eb3c9faa9bda2c6a687edd2172b72ef4e78f6c0aecbb",
+      "localTags": [
+        "local/projectsetup-reference-1791673852-457111-node:1"
+      ],
+      "repositoryDigests": [],
+      "sizeBytes": 417356908,
+      "layers": [
+        "sha256:e58989146fcec76699871403b9897b5c014af1ccd85f5a9300a215e7975525d7",
+        "sha256:1ad7cf4f500b4407cc2b7e10126e1aeb5eba25826bb7b8fdb8f295e51959b930",
+        "sha256:b5c63628d8f2eea385be5f6cf78f3b4722c4e78b57e573fa8914d82701bde6e6",
+        "sha256:952b3e31b68016301b668e61b120df8b07ae39a5896c5e15fc1007fb10f54bbe",
+        "sha256:f1c1fccb32eecaf6484caa3b019ae764d47925d5d75ab4b84d7a9e1472e51ace"
+      ],
+      "imageUser": "vscode",
+      "volumes": null,
+      "devcontainerMetadata": null
+    },
+    {
+      "variant": "node-native",
+      "id": "sha256:7cdf57b7e7cc7e247807b4a941cf46aaf3d9ba7ceacfb39c17a3b97f60c41f91",
+      "localTags": [
+        "local/projectsetup-reference-1791673852-457111-node-native:1"
+      ],
+      "repositoryDigests": [],
+      "sizeBytes": 672082269,
+      "layers": [
+        "sha256:e58989146fcec76699871403b9897b5c014af1ccd85f5a9300a215e7975525d7",
+        "sha256:1ad7cf4f500b4407cc2b7e10126e1aeb5eba25826bb7b8fdb8f295e51959b930",
+        "sha256:b5c63628d8f2eea385be5f6cf78f3b4722c4e78b57e573fa8914d82701bde6e6",
+        "sha256:952b3e31b68016301b668e61b120df8b07ae39a5896c5e15fc1007fb10f54bbe",
+        "sha256:f1c1fccb32eecaf6484caa3b019ae764d47925d5d75ab4b84d7a9e1472e51ace",
+        "sha256:9aaef2e7a518c0f87132e79fb01736b1b34fdf18b6420b8040f69cbfbc5846d4"
+      ],
+      "imageUser": "vscode",
+      "volumes": null,
+      "devcontainerMetadata": null
+    }
+  ],
+  "measurement": {
+    "images": [
+      {
+        "tag": "ps-reference-projectsetup-reference-root-owned-a-app:latest",
+        "id": "sha256:a4ec998144d1deb213f73e65efe8649b66531725fa80aad2f3ffa612efba1070",
+        "inspectSizeBytes": 419525220,
+        "layers": [
+          "sha256:e58989146fcec76699871403b9897b5c014af1ccd85f5a9300a215e7975525d7",
+          "sha256:1ad7cf4f500b4407cc2b7e10126e1aeb5eba25826bb7b8fdb8f295e51959b930",
+          "sha256:b5c63628d8f2eea385be5f6cf78f3b4722c4e78b57e573fa8914d82701bde6e6",
+          "sha256:952b3e31b68016301b668e61b120df8b07ae39a5896c5e15fc1007fb10f54bbe",
+          "sha256:f1c1fccb32eecaf6484caa3b019ae764d47925d5d75ab4b84d7a9e1472e51ace",
+          "sha256:317140e5f36f7c3f85cb4a5020c2e5f47b2d7279b67359cc8346bbf410f90a41",
+          "sha256:5a0062c8f22d215743142af08242f2def5dfda9da43b6fd438c0e3746289f52e",
+          "sha256:c601e219a442e84099be8e674b187a269b8973433c212c5b2af857b7f42ce945"
+        ],
+        "layerTarBytes": 429892096
+      },
+      {
+        "tag": "ps-reference-projectsetup-reference-root-owned-b-app:latest",
+        "id": "sha256:a74d5a5daa37391695051f4162b33b30142cc201efe67612a4d9314d7516c27b",
+        "inspectSizeBytes": 423091073,
+        "layers": [
+          "sha256:e58989146fcec76699871403b9897b5c014af1ccd85f5a9300a215e7975525d7",
+          "sha256:1ad7cf4f500b4407cc2b7e10126e1aeb5eba25826bb7b8fdb8f295e51959b930",
+          "sha256:b5c63628d8f2eea385be5f6cf78f3b4722c4e78b57e573fa8914d82701bde6e6",
+          "sha256:952b3e31b68016301b668e61b120df8b07ae39a5896c5e15fc1007fb10f54bbe",
+          "sha256:f1c1fccb32eecaf6484caa3b019ae764d47925d5d75ab4b84d7a9e1472e51ace",
+          "sha256:317140e5f36f7c3f85cb4a5020c2e5f47b2d7279b67359cc8346bbf410f90a41",
+          "sha256:f0e4a321ff0c7d6f3e9feea5a70a9bac0669202d01357f3ce5e940bc4f876679",
+          "sha256:67a96f9b26ccc4a88e73e65160f12151025dc226d55cca55aebf9ae8af7a3417"
+        ],
+        "layerTarBytes": 433444352
+      }
+    ],
+    "sharedPrefixLayerCount": 6,
+    "sharedLayerCount": 6,
+    "sharedLayerTarBytes": 427675136,
+    "uniqueLayerTarBytes": 435661312,
+    "independentCopiesLayerTarBytes": 863336448,
+    "scope": "Uncompressed saved image layer tar bytes only; excludes writable containers, volumes, compressed blobs, build cache and filesystem allocation overhead."
+  },
+  "containers": [
+    {
+      "consumer": "a",
+      "imageId": "sha256:a4ec998144d1deb213f73e65efe8649b66531725fa80aad2f3ffa612efba1070",
+      "writableBytes": 1469269,
+      "rootFilesystemBytes": 420994489,
+      "mountTypes": [
+        "bind"
+      ],
+      "namedVolumeCount": 0,
+      "runtimeOutput": [
+        "uid=1000(vscode) gid=1000(vscode) groups=1000(vscode)",
+        "v22.14.0",
+        "10.9.2",
+        "gh version 2.67.0 (2025-02-11)",
+        "https://github.com/cli/cli/releases/tag/v2.67.0",
+        "/usr/bin/jq",
+        "jq-1.6"
+      ],
+      "dependencyPostinstallMarker": true
+    },
+    {
+      "consumer": "b",
+      "imageId": "sha256:a74d5a5daa37391695051f4162b33b30142cc201efe67612a4d9314d7516c27b",
+      "writableBytes": 1469253,
+      "rootFilesystemBytes": 424560326,
+      "mountTypes": [
+        "bind"
+      ],
+      "namedVolumeCount": 0,
+      "runtimeOutput": [
+        "uid=1000(vscode) gid=1000(vscode) groups=1000(vscode)",
+        "v22.14.0",
+        "10.9.2",
+        "gh version 2.67.0 (2025-02-11)",
+        "https://github.com/cli/cli/releases/tag/v2.67.0",
+        "ripgrep 13.0.0",
+        "-SIMD -AVX (compiled)",
+        "+SIMD +AVX (runtime)"
+      ],
+      "dependencyPostinstallMarker": true
+    }
+  ],
+  "nativeRuntimeOutput": [
+    "uid=1000(vscode) gid=1000(vscode) groups=1000(vscode)",
+    "v22.14.0",
+    "10.9.2",
+    "gh version 2.67.0 (2025-02-11)",
+    "https://github.com/cli/cli/releases/tag/v2.67.0",
+    "gcc (Debian 12.2.0-14+deb12u1) 12.2.0",
+    "15.19"
+  ],
+  "rootOwnedRuntimeTreeVerified": true,
+  "bakedCacheCheckBeforeExecutingTools": true
+}
