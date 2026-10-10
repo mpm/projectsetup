@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+
+	"github.com/mpm/projectsetup/internal/presets"
 )
 
 type inspectedImage struct {
@@ -211,7 +213,19 @@ func validateMergedMetadata(output []byte, want devcontainerDocument, fail func(
 		fail("resolve expected AI mounts for effective metadata: %v", err)
 	}
 	for index, mount := range want.Mounts {
-		wantMounts[index] = strings.ReplaceAll(mount, "${localEnv:HOME}", home)
+		mount = strings.ReplaceAll(mount, "${localEnv:HOME}", home)
+		source := mountField(mount, "source")
+		if !strings.Contains(source, "${localEnv:") {
+			wantMounts[index] = mount
+			continue
+		}
+		resolvedSource, resolveErr := presets.ResolveHostSource(source, os.LookupEnv)
+		if resolveErr != nil {
+			fail("resolve expected bind mount metadata: %v", resolveErr)
+		} else {
+			mount = strings.Replace(mount, "source="+source, "source="+resolvedSource, 1)
+		}
+		wantMounts[index] = mount
 	}
 	if len(effective.Mounts) != len(wantMounts) || (len(wantMounts) > 0 && !reflect.DeepEqual(effective.Mounts, wantMounts)) {
 		fail("effective mounts differ from the generated mounts; remove inherited project or credential mounts")

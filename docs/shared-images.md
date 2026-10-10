@@ -188,3 +188,7 @@ projectsetup check --runtime
 ```
 
 Refresh resolves all recorded preset/add-on names from the local registry, retaining recorded options and filling only newly introduced defaults. It validates the original snapshots first; a corrupted project snapshot is not repaired by refresh. Remote definitions must be updated through a separate explicit `preset update` before refresh. Refresh does not resolve a moving image tag, fetch an image, or replace an existing running container. Recreate the project's container through your normal Dev Container workflow to apply the new files; preserve database volumes and treat database migration separately.
+
+## Optional Linux display access
+
+Keep display sockets out of shared-image metadata. Select the schema 2 [Wayland host integration](../README.md#explicit-host-integrations) in the consuming project instead. Its TOML snapshot preserves `${localEnv:XDG_RUNTIME_DIR}/${localEnv:WAYLAND_DISPLAY}` across ordinary upgrades; host values are resolved only for checks/startup. Matching fixed IDs are particularly useful for a compositor's per-user runtime socket. Artifact runtime probes remain mount-free; use the separate opt-in real Wayland test for socket/protocol access.

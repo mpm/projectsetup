@@ -152,7 +152,7 @@ func Check(root string, options Options) []Diagnostic {
 		validateCompose(root, devDir, cfg, resolved, add)
 	}
 	if options.Runtime && manifestValid && !resolved.RequiresImageVerification() {
-		add(Error, ".devcontainer/projectsetup.json", "runtime verification requires image.ownership or nonempty image.preinstalled claims; legacy presets retain their explicit integration smoke tests")
+		add(Error, ".devcontainer/projectsetup.json", "runtime verification requires image.ownership or nonempty image.preinstalled claims or explicit host integrations; legacy presets retain their explicit integration smoke tests")
 	}
 	if options.External || options.Runtime {
 		build := (options.Build || options.Runtime) && ErrorCount(diagnostics) == 0
@@ -298,6 +298,25 @@ func validateDevcontainer(root, devDir string, manifest config.Manifest, resolve
 			add(Error, path, "feature %q reinstalls preinstalled tool %q; remove its installer when consuming the image", id, tool)
 		}
 	}
+	for _, mount := range resolved.Mounts {
+		if !containsString(document.Mounts, mount.DevcontainerMount()) {
+			add(Error, path, "declared host integration mount %q is missing or changed", mount.Target)
+		}
+	}
+	if len(resolved.Mounts) > 0 {
+		expected := append([]string(nil), expectedAIMounts(manifest.AITools)...)
+		for _, mount := range resolved.Mounts {
+			expected = append(expected, mount.DevcontainerMount())
+		}
+		for _, mount := range document.Mounts {
+			if !containsString(expected, mount) {
+				add(Error, path, "unexpected mount %q; declare host integrations in the selected definition", mount)
+			}
+		}
+	}
+	if checkHost {
+		validateHostIntegrations(resolved.Mounts, resolved.Ownership, add)
+	}
 	for _, expected := range expectedAIMounts(manifest.AITools) {
 		if !containsString(document.Mounts, expected) {
 			add(Error, path, "selected AI tool mount %q is missing", expected)
@@ -340,6 +359,16 @@ func validateDevcontainer(root, devDir string, manifest config.Manifest, resolve
 				}
 			}
 			for _, mount := range document.Mounts {
+				declared := false
+				for _, integration := range resolved.Mounts {
+					if mount == integration.DevcontainerMount() {
+						declared = true
+						break
+					}
+				}
+				if declared {
+					continue
+				}
 				source := mountField(mount, "source")
 				if strings.HasPrefix(source, "${localEnv:HOME}/") {
 					hostPath := filepath.Join(home, filepath.FromSlash(strings.TrimPrefix(source, "${localEnv:HOME}/")))
@@ -624,7 +653,7 @@ func sortedKeys[V any](values map[string]V) []string {
 
 func validateExternal(root, devDir string, compose, build bool, resolved presets.Resolved, document devcontainerDocument, options Options, add func(Severity, string, string, ...any)) {
 	if resolved.RequiresImageVerification() && !build {
-		add(Warning, ".devcontainer/Dockerfile", "shared-image Dev Container metadata has not been inspected; run projectsetup check --build before starting the container")
+		add(Warning, ".devcontainer/Dockerfile", "base-image Dev Container metadata has not been inspected; run projectsetup check --build before starting the container")
 	}
 	if compose {
 		if _, err := options.Runner.LookPath("docker"); err != nil {

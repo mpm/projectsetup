@@ -142,8 +142,9 @@ type Image struct {
 }
 
 type Container struct {
-	Path []string          `toml:"path"`
-	Env  map[string]string `toml:"env"`
+	Mounts []BindMount       `toml:"mounts"`
+	Path   []string          `toml:"path"`
+	Env    map[string]string `toml:"env"`
 }
 
 type Setup struct {
@@ -322,10 +323,16 @@ func (d Definition) problems() []string {
 			fail("image.base must be literal when image.preinstalled makes claims; select a separate preset for each fixed artifact")
 		}
 	}
+	if d.Schema != 2 && d.Container.Mounts != nil {
+		fail("container.mounts requires schema 2")
+	}
 	problems = append(problems, d.Fragment.problems("", d.Options)...)
 
 	for i, variant := range d.Variants {
 		where := fmt.Sprintf("variant[%d]", i)
+		if d.Schema != 2 && variant.Container.Mounts != nil {
+			fail("%s: container.mounts requires schema 2", where)
+		}
 		if variant.Image.Base != "" {
 			fail("%s: image.base cannot be set in a variant", where)
 		}
@@ -402,6 +409,11 @@ func (f Fragment) problems(prefix string, options map[string]Option) []string {
 			fail("%scontainer.env: %s is managed by projectsetup", prefix, key)
 		}
 		text("container.env."+key, f.Container.Env[key])
+	}
+	for i, mount := range f.Container.Mounts {
+		for _, problem := range mount.problems() {
+			fail("%scontainer.mounts[%d]: %s", prefix, i, problem)
+		}
 	}
 	text("setup.script", f.Setup.Script)
 

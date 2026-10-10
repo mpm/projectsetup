@@ -38,6 +38,9 @@ func renderDevcontainer(cfg config.Config, resolved presets.Resolved) ([]byte, e
 		PostCreateCommand: ".devcontainer/scripts/post-create.sh",
 		ShutdownAction:    "stopCompose",
 	}
+	for _, mount := range resolved.Mounts {
+		document.Mounts = append(document.Mounts, mount.DevcontainerMount())
+	}
 	if resolved.Ownership != nil {
 		update := false
 		document.UpdateRemoteUserUID = &update

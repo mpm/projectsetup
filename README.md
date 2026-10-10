@@ -232,7 +232,7 @@ devcontainer build --workspace-folder <project-root>
 
 It builds the configuration but does not start the Dev Container or application.
 
-For a preset with **nonempty preinstalled claims or fixed ownership**, `check --build` first inspects the locally available base image's `devcontainer.metadata` and asks the Dev Container CLI for its effective merged configuration. Pull or build that base image locally before checking; a missing image or unavailable daemon fails with guidance. Unsafe inherited lifecycle commands or mounts stop the check before the project build. After building, it inspects the final image user/HOME and merged feature requests, environment, mounts, UID-adjustment policy, and lifecycle commands. Inspection creates stopped, mount-free probe containers, never runs their commands, and removes only those probes (including any anonymous volumes they created). Cleanup failures identify the probe to remove. Ordinary `check` warns that shared-image metadata is uninspected; generation and static checks remain offline. These inspections do not verify executable availability, versions, glibc compatibility, home writability, or runtime behavior.
+For a preset with **nonempty preinstalled claims, fixed ownership, or explicit host integrations**, `check --build` first inspects the locally available base image's `devcontainer.metadata` and asks the Dev Container CLI for its effective merged configuration. Pull or build that base image locally before checking; a missing image or unavailable daemon fails with guidance. Unsafe inherited lifecycle commands or mounts stop the check before the project build. After building, it inspects the final image user/HOME and merged feature requests, environment, mounts, UID-adjustment policy, and lifecycle commands. Inspection creates stopped, mount-free probe containers, never runs their commands, and removes only those probes (including any anonymous volumes they created). Cleanup failures identify the probe to remove. Ordinary `check` warns that shared-image metadata is uninspected; generation and static checks remain offline. These inspections do not verify executable availability, versions, glibc compatibility, home writability, or runtime behavior.
 
 `check --runtime` **implies a build** and requires nonempty `image.preinstalled` claims or fixed `image.ownership`. After static/external checks, the build, and successful base/final metadata inspection, it starts a separate disposable container from the built image with the generated `containerEnv`. It overrides the image startup command, disables networking and inherited healthchecks, mounts no workspace or host credentials, and uses non-login direct `docker exec` as `vscode`, without lifecycle scripts or application setup. It checks:
 
@@ -397,7 +397,7 @@ Run `projectsetup check --build` before starting a shared-image project. Baked f
 
 Reusable images must carry **toolchain-only metadata**: no project lifecycle/dependency/server commands, Dev Container mounts, or Docker `VOLUME` declarations. The effective container/remote users must be `vscode`; HOME must agree with `/home/vscode`; generated PATH/environment must survive merging; reserved `remoteEnv` values must not conflict with direct execution. Effective `updateRemoteUserUID` must match the selected policy: false for fixed ownership, and enabled/default for portable presets. The project post-create script must appear exactly once, with no other nonempty lifecycle hooks (including hooks from explicitly requested features).
 
-Do not reuse an application image whose metadata contains its project setup. Rebuild its recipe without those entries, or deliberately reset `LABEL devcontainer.metadata="[]"` in a **separately built toolchain artifact**, retaining any needed runtime environment in image `ENV` or preset `container.env`/paths. A reset in the consuming project's Dockerfile is insufficient: the Dev Container CLI reads `FROM` metadata before building and can re-emit inherited hooks. Project configuration overrides do not remove additive lifecycle commands/mounts. Checks fail with the image, metadata entry, and field requiring repair; they do not rewrite the base image, definitions, or credentials. Absent/empty preinstalled declarations without fixed ownership retain historical metadata/build gating; targeted non-recursive parent handling applies to all presets.
+Do not reuse an application image whose metadata contains its project setup. Rebuild its recipe without those entries, or deliberately reset `LABEL devcontainer.metadata="[]"` in a **separately built toolchain artifact**, retaining any needed runtime environment in image `ENV` or preset `container.env`/paths. A reset in the consuming project's Dockerfile is insufficient: the Dev Container CLI reads `FROM` metadata before building and can re-emit inherited hooks. Project configuration overrides do not remove additive lifecycle commands/mounts. Checks fail with the image, metadata entry, and field requiring repair; they do not rewrite the base image, definitions, or credentials. Absent/empty preinstalled declarations without fixed ownership or explicit host integrations retain historical metadata/build gating; targeted non-recursive parent handling applies to all presets.
 
 ### Writing a definition
 
@@ -481,7 +481,7 @@ Rules:
 - Contributions are applied in this order: the preset, then add-ons sorted by name. Each definition's top-level block comes first, followed by its matching variants in file order. A variant can override its own definition's feature options, `env` values, and service fields, but two definitions cannot set the same feature, environment variable, or service.
 - Feature PATH changes made through the feature's own `containerEnv` are replaced by the generated `containerEnv.PATH`, which `dworm exec` uses. List the directories the feature adds in `container.path`. The feature's other environment variables are kept.
 
-Definitions cannot change the parts that `dworm` and the AI tools rely on: the `vscode` user and `/home/vscode`, the `app` service with its build, command, and workspace mount, the AI tool installer, mounts, and environment, the GitHub CLI feature, and the core PATH entries. `PATH`, `HOME`, `USER`, `CODEX_HOME`, and `CLAUDE_CONFIG_DIR` cannot be set, a sidecar cannot be named `app`, and there is no field for host mounts; sidecar volumes are named volumes.
+Definitions cannot change the parts that `dworm` and the AI tools rely on: the `vscode` user and `/home/vscode`, the `app` service with its build, command, and workspace mount, the AI tool installer, mounts, and environment, the GitHub CLI feature, and the core PATH entries. `PATH`, `HOME`, `USER`, `CODEX_HOME`, and `CLAUDE_CONFIG_DIR` cannot be set, a sidecar cannot be named `app`, and sidecar volumes are named volumes. Definition schema 2 supports constrained opt-in [host integrations](#explicit-host-integrations) alongside these core mounts.
 
 ### Remote definitions
 
@@ -617,3 +617,44 @@ The PostgreSQL port is not published to the host. `dworm` scans only the primary
 `--addon rust` installs Rust with rustup and Cargo through the official feature, 1.99 by default; pass `--set rust.version=VERSION` to choose another. `/usr/local/cargo/bin` is on PATH.
 
 Both directories are in `containerEnv`, so `dworm exec -- go ...` and `dworm exec -- cargo ...` work without a login shell. The add-ons combine with any preset and with each other.
+
+## Explicit host integrations
+
+Definition schema 2 presets and add-ons can opt in to local Linux host binds. For Wayland, save this as `wayland.toml` in your user preset directory (normally `~/.config/projectsetup/presets/`):
+
+```toml
+schema = 2
+kind = "addon"
+name = "wayland"
+version = "1.0.0"
+description = "Explicit Linux Wayland socket forwarding"
+
+[[container.mounts]]
+source = "${localEnv:XDG_RUNTIME_DIR}/${localEnv:WAYLAND_DISPLAY}"
+target = "/run/host-wayland/wayland-0"
+source_kind = "socket"
+read_only = true
+
+[container.env]
+WAYLAND_DISPLAY = "/run/host-wayland/wayland-0"
+```
+
+Validate it with `projectsetup preset validate ~/.config/projectsetup/presets/wayland.toml`, then select `--addon wayland` during initialization. Export `XDG_RUNTIME_DIR` and `WAYLAND_DISPLAY` from the compositor session before `init`, `check`, `upgrade`, and container startup. The socket must already exist. `container.env` supplies the absolute display path to non-login `dworm exec`; no display server or application starts automatically. Recreate existing containers after regeneration.
+
+Every bind requires `source`, `target`, `source_kind` (`directory`, `file`, or `socket`), and explicit `read_only = true|false`. Sources accept literal `${localEnv:NAME}` references without defaults. Missing/empty variables fail; there is no shell evaluation, tilde expansion, option/project substitution, discovery, or source creation. Both source and target must resolve to clean absolute paths without whitespace, commas, colons, or shell syntax. Targets are literal container paths. Matching schema 2 variants may also contribute mounts. Contributions sort by target; duplicate and overlapping targets fail, including ancestor/descendant conflicts with workspace, AI state/installations, credential forwarding, and protected system paths. Host `.ssh` and `.gitconfig`, their symlink aliases, and source directories exposing them remain forbidden.
+
+Only Linux with a local Unix Docker endpoint and the default Docker context is supported. Nondefault contexts (including a configured `currentContext`), remote endpoints, macOS, and Windows fail with guidance when integration sources are checked. Portable images assume Dev Container UID/GID adjustment to the caller; fixed images use their declared IDs and require the Phase 2 host match. Checks require the selected source kind, numeric primary-ID access, and search access through source ancestors; socket access requires write permission even for a read-only bind. Permission diagnostics conservatively use mode bits: supplementary groups and ACL grants cannot prove container access. Repair host permissions deliberately or select a matching image; projectsetup never changes integration source ownership. Actual compositor/container connection remains the final access check.
+
+The unchanged manifest schema 2 pins exact TOML snapshots, preserving references rather than machine paths. Plain `upgrade` keeps those bytes; `upgrade --refresh-presets` explicitly adopts updated declarations. Built-ins and definitions without mounts keep their existing output. Definition schema 1 rejects mounts, and older binaries reject the new schema 2 field rather than silently dropping it. Static checks stay offline. For selected integrations, `check --build` also validates base/final effective metadata against the typed mount plan and rejects unexpected inherited mounts or lifecycle hooks. Artifact runtime probes remain mount-free and do not test the display connection.
+
+To exercise a real compositor with a local image whose `vscode` IDs match the host:
+
+```bash
+PROJECTSETUP_WAYLAND_TESTS=1 \
+PROJECTSETUP_WAYLAND_IMAGE=your-local-toolchain:tag \
+go test ./internal/generate -run '^TestWaylandIntegration$' -v
+```
+
+The opt-in test validates generated files with real Compose and Dev Container configuration checks, then sends a Wayland `wl_display.sync` request through the declared socket using direct, non-login `docker exec --user vscode`. It removes its own probe container. It needs a running compositor, Docker, the Dev Container CLI, and Go; it does not start a compositor or mount AI credentials.
+
+For projects awaiting regeneration support in an older installed binary, a temporary manual `devcontainer.json` mount with the same source/target/type and `containerEnv.WAYLAND_DISPLAY` can work. Such edits are not snapshotted and ordinary `upgrade` discards them; older static checks do not fully validate source kinds/access. Use the typed add-on with the current binary for persistent configuration.

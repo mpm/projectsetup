@@ -1,0 +1,12 @@
+schema = 2
+kind = "addon"
+name = "wayland"
+version = "1.0.0"
+description = "Explicit Linux Wayland socket"
+[[container.mounts]]
+source = "${localEnv:XDG_RUNTIME_DIR}/${localEnv:WAYLAND_DISPLAY}"
+target = "/run/host-wayland/wayland-0"
+source_kind = "socket"
+read_only = true
+[container.env]
+WAYLAND_DISPLAY = "/run/host-wayland/wayland-0"

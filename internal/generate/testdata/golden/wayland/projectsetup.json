@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 2,
+  "projectName": "wayland-app",
+  "preset": {
+    "name": "node",
+    "version": "1.0.0",
+    "source": "builtin",
+    "sha256": "ebfea2380619d859da2078471a3793b6690f52b69e9fedf264722d3f3e448a47"
+  },
+  "addons": [
+    {
+      "name": "wayland",
+      "version": "1.0.0",
+      "source": "user",
+      "sha256": "6b258a50f4ef8a7ce95e1a3c77fc3e1934adcaa748567f3878d9fe9222a0d7a9"
+    }
+  ],
+  "options": {
+    "node": {
+      "package_manager": "npm",
+      "version": "26"
+    }
+  },
+  "aiTools": [],
+  "ports": [],
+  "systemPackages": [],
+  "generatedBy": "projectsetup"
+}

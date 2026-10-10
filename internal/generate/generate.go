@@ -72,10 +72,10 @@ func Write(root string, cfg config.Config, force bool) error {
 	if err != nil {
 		return err
 	}
-	if resolved.Ownership != nil {
+	if resolved.Ownership != nil || len(resolved.Mounts) > 0 {
 		diagnostics := validate.Check(root, validate.Options{DevcontainerDir: staging, CheckHostMounts: true})
 		if count := validate.ErrorCount(diagnostics); count > 0 {
-			return fmt.Errorf("validate fixed image ownership: %d error(s): %s", count, diagnostics[0].Message)
+			return fmt.Errorf("validate host bind access and image ownership: %d error(s): %s", count, diagnostics[0].Message)
 		}
 	}
 	if _, err := os.Stat(target); errors.Is(err, os.ErrNotExist) {

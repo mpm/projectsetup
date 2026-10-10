@@ -275,3 +275,32 @@ func TestComposeFailurePreventsBuildAndMetadataProbes(t *testing.T) {
 		}
 	}
 }
+
+func TestMergedHostMountInterpolation(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", "/run/user/1000")
+	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
+	want, data := validMetadataDocument()
+	readonly := true
+	mount := presets.BindMount{Source: "${localEnv:XDG_RUNTIME_DIR}/${localEnv:WAYLAND_DISPLAY}", Target: "/run/host-wayland/wayland-0", SourceKind: "socket", ReadOnly: &readonly}
+	want.Mounts = []string{mount.DevcontainerMount()}
+	var result map[string]map[string]any
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatal(err)
+	}
+	result["mergedConfiguration"]["mounts"] = []string{"source=/run/user/1000/wayland-0,target=/run/host-wayland/wayland-0,type=bind,readonly"}
+	data, _ = json.Marshal(result)
+	validateMergedMetadata(data, want, func(format string, args ...any) { t.Errorf(format, args...) })
+	result["mergedConfiguration"]["mounts"] = []string{"source=/run/user/1000/wayland-0,target=/run/host-wayland/wayland-0,type=bind,readonly", "source=/host,target=/unexpected,type=bind"}
+	data, _ = json.Marshal(result)
+	failed := false
+	validateMergedMetadata(data, want, func(string, ...any) { failed = true })
+	if !failed {
+		t.Fatal("unexpected inherited mount accepted")
+	}
+	t.Setenv("WAYLAND_DISPLAY", "")
+	failed = false
+	validateMergedMetadata(data, want, func(string, ...any) { failed = true })
+	if !failed {
+		t.Fatal("missing host reference accepted")
+	}
+}

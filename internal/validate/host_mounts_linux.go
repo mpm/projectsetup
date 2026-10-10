@@ -17,7 +17,10 @@ func hostIntegrationAccess(path, kind string, readOnly bool, uid, gid int) error
 		return err
 	}
 	required := uint32(4)
-	if !readOnly || kind == "socket" {
+	if !readOnly {
+		required |= 2
+	}
+	if kind == "socket" {
 		required = 2
 	}
 	if kind == "directory" {

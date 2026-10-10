@@ -28,6 +28,7 @@ type Selection struct {
 // Resolved is the merged contribution of the selected definitions with all
 // placeholders expanded.
 type Resolved struct {
+	Mounts       []BindMount
 	Ownership    *Ownership
 	Base         string
 	Preinstalled *Preinstalled
@@ -56,7 +57,7 @@ func (r Resolved) ConsumesPreinstalledImage() bool {
 // RequiresImageVerification includes ownership-only artifacts, which make no
 // tool claims but still need metadata isolation and numeric identity checks.
 func (r Resolved) RequiresImageVerification() bool {
-	return r.ConsumesPreinstalledImage() || r.Ownership != nil
+	return r.ConsumesPreinstalledImage() || r.Ownership != nil || len(r.Mounts) > 0
 }
 
 // Registry holds definitions by name.
@@ -162,6 +163,9 @@ func (r *Registry) Resolve(selection Selection) (Resolved, error) {
 			merger.add(definition.Name, fragment.expand(values, project))
 		}
 	}
+	var mountErrors []error
+	merger.result.Mounts, mountErrors = normalizeMounts(merger.result.Mounts, selection.Project.Workspace)
+	merger.errs = append(merger.errs, mountErrors...)
 	merger.finish()
 	if len(merger.errs) > 0 {
 		return Resolved{}, errors.Join(merger.errs...)
@@ -263,7 +267,7 @@ func (f Fragment) expand(options, project map[string]string) Fragment {
 			UserRun: texts(f.Image.UserRun),
 		},
 		Features:  make(map[string]map[string]any, len(f.Features)),
-		Container: Container{Path: texts(f.Container.Path), Env: textMap(f.Container.Env)},
+		Container: Container{Mounts: slices.Clone(f.Container.Mounts), Path: texts(f.Container.Path), Env: textMap(f.Container.Env)},
 		Setup:     Setup{Script: text(f.Setup.Script)},
 		Services:  make(map[string]Service, len(f.Services)),
 	}
@@ -315,6 +319,7 @@ func (m *merger) claim(kind, key, owner string) bool {
 }
 
 func (m *merger) add(owner string, f Fragment) {
+	m.result.Mounts = append(m.result.Mounts, f.Container.Mounts...)
 	if f.Image.Base != "" {
 		m.result.Base = f.Image.Base
 	}

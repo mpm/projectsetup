@@ -7,7 +7,7 @@
   "additionalProperties": false,
   "required": ["schema", "kind", "name", "version", "description"],
   "properties": {
-    "schema": { "description": "Definition format version; preinstalled and ownership declarations require 2.", "enum": [1, 2] },
+    "schema": { "description": "Definition format version; preinstalled, ownership and host mount declarations require 2.", "enum": [1, 2] },
     "kind": {
       "description": "A project uses exactly one preset and any number of add-ons.",
       "enum": ["preset", "addon"]
@@ -40,7 +40,7 @@
   "allOf": [
     {
       "if": { "properties": { "schema": { "const": 1 } } },
-      "then": { "properties": { "image": { "not": { "required": ["preinstalled"] }, "properties": { "ownership": { "not": {} } } } } }
+      "then": { "properties": { "image": { "not": { "required": ["preinstalled"] }, "properties": { "ownership": { "not": {} } } }, "container": { "properties": { "mounts": { "not": {} } } }, "variant": { "items": { "properties": { "container": { "properties": { "mounts": { "not": {} } } } } } } } }
     },
     {
       "if": { "properties": { "kind": { "const": "addon" } } },
@@ -242,10 +242,23 @@
         "additionalProperties": { "type": ["string", "boolean", "number"] }
       }
     },
+    "bindMount": {
+      "description": "Schema 2 explicit Linux local-host bind; preset validate checks literal references, clean paths and conflicts.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "target", "source_kind", "read_only"],
+      "properties": {
+        "source": { "type": "string", "pattern": "^(?:/|\\$\\{localEnv:[A-Za-z_][A-Za-z0-9_]*\\})(?:[^\\s\u0000-\u001f\u007f,:$`~\\\\]|\\$\\{localEnv:[A-Za-z_][A-Za-z0-9_]*\\})*$" },
+        "target": { "$ref": "#/$defs/literalPath" },
+        "source_kind": { "enum": ["directory", "file", "socket"] },
+        "read_only": { "type": "boolean" }
+      }
+    },
     "container": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "mounts": { "type": "array", "items": { "$ref": "#/$defs/bindMount" } },
         "path": {
           "description": "Absolute containerEnv.PATH entries after the core user entries.",
           "$ref": "#/$defs/strings"
