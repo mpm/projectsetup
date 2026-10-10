@@ -1,8 +1,8 @@
 # Projectsetup Implementation Handoff
 
-## Planned Extensions
+## Shared-image implementation and extension status
 
-Shared-image consumption is implemented through definition schema 2's optional top-level preset `image.preinstalled` and `image.ownership` contracts. See [Consume a digest-pinned shared toolchain](docs/shared-images.md) and the [README declaration contract](README.md#preinstalled-image-declarations) for current syntax, snapshot/refresh behavior, and opt-in metadata/runtime verification. The [Shared Toolchain Images: Implementation Roadmap](SHARED_IMAGES_ROADMAP.md) tracks completed consumption work and customizable image-family recipes, optional build/export workflow and exact PostgreSQL references. Explicit Linux host integrations are implemented through schema 2 typed bind declarations. Fixed ownership policy, targeted AI parent repair and measured local two-project acceptance are implemented. See the [customizable image-family workflow](docs/image-family.md) and [measured evidence](docs/image-family-evidence.md); first-class build/export was evaluated and conditionally deferred. See [Fixed image ownership](README.md#fixed-image-ownership) for host restrictions and the [image-author recipe](docs/shared-images.md#establish-fixed-ids-before-installing-toolchains) for establishing IDs before installing toolchains.
+Shared-image consumption is implemented through definition schema 2's optional top-level preset `image.preinstalled` and `image.ownership` contracts. See [Consume a digest-pinned shared toolchain](docs/shared-images.md) and the [README declaration contract](README.md#preinstalled-image-declarations) for current syntax, snapshot/refresh behavior, and opt-in metadata/runtime verification. The [Shared Toolchain Images: Implementation Roadmap](SHARED_IMAGES_ROADMAP.md) tracks completed consumption work and customizable image-family recipes, the conditionally deferred build/export workflow and completed [exact PostgreSQL references](docs/exact-postgres.md). Explicit Linux host integrations are implemented through schema 2 typed bind declarations. Fixed ownership policy, targeted AI parent repair and measured local two-project acceptance are implemented. See the [customizable image-family workflow](docs/image-family.md) and [measured evidence](docs/image-family-evidence.md); first-class build/export was evaluated and conditionally deferred. See [Fixed image ownership](README.md#fixed-image-ownership) for host restrictions and the [image-author recipe](docs/shared-images.md#establish-fixed-ids-before-installing-toolchains) for establishing IDs before installing toolchains.
 
 ## Purpose
 
@@ -87,6 +87,7 @@ Initial flags:
 --name NAME
 --database none|postgres|sqlite    alias for --addon
 --postgres-version MAJOR
+--postgres-image REF         literal tagged sidecar reference, optional @sha256 digest
 --ai TOOL[,TOOL...]          opencode, claude, codex; or none
 --node-version VERSION
 --ruby-version VERSION
@@ -439,7 +440,7 @@ When selected, extend the shared Compose configuration with:
 
 - One primary development service.
 - One `postgres` service.
-- A pinned PostgreSQL major version.
+- An explicit PostgreSQL major version, with an optional exact sidecar image reference.
 - A named volume for database data.
 - Development-only credentials.
 - A health check.
@@ -447,6 +448,10 @@ When selected, extend the shared Compose configuration with:
 - `DB_HOST=postgres` in `containerEnv`.
 
 Keep service name, hostname, credentials, and generated environment consistent from one normalized database model.
+
+`--postgres-version MAJOR` (or `--set postgres.version=MAJOR`) remains the explicit compatibility/layout selection. The built-in add-on mounts `postgres-data` at `/var/lib/postgresql/data` before 18 and `/var/lib/postgresql` from 18 onward. Its default images remain `postgres:MAJOR-bookworm` and `postgres:MAJOR-trixie`, respectively. Optional `--postgres-image REF` changes only the resolved built-in sidecar image. Normalize it as `PostgresImageRef`, separate from generic definition options; validate literal repository/tag/optional sha256 syntax and require the tag major to agree with the recorded major. Reject the override without the built-in add-on or for an unrelated/custom add-on. Do not relax generic shell-safe option characters, rewrite definition snapshots, or resolve image references over the network.
+
+Ordinary upgrade, explicit definition refresh, and `init --force` preserve the recorded major and reference for PostgreSQL that remains selected. Explicit `--postgres-image REF` replaces it; `--postgres-image ''` clears it and restores the selected major's definition default. An inconsistent retained image and explicitly changed major fails before replacing generated files. Removing the add-on drops the reference. Regeneration does not start/stop databases, migrate data, or rename/delete volumes. Plan major upgrades separately using dump/restore or `pg_upgrade`, retaining backups and original data until verified; see [exact PostgreSQL references](docs/exact-postgres.md).
 
 Do not forward the PostgreSQL sidecar port merely for `dworm`: `dworm` scans only the primary service. Add a host Compose port only when explicitly desired because publishing a database port can conflict with local services. `forwardPorts` does not expose sidecar ports through `dworm`.
 
@@ -831,11 +836,13 @@ Rules:
 
 `options` records every option of every selected definition, including defaults; definitions without options have no entry. `check` and `upgrade` require that normalizing the manifest reproduces it.
 
+Schema 2 also supports optional top-level `postgresImage`, a typed literal tagged reference with optional sha256 digest. It is omitted when unused, while `options.postgres.version` always retains the explicit selected major. Existing schema 1/2 major-only manifests and built-in snapshot hashes/output remain unchanged. Earlier strict schema 2 readers reject the new field rather than discarding the pin; schema 1 does not accept it. Shared-image capability and ownership contracts continue to live only in exact definition snapshots, independent of this sidecar selection.
+
 `check` and `upgrade` continue to read schema 1 manifests. Those map to the built-in definitions: `database` becomes the `postgres` or `sqlite` add-on, `languageVersion` and `packageManager` become preset options, and a missing PostgreSQL version means `17`. `upgrade` writes schema 2.
 
-`init --force` keeps the option values of add-ons that the existing manifest also selected unless they are set explicitly, so a PostgreSQL data volume stays readable.
+`init --force` keeps the option values of add-ons that the existing manifest also selected unless they are set explicitly. It also preserves optional `postgresImage` when PostgreSQL remains selected, subject to explicit replacement/clearing and major consistency as described above.
 
-The CLI gains a repeatable `--addon NAME` and `--set [DEFINITION.]OPTION=VALUE`. These flags remain as aliases: `--node-version`, `--ruby-version`, `--python-version`, `--package-manager`, `--database`, and `--postgres-version`.
+The CLI supports dedicated `--postgres-image REF`, repeatable `--addon NAME` and `--set [DEFINITION.]OPTION=VALUE`. These flags remain as aliases: `--node-version`, `--ruby-version`, `--python-version`, `--package-manager`, `--database`, and `--postgres-version`.
 
 ## Preset System Roadmap
 
