@@ -14,7 +14,7 @@
   "containerEnv": {
     "CLAUDE_CONFIG_DIR": "/home/vscode/.claude",
     "DB_HOST": "postgres",
-    "PATH": "/home/vscode/.local/bin:/home/vscode/.opencode/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "PATH": "/home/vscode/.local/bin:/home/vscode/.opencode/bin:/usr/local/share/nvm/current/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
     "PGDATABASE": "node-postgres",
     "PGHOST": "postgres",
     "PGPASSWORD": "projectsetup",

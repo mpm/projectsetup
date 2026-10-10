@@ -454,7 +454,7 @@ Application-specific database names and framework configuration are not rewritte
 - `rust` installs the official Rust feature with an explicit `version` option (default `1.99`) and adds `/usr/local/cargo/bin` to `containerEnv.PATH`.
 - `redis` adds a `redis` sidecar (`redis:VERSION-trixie`, default version `8`) with a `redis-cli ping` health check and the `redis-data` named volume at `/data`, installs `redis-tools` in the app image, and sets `REDIS_URL=redis://redis:6379`. Like PostgreSQL, its port is not published.
 
-The generated `containerEnv.PATH` replaces PATH changes that features make through their own `containerEnv`, so every add-on that installs a feature lists its PATH entries. The opt-in smoke test checks them through a non-login `docker exec`, as `dworm exec` runs commands.
+The generated `containerEnv.PATH` replaces PATH changes that features make through their own `containerEnv`, so every definition that installs a feature lists its PATH entries: the Node feature needs `/usr/local/share/nvm/current/bin` (node and rails presets), the Python feature `/usr/local/python/current/bin` and `/usr/local/py-utils/bin`, and the Ruby feature the mise shims. The opt-in smoke test checks each preset runtime and add-on tool through a non-login `docker exec`, as `dworm exec` runs commands.
 
 ## SQLite Capability
 
@@ -876,7 +876,8 @@ Each phase ends with `go test ./...`, `go vet ./...`, and gofmt passing.
 ### Phase 6: New built-in add-ons
 
 - [x] Add `go`, `rust`, and `redis` add-ons, each with the PATH entries its feature needs, because the generated `containerEnv.PATH` replaces feature PATH changes.
-- [ ] Add golden fixtures (`ruby-go`, `node-rust`, `python-redis`) and an opt-in build and smoke test per add-on. Fixtures and tests exist; the container runs still need to pass.
+- [x] Add golden fixtures (`ruby-go`, `node-rust`, `python-redis`) and an opt-in build and smoke test per add-on.
+- [x] Smoke-test each preset runtime through a non-login `docker exec`. This found that the Node and Python features' PATH entries were missing from the node, rails, and python presets; they are now listed.
 
 ### Phase 7: Documentation and release
 

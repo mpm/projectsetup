@@ -14,7 +14,7 @@
   "containerEnv": {
     "CLAUDE_CONFIG_DIR": "/home/vscode/.claude",
     "CODEX_HOME": "/home/vscode/.codex",
-    "PATH": "/home/vscode/.local/bin:/home/vscode/.opencode/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    "PATH": "/home/vscode/.local/bin:/home/vscode/.opencode/bin:/usr/local/share/nvm/current/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   },
   "mounts": [
     "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind",

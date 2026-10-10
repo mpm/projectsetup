@@ -39,6 +39,11 @@ base = "mcr.microsoft.com/devcontainers/base:ubuntu-24.04"
 [features."ghcr.io/devcontainers/features/python:1"]
 version = "${option:version}"
 
+# The feature puts Python and its pipx tools on PATH through containerEnv,
+# which the generated containerEnv.PATH replaces; dworm exec needs them here.
+[container]
+path = ["/usr/local/python/current/bin", "/usr/local/py-utils/bin"]
+
 [setup]
 script = '''
 case "${option:package_manager}" in

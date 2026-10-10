@@ -242,13 +242,13 @@ func TestSmokePresetFixtures(t *testing.T) {
 		t.Fatal("docker is not installed")
 	}
 
-	// Add-on checks run like dworm exec: docker exec without a login shell,
-	// so tools must be on the containerEnv PATH.
+	// Runtime and add-on checks run like dworm exec: docker exec without a
+	// login shell, so tools must be on the containerEnv PATH.
 	fixtures := []struct{ name, check string }{
-		{"node-opencode", ""},
-		{"ruby-opencode", ""},
-		{"rails-opencode", ""},
-		{"python-pip", ""},
+		{"node-opencode", `node --version && npm --version`},
+		{"ruby-opencode", `ruby --version && bundle --version`},
+		{"rails-opencode", `ruby --version && node --version`},
+		{"python-pip", `python --version && python -m pip --version`},
 		{"ruby-go", `go version && ruby --version`},
 		{"node-rust", `cargo --version && rustc --version && node --version`},
 		{"python-redis", `test "$(redis-cli -u "$REDIS_URL" ping)" = PONG`},
@@ -273,7 +273,8 @@ func TestSmokePresetFixtures(t *testing.T) {
 			up.Stderr = &stderr
 			output, err := up.Output()
 			var result struct {
-				ContainerID string `json:"containerId"`
+				ContainerID     string `json:"containerId"`
+				WorkspaceFolder string `json:"remoteWorkspaceFolder"`
 			}
 			parseErr := json.Unmarshal(output, &result)
 			// Sidecars, the network, and volumes belong to the fixture's
@@ -308,10 +309,9 @@ func TestSmokePresetFixtures(t *testing.T) {
 				t.Fatalf("smoke test container: %v\n%s", err, output)
 			}
 			if fixture.check != "" {
-				workspace := "/workspaces/" + name
-				check := exec.Command(docker, "exec", "-u", "vscode", "-w", workspace, result.ContainerID, "bash", "-c", fixture.check)
+				check := exec.Command(docker, "exec", "-u", "vscode", "-w", result.WorkspaceFolder, result.ContainerID, "bash", "-c", fixture.check)
 				if output, err := check.CombinedOutput(); err != nil {
-					t.Fatalf("add-on check %q: %v\n%s", fixture.check, err, output)
+					t.Fatalf("tool check %q: %v\n%s", fixture.check, err, output)
 				}
 			}
 		})

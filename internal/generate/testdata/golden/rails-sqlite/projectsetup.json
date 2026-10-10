@@ -5,7 +5,7 @@
     "name": "rails",
     "version": "1.0.0",
     "source": "builtin",
-    "sha256": "63762b8f37cbf8ad7574a62421731f6b4dfe4d27ac2da5e4a89f44ad3a8c0e0b"
+    "sha256": "6a07c029e91bed7f62534a60a08aa156f1eb1d03e1045ef88ca60f7844dfa3dc"
   },
   "addons": [
     {

@@ -41,9 +41,11 @@ version = "lts"
 
 [features."ghcr.io/rails/devcontainer/features/activestorage"]
 
-# The Ruby feature installs through mise; dworm exec needs its shims on PATH.
+# The Ruby feature installs through mise and the Node feature through nvm;
+# dworm exec needs both on PATH, because the generated containerEnv.PATH
+# replaces the features' own PATH changes.
 [container]
-path = ["${project:home}/.local/share/mise/shims"]
+path = ["${project:home}/.local/share/mise/shims", "/usr/local/share/nvm/current/bin"]
 
 [setup]
 script = '''

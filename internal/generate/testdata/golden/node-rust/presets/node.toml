@@ -36,6 +36,11 @@ base = "mcr.microsoft.com/devcontainers/base:ubuntu-24.04"
 [features."ghcr.io/devcontainers/features/node:1"]
 version = "${option:version}"
 
+# The feature puts Node on PATH through containerEnv, which the generated
+# containerEnv.PATH replaces; dworm exec needs it listed here.
+[container]
+path = ["/usr/local/share/nvm/current/bin"]
+
 [setup]
 script = '''
 if [[ -f package.json ]]; then

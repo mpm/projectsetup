@@ -5,7 +5,7 @@
     "name": "node",
     "version": "1.0.0",
     "source": "builtin",
-    "sha256": "4cb8fa269ee5294185cce1a2a88ad7c589b82e4919939df72b033ed6e609d657"
+    "sha256": "ebfea2380619d859da2078471a3793b6690f52b69e9fedf264722d3f3e448a47"
   },
   "addons": [],
   "options": {
