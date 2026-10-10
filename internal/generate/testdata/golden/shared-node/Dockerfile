@@ -5,7 +5,6 @@ FROM registry.example/team/node-toolchain:fixed
 USER root
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        bash ca-certificates curl git gnupg sudo \
         git make \
         libsqlite3-dev sqlite3 \
         curl \

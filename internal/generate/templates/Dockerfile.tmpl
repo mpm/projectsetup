@@ -3,12 +3,13 @@ FROM {{.Resolved.Base}}
 
 
 USER root
+{{if .AptGroups -}}
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        bash ca-certificates curl git gnupg sudo{{range .AptGroups}} \
-        {{.}}{{end}}{{range .Config.SystemPackages}} \
+        {{index .AptGroups 0}}{{range slice .AptGroups 1}} \
         {{.}}{{end}} \
     && rm -rf /var/lib/apt/lists/*
+{{end -}}
 {{range .Resolved.RootRun}}
 RUN {{.}}
 {{end}}
@@ -17,4 +18,4 @@ RUN mkdir -p /home/vscode/.local/bin /home/vscode/.local/state \
 
 USER vscode
 {{range .Resolved.UserRun}}RUN {{.}}
-{{end}}
+{{end -}}

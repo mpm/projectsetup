@@ -117,7 +117,7 @@ func TestSharedImageGenerationAndOfflineRegeneration(t *testing.T) {
 						t.Fatalf("PATH = %q, want %q", doc.ContainerEnv["PATH"], want)
 					}
 				case "Dockerfile":
-					for _, step := range []string{"FROM registry.example/team/node-toolchain:fixed", "bash ca-certificates curl git gnupg sudo", "git make", "libsqlite3-dev sqlite3", "install -d /opt/project", "mkdir -p /home/vscode/project-cache", "USER vscode"} {
+					for _, step := range []string{"FROM registry.example/team/node-toolchain:fixed", "git make", "libsqlite3-dev sqlite3", "curl", "jq", "install -d /opt/project", "mkdir -p /home/vscode/project-cache", "USER vscode"} {
 						if !bytes.Contains(f.data, []byte(step)) {
 							t.Fatalf("Dockerfile lost %q", step)
 						}
@@ -180,7 +180,7 @@ func TestAbsentAndEmptyPreinstalledPreserveLegacyRendering(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, contract := range []string{"", "\n[image.preinstalled]\n", "\n[image.preinstalled]\ncore_packages = []\ntools = {}\n", "\n[image.preinstalled]\ncore_packages = ['bash', 'ca-certificates', 'curl', 'git', 'gnupg', 'sudo']\n"} {
+			for _, contract := range []string{"", "\n[image.preinstalled]\n", "\n[image.preinstalled]\ncore_packages = []\ntools = {}\n"} {
 				definition, err := presets.Parse([]byte(strings.Replace(string(builtin.Raw), "schema = 1", "schema = 2", 1)+contract), name+".toml")
 				if err != nil {
 					t.Fatal(err)

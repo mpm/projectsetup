@@ -138,7 +138,7 @@ func Check(root string, options Options) []Diagnostic {
 	}
 
 	if manifestValid {
-		validateDockerfile(root, devDir, resolved, add)
+		validateDockerfile(root, devDir, cfg, resolved, add)
 		validateProjectConventions(root, cfg, add)
 		validateCompose(root, devDir, cfg, resolved, add)
 	}
@@ -330,7 +330,7 @@ func validateDevcontainer(root, devDir string, manifest config.Manifest, resolve
 	}
 }
 
-func validateDockerfile(root, devDir string, resolved presets.Resolved, add func(Severity, string, string, ...any)) {
+func validateDockerfile(root, devDir string, cfg config.Config, resolved presets.Resolved, add func(Severity, string, string, ...any)) {
 	path := filepath.Join(devDir, "Dockerfile")
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -346,15 +346,25 @@ func validateDockerfile(root, devDir string, resolved presets.Resolved, add func
 	if finalUser != "vscode" {
 		add(Error, relative(root, path), "final effective Dockerfile user must be vscode")
 	}
-	if !strings.Contains(text, "bash") {
+	if slices.Contains(resolved.CoreAptPackages(), "bash") && !strings.Contains(text, "bash") {
 		add(Error, relative(root, path), "image must provide /bin/bash")
 	}
 	packages := strings.Fields(text)
+	for _, pkg := range resolved.CoreAptPackages() {
+		if !containsString(packages, pkg) {
+			add(Error, relative(root, path), "core apt package %q is missing and is not declared preinstalled", pkg)
+		}
+	}
 	for _, group := range resolved.Apt {
 		for _, pkg := range group {
 			if !containsString(packages, pkg) {
 				add(Error, relative(root, path), "apt package %q required by the selected definitions is missing", pkg)
 			}
+		}
+	}
+	for _, pkg := range cfg.SystemPackages {
+		if !containsString(packages, pkg) {
+			add(Error, relative(root, path), "explicit system package %q is missing", pkg)
 		}
 	}
 }

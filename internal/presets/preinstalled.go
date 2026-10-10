@@ -39,6 +39,18 @@ var installedVersion = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9
 var knownTools = []string{"node", "ruby", "python", "go", "rust", "gh"}
 var movingVersions = []string{"latest", "lts", "stable", "nightly"}
 
+// CoreAptPackages returns only core prerequisites not supplied by the image,
+// in the historical installation order. Project contributions stay separate.
+func (r Resolved) CoreAptPackages() []string {
+	var result []string
+	for _, pkg := range []CorePackage{CoreBash, CoreCACertificates, CoreCurl, CoreGit, CoreGnuPG, CoreSudo} {
+		if r.Preinstalled == nil || !slices.Contains(r.Preinstalled.CorePackages, pkg) {
+			result = append(result, string(pkg))
+		}
+	}
+	return result
+}
+
 func literalLinuxPath(value string) bool {
 	return path.IsAbs(value) && path.Clean(value) == value &&
 		!strings.ContainsAny(value, ":$`~\\") &&

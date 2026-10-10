@@ -1,6 +1,6 @@
 # Shared Toolchain Images: Implementation Roadmap
 
-Status: Phase 1 declaration design, schema evolution, parsing/resolution/normalization/editor/listing support, and generated tool consumption completed. Core apt suppression, inherited metadata handling, fixed-runtime version-file binding, and executable shared-image verification remain pending.
+Status: Phase 1 declaration design, schema evolution, parsing/resolution/normalization/editor/listing support, generated tool consumption, and core apt suppression completed. Inherited metadata handling, fixed-runtime version-file binding, and executable shared-image verification remain pending.
 
 This roadmap records the shared-image design discussed with the user. It is a handoff for a future implementation session. Read `AGENTS.md` and `HANDOFF.md` first, then this document. `HANDOFF.md` remains the contract for existing behavior; this roadmap describes proposed extensions.
 
@@ -25,7 +25,7 @@ Identical version settings in separate project builds do not guarantee identical
 - Projects snapshot selected definitions and record their hashes. `check` and ordinary `upgrade` use those copies; `upgrade --refresh-presets` explicitly adopts registry changes.
 - Built-in runtime presets request Dev Container features. Merely replacing their base does not stop them requesting those features.
 - Generated Dev Container configuration requests the GitHub CLI feature unless the preset declares `gh`, and includes declared tool paths in `containerEnv.PATH` independently of image PATH.
-- `internal/generate/templates/Dockerfile.tmpl` always installs core apt packages and recursively chowns `/home/vscode/.local`.
+- `internal/generate/templates/Dockerfile.tmpl` installs only undeclared core apt packages, preserves explicit project packages, and omits apt entirely when no packages remain. It still recursively chowns `/home/vscode/.local`.
 - `internal/generate/templates/install-ai-tools.sh` can recursively chown unwritable directories, including a parent containing mounted host state. Codex-specific paths already use a non-recursive, fail-with-guidance policy.
 - There is no explicit generated UID/GID policy or `updateRemoteUserUID` setting.
 - The built-in PostgreSQL add-on accepts a major version only. Full references cannot be generic option values under the current shell-safe option character restriction.
@@ -83,8 +83,8 @@ Implement the smallest typed extension that makes a custom shared-image preset r
 - [x] Design declarations for preinstalled runtimes/tools and their versions/paths, including GitHub CLI and any core image prerequisites the generator will skip installing. See [Declaration contract](#declaration-contract-design-completed).
 - [x] Decide definition and manifest schema evolution explicitly. Retain support for existing definition snapshots and manifests; default existing definitions to current installation behavior. See [Schema evolution contract](#schema-evolution-contract-decisions-completed).
 - [x] Extend parsing, registry resolution, normalization, editor schema, and options listing together. Definition schemas 1/2, literal/ownership validation, selected installer conflicts, deterministic separate preinstalled PATH data, and additive listing metadata are implemented. Mixed selections, schema 2 snapshot/manifest round trips, hash rejection, and absent/empty legacy rendering are tested.
-- [x] Generate project Dockerfiles and Dev Container configuration without requesting installation of capabilities explicitly provided by the image. Declared `gh` suppresses the core GitHub CLI feature; consumption-only presets omit runtime installers and resolution rejects known conflicts. Declared tool paths precede definition paths with deterministic first-occurrence deduplication. Static checks use the same expected feature/PATH model and reject reintroduced installers (including tags/digests) and PATH drift. Dockerfiles preserve the selected base, project apt packages, and root/user steps; core apt suppression is the next separate item. Shared-image golden output, executable modes, offline snapshot regeneration, valid/failure cases, and absent/empty/core-only legacy rendering are covered.
-- [ ] Avoid redundant core apt installation for images that declare the required prerequisites. Preserve project-specific packages and root/user steps.
+- [x] Generate project Dockerfiles and Dev Container configuration without requesting installation of capabilities explicitly provided by the image. Declared `gh` suppresses the core GitHub CLI feature; consumption-only presets omit runtime installers and resolution rejects known conflicts. Declared tool paths precede definition paths with deterministic first-occurrence deduplication. Static checks use the same expected feature/PATH model and reject reintroduced installers (including tags/digests) and PATH drift. Dockerfiles preserve the selected base, project apt packages, and root/user steps; core apt suppression is implemented in the separate item below. Shared-image golden output, executable modes, offline snapshot regeneration, valid/failure cases, and absent/empty legacy rendering are covered.
+- [x] Avoid redundant core apt installation for images that declare the required prerequisites. Preserve project-specific packages and root/user steps. Generation filters only the core set in historical order and omits the whole apt step when empty; definition groups and explicit system packages remain even when they overlap claims. Static checks accept declared bash and require undeclared core/explicit project packages. Partial/all claims, absent/empty legacy output, ordered root/user steps, add-on/variant contributions, missing-package failures, shared-image golden modes, and offline regeneration are covered.
 - [ ] Account for Dev Container metadata inherited from prebuilt images. Inspect effective feature, environment, user, and lifecycle behavior; baked features must not cause repeated toolchain installation or inherited project setup.
 - [ ] Preserve runtime version-file checks for custom shared-image presets. Define how fixed installed versions and any configurable image selection relate; reject inconsistent combinations.
 - [ ] Add a separate opt-in runtime verification path, or extend an existing explicit integration path, to inspect the built artifact's capabilities. Do not represent static checks or build success alone as proof that its runtimes exist and work.
@@ -96,9 +96,11 @@ Parsing-item verification: changed Go files were formatted and `go test ./...` a
 
 Tool-consumption verification: changed Go files were formatted; `go test ./...`, `go vet ./...`, all golden `docker compose config` checks, and representative `devcontainer read-configuration` checks (including the new shared-image fixture) passed using `mise exec go@1.27.2`. Existing golden trees were unchanged. The shared fixture uses illustrative image/opaque-feature references for configuration testing; it is not a buildable or verified artifact. Opt-in builds/smoke tests were not run for this configuration-only item; actual shared-artifact verification remains the separate checklist item above.
 
+Core-apt verification: changed Go files were formatted; `go test ./...` and `go vet ./...` passed using `mise exec go@1.27.2`. All 15 golden `docker compose config` checks and all eight representative `devcontainer read-configuration` checks passed, including shared-node. Existing preset golden trees remain byte-identical; only shared-node's redundant core apt line changed. Tests cover partial/all claims, no apt work when no packages remain, overlapping preset/add-on/variant/flag packages, root/user ordering, and missing undeclared/explicit packages. Existing parser rejection tests for unknown/duplicate claims also pass. Opt-in builds/smoke tests were not run: the changed shared fixture uses illustrative references and is not buildable; existing buildable fixtures are unchanged. Actual artifact capability verification remains pending.
+
 ### Declaration contract (design completed)
 
-This section specifies the Phase 1 declaration contract. Its syntax is accepted by the parser and editor schema in definition schema 2; schema 1 rejects these fields. Parsing, resolution, normalization, snapshots, listings, and generated tool/feature/PATH consumption are implemented. Core apt suppression, effective metadata inspection, runtime version-file binding, and artifact verification remain subsequent items; core-package declarations do not yet alter generated apt installation.
+This section specifies the Phase 1 declaration contract. Its syntax is accepted by the parser and editor schema in definition schema 2; schema 1 rejects these fields. Parsing, resolution, normalization, snapshots, listings, generated tool/feature/PATH consumption, and core apt suppression are implemented. Effective metadata inspection, runtime version-file binding, and artifact verification remain subsequent items.
 
 #### Shape and ownership
 
@@ -178,7 +180,7 @@ Implementation tests for the later checklist items should cover absent/empty con
 
 ### Schema evolution contract (decisions completed)
 
-This section records the second Phase 1 item's schema decisions. Parsing/resolution and generated tool consumption implement these format gates and compatibility rules; core apt suppression remains pending.
+This section records the second Phase 1 item's schema decisions. Parsing/resolution, generated tool consumption, and core apt suppression implement these format gates and compatibility rules.
 
 #### Definition format
 

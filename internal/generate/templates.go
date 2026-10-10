@@ -18,7 +18,8 @@ type data struct {
 	Config   config.Config
 	Resolved presets.Resolved
 	AITools  string
-	// AptGroups holds one space-separated line per contributing definition block.
+	// AptGroups holds remaining core packages, contributing definition blocks,
+	// and explicit system packages in installation order, one line per group.
 	AptGroups []string
 	Setup     string
 }
@@ -30,9 +31,13 @@ func templateData(cfg config.Config, resolved presets.Resolved) data {
 		AITools:  shellWords(cfg.AITools),
 		Setup:    strings.Join(resolved.Setup, "\n"),
 	}
+	if core := resolved.CoreAptPackages(); len(core) > 0 {
+		result.AptGroups = append(result.AptGroups, strings.Join(core, " "))
+	}
 	for _, group := range resolved.Apt {
 		result.AptGroups = append(result.AptGroups, strings.Join(group, " "))
 	}
+	result.AptGroups = append(result.AptGroups, cfg.SystemPackages...)
 	return result
 }
 
