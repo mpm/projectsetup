@@ -116,7 +116,8 @@ var goldenCases = []goldenCase{
 }
 
 func TestGoldenTrees(t *testing.T) {
-	for _, tt := range goldenCases {
+	cases := append(append([]goldenCase(nil), goldenCases...), goldenCase{name: "shared-node", input: sharedImageInput(t, true)})
+	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("HOME", t.TempDir())
@@ -160,7 +161,8 @@ func TestGoldenComposeConfigurations(t *testing.T) {
 		t.Skipf("docker compose is not available: %v: %s", err, output)
 	}
 
-	for _, tt := range goldenCases {
+	cases := append(append([]goldenCase(nil), goldenCases...), goldenCase{name: "shared-node"})
+	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			compose := filepath.Join("testdata", "golden", tt.name, "compose.yaml")
 			command := exec.Command(docker, "compose", "-f", compose, "config")
@@ -186,7 +188,7 @@ func TestGoldenDevcontainerConfigurations(t *testing.T) {
 		t.Skipf("Docker daemon is unavailable: %v: %s", err, output)
 	}
 
-	for _, name := range []string{"node-opencode", "ruby-opencode", "rails-claude-postgres", "rails-sqlite", "python-uv-claude-postgres", "python-codex", "node-all-agents"} {
+	for _, name := range []string{"node-opencode", "ruby-opencode", "rails-claude-postgres", "rails-sqlite", "python-uv-claude-postgres", "python-codex", "node-all-agents", "shared-node"} {
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()

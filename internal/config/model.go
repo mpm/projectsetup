@@ -57,6 +57,25 @@ func AIHostDirectories(tools []AITool) []string {
 	return directories
 }
 
+// ContainerPath is shared by generation and static checks. It works for direct,
+// non-login docker exec and preserves legacy rendering when no tools are claimed.
+func ContainerPath(home string, resolved presets.Resolved) string {
+	paths := []string{home + "/.local/bin", home + "/.opencode/bin"}
+	paths = append(paths, resolved.PreinstalledPath...)
+	paths = append(paths, resolved.Path...)
+	paths = append(paths, "/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin")
+	if resolved.Preinstalled != nil && len(resolved.Preinstalled.Tools) > 0 {
+		unique := make([]string, 0, len(paths))
+		for _, entry := range paths {
+			if !slices.Contains(unique, entry) {
+				unique = append(unique, entry)
+			}
+		}
+		paths = unique
+	}
+	return strings.Join(paths, ":")
+}
+
 // DescribeChoices formats values as "a, b, or c" for messages and help text.
 func DescribeChoices[T ~string](values []T) string {
 	items := make([]string, len(values))

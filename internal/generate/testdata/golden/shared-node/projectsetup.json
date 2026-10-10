@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 2,
+  "projectName": "shared-app",
+  "preset": {
+    "name": "shared-node",
+    "version": "1.0.0",
+    "source": "user",
+    "sha256": "d6e61c5cdefe9fa543ed63825a1e1c7dbe8b51b4ad9dc7455a949a772bc165af"
+  },
+  "addons": [
+    {
+      "name": "sqlite",
+      "version": "1.0.0",
+      "source": "builtin",
+      "sha256": "d4bb27de82cf109214a5c2c2a9ba1cb85ec040fab4225a3a0328c90e97c24ca3"
+    }
+  ],
+  "options": {},
+  "aiTools": [
+    "opencode"
+  ],
+  "ports": [],
+  "systemPackages": [
+    "curl",
+    "jq"
+  ],
+  "generatedBy": "projectsetup"
+}

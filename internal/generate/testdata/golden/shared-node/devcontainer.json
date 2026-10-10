@@ -1,0 +1,25 @@
+{
+  "name": "shared-app",
+  "dockerComposeFile": "compose.yaml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/shared-app",
+  "containerUser": "vscode",
+  "remoteUser": "vscode",
+  "features": {
+    "example.com/features/opaque:1": {
+      "enabled": true
+    }
+  },
+  "containerEnv": {
+    "PATH": "/home/vscode/.local/bin:/home/vscode/.opencode/bin:/usr/bin:/opt/node/bin:/opt/team/bin:/opt/project/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/sbin:/bin",
+    "TEAM_MODE": "development"
+  },
+  "mounts": [
+    "source=${localEnv:HOME}/.config/opencode,target=/home/vscode/.config/opencode,type=bind",
+    "source=${localEnv:HOME}/.local/share/opencode,target=/home/vscode/.local/share/opencode,type=bind",
+    "source=${localEnv:HOME}/.opencode,target=/home/vscode/.opencode,type=bind",
+    "source=${localEnv:HOME}/.cache/opencode,target=/home/vscode/.cache/opencode,type=bind"
+  ],
+  "postCreateCommand": ".devcontainer/scripts/post-create.sh",
+  "shutdownAction": "stopCompose"
+}

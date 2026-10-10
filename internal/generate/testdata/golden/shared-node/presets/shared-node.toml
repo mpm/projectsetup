@@ -1,0 +1,35 @@
+schema = 2
+kind = "preset"
+name = "shared-node"
+version = "1.0.0"
+description = "Fixed image consumption fixture, not a verified artifact"
+[image]
+base = "registry.example/team/node-toolchain:fixed"
+apt = ["git", "make"]
+root_run = ["install -d /opt/project"]
+user_run = ["mkdir -p /home/vscode/project-cache"]
+[image.preinstalled]
+core_packages = ["bash", "ca-certificates", "curl", "git", "gnupg", "sudo"]
+[image.preinstalled.tools.node]
+version = "22.14.0"
+executable = "/opt/node/bin/node"
+path = ["/opt/node/bin", "/usr/bin"]
+[image.preinstalled.tools.npm]
+version = "10.9.2"
+executable = "/opt/node/bin/npm"
+path = ["/opt/node/bin"]
+[image.preinstalled.tools.team-cli]
+version = "release_1"
+executable = "/opt/team/bin/team"
+path = ["/opt/team/bin", "/home/vscode/.local/bin"]
+[container]
+path = ["/opt/node/bin", "/opt/project/bin", "/usr/bin"]
+env = { TEAM_MODE = "development" }
+[features."example.com/features/opaque:1"]
+enabled = true
+[setup]
+script = "if [ -f package-lock.json ]; then npm ci; fi"
+[image.preinstalled.tools.gh]
+version = "2.67.0"
+executable = "/usr/bin/gh"
+path = ["/usr/bin"]

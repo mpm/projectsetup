@@ -309,12 +309,8 @@ func (m *merger) add(owner string, f Fragment) {
 	m.result.RootRun = append(m.result.RootRun, f.Image.RootRun...)
 	m.result.UserRun = append(m.result.UserRun, f.Image.UserRun...)
 	for _, id := range sortedKeys(f.Features) {
-		if p := m.result.Preinstalled; p != nil {
-			if tool := installerTool(id); tool != "" {
-				if _, declared := p.Tools[tool]; declared {
-					m.errs = append(m.errs, fmt.Errorf("preinstalled tool %q conflicts with definition %q feature %q; omit its installer when consuming the image", tool, owner, id))
-				}
-			}
+		if tool := m.result.PreinstalledInstaller(id); tool != "" {
+			m.errs = append(m.errs, fmt.Errorf("preinstalled tool %q conflicts with definition %q feature %q; omit its installer when consuming the image", tool, owner, id))
 		}
 		if !m.claim("feature", id, owner) {
 			continue

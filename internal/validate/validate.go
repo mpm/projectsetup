@@ -257,17 +257,23 @@ func validateDevcontainer(root, devDir string, manifest config.Manifest, resolve
 	if !equalInts(document.ForwardPorts, manifest.Ports) {
 		add(Error, path, "forwardPorts %v do not match manifest ports %v", document.ForwardPorts, manifest.Ports)
 	}
-	for _, id := range sortedKeys(resolved.Features) {
+	expectedFeatures := resolved.DevcontainerFeatures()
+	for _, id := range sortedKeys(expectedFeatures) {
 		actual, ok := document.Features[id]
 		if !ok {
-			add(Error, path, "feature %q required by the selected definitions is missing", id)
+			add(Error, path, "required feature %q is missing", id)
 			continue
 		}
-		for _, key := range sortedKeys(resolved.Features[id]) {
-			want := jsonValue(resolved.Features[id][key])
+		for _, key := range sortedKeys(expectedFeatures[id]) {
+			want := jsonValue(expectedFeatures[id][key])
 			if !reflect.DeepEqual(actual[key], want) {
 				add(Error, path, "feature %q option %s is %s; expected %s", id, key, jsonText(actual[key]), jsonText(want))
 			}
+		}
+	}
+	for _, id := range sortedKeys(document.Features) {
+		if tool := resolved.PreinstalledInstaller(id); tool != "" {
+			add(Error, path, "feature %q reinstalls preinstalled tool %q; remove its installer when consuming the image", id, tool)
 		}
 	}
 	for _, expected := range expectedAIMounts(manifest.AITools) {
@@ -288,6 +294,11 @@ func validateDevcontainer(root, devDir string, manifest config.Manifest, resolve
 		}
 	}
 	containerPath := strings.Split(document.ContainerEnv["PATH"], ":")
+	if resolved.Preinstalled != nil && len(resolved.Preinstalled.Tools) > 0 {
+		if want := config.ContainerPath("/home/vscode", resolved); document.ContainerEnv["PATH"] != want {
+			add(Error, path, "containerEnv.PATH must match the ordered, deduplicated image tool and definition paths; expected %q", want)
+		}
+	}
 	for _, required := range append([]string{"/home/vscode/.local/bin", "/usr/bin", "/bin"}, resolved.Path...) {
 		if !containsString(containerPath, required) {
 			add(Error, path, "containerEnv.PATH must include %s", required)

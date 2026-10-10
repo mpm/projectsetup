@@ -121,6 +121,32 @@ func (p *Preinstalled) toolPath() []string {
 	return result
 }
 
+// PreinstalledInstaller returns the declared tool that a known feature would
+// reinstall, recognizing repository identity independently of tag/digest.
+func (r Resolved) PreinstalledInstaller(id string) string {
+	if r.Preinstalled != nil {
+		tool := installerTool(id)
+		if _, declared := r.Preinstalled.Tools[tool]; declared {
+			return tool
+		}
+	}
+	return ""
+}
+
+// DevcontainerFeatures includes the core GitHub CLI request only when the
+// image does not declare its equivalent. Definition installers remain explicit.
+func (r Resolved) DevcontainerFeatures() map[string]map[string]any {
+	result := make(map[string]map[string]any, len(r.Features)+1)
+	const githubCLI = "ghcr.io/devcontainers/features/github-cli:1"
+	if r.PreinstalledInstaller(githubCLI) == "" {
+		result[githubCLI] = map[string]any{}
+	}
+	for id, options := range r.Features {
+		result[id] = options
+	}
+	return result
+}
+
 // installerTool recognizes repository identity independently of tag/digest.
 func installerTool(id string) string {
 	repository, _, _ := strings.Cut(id, "@")

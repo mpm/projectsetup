@@ -313,7 +313,7 @@ Every generated project gets a copy of the exact definition files it was generat
 
 The CLI and editor schema accept **definition schemas 1 and 2**, including mixed-schema preset/add-on selections. Built-ins remain schema 1 with their original bytes and hashes. Schema 2 adds the optional `image.preinstalled` declaration described below. Manifest schema 2 is unchanged: the exact preset snapshot pins the declaration, base image, and format number. Ordinary checks/upgrades retain those bytes; `upgrade --refresh-presets` explicitly adopts registry changes. Remote indexes and `sources.toml` remain schema 1.
 
-### Preinstalled image declarations (parsing support)
+### Preinstalled image declarations
 
 Definition schema 2 permits `[image.preinstalled]` only in the preset's top-level image. Schema 1, add-ons, and variants reject it, including an empty table. It has two independent optional members:
 
@@ -326,7 +326,11 @@ Versions and paths are literal fixed artifact data, not options. Paths must be c
 
 `init --list-options --json` and `preset list --json` expose additive `definitionSchema` and optional `preinstalled` metadata (`corePackages`, `tools`); the init listing remains schema 2. The text options listing labels declarations as fixed data and does not synthesize `--set` runtime options.
 
-**Consumption is still pending:** declarations are parsed, validated, resolved, normalized, and snapshotted, but do not yet suppress core apt/GitHub CLI installation or change generated PATH. Static validation does not verify the artifact. Absent/empty contracts preserve existing generated installation behavior. Follow the [shared-image roadmap](SHARED_IMAGES_ROADMAP.md#phase-1-first-class-consumption-of-shared-images) for generation, version-file binding, effective metadata, ownership, and opt-in runtime verification work before relying on this as an end-to-end shared-image workflow.
+Generation consumes declared tools: declaring `gh` omits the core GitHub CLI feature; without it, the feature remains required. For preinstalled runtimes, omit the corresponding installer from your custom preset and selected add-ons. Known conflicting installers are rejected, even with a matching version. Opaque features, root/user shell steps, package-manager setup, and project dependency installation remain explicit contributions.
+
+Generated `containerEnv.PATH` contains the core AI/user directories first, then declared tool directories (sorted by tool name, preserving each list's order), definition `container.path` entries, and system fallback directories. With declared tools, the combined list is deduplicated by first occurrence. `check` requires this ordering and rejects known feature requests that reinstall declared tools, including alternate tags/digests. This makes declared paths available to direct non-login `dworm exec` commands. Absent/empty tool maps preserve legacy PATH rendering and the GitHub CLI request.
+
+Core apt suppression is a separate pending step: `core_packages` is accepted and snapshotted but currently leaves the core apt installation unchanged. Dockerfiles still preserve all project packages, root/user steps, and existing user/home ownership handling. Static checks validate the declared configuration, not the image artifact. Follow the [shared-image roadmap](SHARED_IMAGES_ROADMAP.md#phase-1-first-class-consumption-of-shared-images) for core apt suppression, version-file binding, inherited metadata, ownership, and opt-in runtime verification before relying on this as an end-to-end shared-image workflow.
 
 ### Writing a definition
 

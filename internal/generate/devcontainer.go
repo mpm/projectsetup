@@ -2,7 +2,6 @@ package generate
 
 import (
 	"maps"
-	"strings"
 
 	"github.com/mpm/projectsetup/internal/config"
 	"github.com/mpm/projectsetup/internal/presets"
@@ -31,7 +30,7 @@ func renderDevcontainer(cfg config.Config, resolved presets.Resolved) ([]byte, e
 		WorkspaceFolder:   cfg.Workspace.ContainerPath,
 		ContainerUser:     cfg.Container.User,
 		RemoteUser:        cfg.Container.User,
-		Features:          features(resolved),
+		Features:          resolved.DevcontainerFeatures(),
 		ContainerEnv:      map[string]string{},
 		Mounts:            aiMounts(cfg),
 		ForwardPorts:      append([]int(nil), cfg.Ports...),
@@ -40,7 +39,7 @@ func renderDevcontainer(cfg config.Config, resolved presets.Resolved) ([]byte, e
 	}
 	// Definitions cannot set the reserved keys written below.
 	maps.Copy(document.ContainerEnv, resolved.Env)
-	document.ContainerEnv["PATH"] = containerPath(cfg, resolved)
+	document.ContainerEnv["PATH"] = config.ContainerPath(cfg.Container.Home, resolved)
 	for _, tool := range cfg.AITools {
 		if tool == config.AIToolCodex {
 			document.ContainerEnv["CODEX_HOME"] = cfg.Container.Home + "/.codex"
@@ -50,27 +49,6 @@ func renderDevcontainer(cfg config.Config, resolved presets.Resolved) ([]byte, e
 		}
 	}
 	return marshalJSON(document)
-}
-
-func features(resolved presets.Resolved) map[string]map[string]any {
-	result := map[string]map[string]any{
-		"ghcr.io/devcontainers/features/github-cli:1": {},
-	}
-	maps.Copy(result, resolved.Features)
-	return result
-}
-
-// containerPath is set in containerEnv because dworm exec does not apply
-// remoteEnv. It replaces PATH changes made by features, so definitions list
-// the directories their features install into.
-func containerPath(cfg config.Config, resolved presets.Resolved) string {
-	paths := []string{
-		cfg.Container.Home + "/.local/bin",
-		cfg.Container.Home + "/.opencode/bin",
-	}
-	paths = append(paths, resolved.Path...)
-	paths = append(paths, "/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin")
-	return strings.Join(paths, ":")
 }
 
 func aiMounts(cfg config.Config) []string {
