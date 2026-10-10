@@ -311,7 +311,22 @@ projectsetup preset remove NAME
 
 Every generated project gets a copy of the exact definition files it was generated from in `.devcontainer/presets/`. The manifest records each definition's name, version, source, and SHA-256 hash. `check` and `upgrade` use these copies, so a project keeps working on a machine that does not have its user or remote definitions, and changing a definition does not affect existing projects until you run `projectsetup upgrade --refresh-presets` there. Do not edit the copies: `check` reports a copy whose hash differs from the manifest.
 
-The [shared-image roadmap](SHARED_IMAGES_ROADMAP.md#schema-evolution-contract-decisions-completed) reserves definition schema 2 for an optional preinstalled-tool contract and retains manifest schema 2, with the declaration pinned in the preset snapshot. This is a planned format extension: the current CLI and editor schema still support definition schema 1 only. Existing definitions keep their current installation behavior; shared-image declarations will require the coordinated parser and generation work recorded in the roadmap.
+The CLI and editor schema accept **definition schemas 1 and 2**, including mixed-schema preset/add-on selections. Built-ins remain schema 1 with their original bytes and hashes. Schema 2 adds the optional `image.preinstalled` declaration described below. Manifest schema 2 is unchanged: the exact preset snapshot pins the declaration, base image, and format number. Ordinary checks/upgrades retain those bytes; `upgrade --refresh-presets` explicitly adopts registry changes. Remote indexes and `sources.toml` remain schema 1.
+
+### Preinstalled image declarations (parsing support)
+
+Definition schema 2 permits `[image.preinstalled]` only in the preset's top-level image. Schema 1, add-ons, and variants reject it, including an empty table. It has two independent optional members:
+
+- `core_packages`: unique names from `bash`, `ca-certificates`, `curl`, `git`, `gnupg`, and `sudo`.
+- `tools`: tables keyed by lowercase tool names (`^[a-z][a-z0-9-]*$`). Each requires `version`, `executable`, and a nonempty `path` array containing the executable's parent directory.
+
+`node`, `ruby`, `python`, `go`, `rust`, and `gh` require a concrete `MAJOR.MINOR.PATCH` release, optionally with prerelease/build suffixes. Other tools accept literal shell-safe release tokens; moving selectors (`latest`, `lts`, `stable`, `nightly`) are rejected. Package managers and companion commands are separate tool declarations. AI tools (`opencode`, `claude`, `codex`) remain managed by the shared installer and cannot be declared here.
+
+Versions and paths are literal fixed artifact data, not options. Paths must be clean absolute Linux paths without whitespace, control characters, `:`, or expansion markers; symlinks and shims are allowed. Resolution orders tool PATH entries by tool name, preserving each list's order and deduplicating first occurrences. Selected known runtime/GitHub CLI installer features conflict with declarations for the same tool regardless of feature tag/digest, including installers contributed by add-ons or matching variants. Unknown features and shell steps are not inferred to install tools.
+
+`init --list-options --json` and `preset list --json` expose additive `definitionSchema` and optional `preinstalled` metadata (`corePackages`, `tools`); the init listing remains schema 2. The text options listing labels declarations as fixed data and does not synthesize `--set` runtime options.
+
+**Consumption is still pending:** declarations are parsed, validated, resolved, normalized, and snapshotted, but do not yet suppress core apt/GitHub CLI installation or change generated PATH. Static validation does not verify the artifact. Absent/empty contracts preserve existing generated installation behavior. Follow the [shared-image roadmap](SHARED_IMAGES_ROADMAP.md#phase-1-first-class-consumption-of-shared-images) for generation, version-file binding, effective metadata, ownership, and opt-in runtime verification work before relying on this as an end-to-end shared-image workflow.
 
 ### Writing a definition
 

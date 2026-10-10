@@ -30,6 +30,16 @@ func writeOptions(output io.Writer, options config.Options, asJSON bool) error {
 	text.WriteString("Options (--set [DEFINITION.]OPTION=VALUE):\n")
 	for _, name := range append(slices.Clone(options.Presets), options.Addons...) {
 		info := options.Definitions[name]
+		if info.Preinstalled != nil {
+			fmt.Fprintf(&text, "  %s image declarations (fixed, not --set options):\n", name)
+			if len(info.Preinstalled.CorePackages) > 0 {
+				fmt.Fprintf(&text, "    core packages: %s\n", joinChoices(info.Preinstalled.CorePackages, ", "))
+			}
+			for _, tool := range slices.Sorted(maps.Keys(info.Preinstalled.Tools)) {
+				details := info.Preinstalled.Tools[tool]
+				fmt.Fprintf(&text, "    %s: %s; executable %s; PATH %s\n", tool, details.Version, details.Executable, strings.Join(details.Path, ":"))
+			}
+		}
 		for _, option := range slices.Sorted(maps.Keys(info.Options)) {
 			details := info.Options[option]
 			if len(details.Choices) > 0 {

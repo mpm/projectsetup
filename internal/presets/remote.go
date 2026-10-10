@@ -172,8 +172,8 @@ func (f Fetcher) index(ctx context.Context, base *url.URL) ([]string, error) {
 		return nil, fmt.Errorf("%s: parse index: %w", base, err)
 	}
 	var problems []string
-	if index.Schema != SchemaVersion {
-		problems = append(problems, fmt.Sprintf("schema is %d; this projectsetup reads schema %d", index.Schema, SchemaVersion))
+	if index.Schema != 1 {
+		problems = append(problems, fmt.Sprintf("schema is %d; this projectsetup reads index schema 1", index.Schema))
 	}
 	if len(index.Definitions) == 0 || len(index.Definitions) > MaxIndexEntries {
 		problems = append(problems, fmt.Sprintf("definitions must list 1 to %d files", MaxIndexEntries))

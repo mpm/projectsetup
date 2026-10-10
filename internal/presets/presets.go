@@ -16,8 +16,9 @@ import (
 	toml "github.com/pelletier/go-toml/v2"
 )
 
-// SchemaVersion is the definition file format this build reads.
-const SchemaVersion = 1
+// SchemaVersion is the newest definition format this build reads. Schema 1
+// remains supported; built-in definitions retain their original bytes.
+const SchemaVersion = 2
 
 type Kind string
 
@@ -116,10 +117,11 @@ type Fragment struct {
 }
 
 type Image struct {
-	Base    string   `toml:"base"`
-	Apt     []string `toml:"apt"`
-	RootRun []string `toml:"root_run"`
-	UserRun []string `toml:"user_run"`
+	Preinstalled *Preinstalled `toml:"preinstalled"`
+	Base         string        `toml:"base"`
+	Apt          []string      `toml:"apt"`
+	RootRun      []string      `toml:"root_run"`
+	UserRun      []string      `toml:"user_run"`
 }
 
 type Container struct {
@@ -219,8 +221,8 @@ func (d Definition) problems() []string {
 	var problems []string
 	fail := func(format string, args ...any) { problems = append(problems, fmt.Sprintf(format, args...)) }
 
-	if d.Schema != SchemaVersion {
-		fail("schema is %d; this projectsetup reads schema %d", d.Schema, SchemaVersion)
+	if d.Schema != 1 && d.Schema != SchemaVersion {
+		fail("schema is %d; this projectsetup reads schemas 1 and %d", d.Schema, SchemaVersion)
 	}
 	if d.Kind != KindPreset && d.Kind != KindAddon {
 		fail("kind is %q; expected %q or %q", d.Kind, KindPreset, KindAddon)
@@ -275,12 +277,23 @@ func (d Definition) problems() []string {
 	if d.Kind == KindAddon && d.Image.Base != "" {
 		fail("image.base can only be set by a preset")
 	}
+	if d.Image.Preinstalled != nil {
+		if d.Schema != 2 {
+			fail("image.preinstalled requires schema 2")
+		}
+		if d.Kind != KindPreset {
+			fail("image.preinstalled can only be set by a preset")
+		}
+	}
 	problems = append(problems, d.Fragment.problems("", d.Options)...)
 
 	for i, variant := range d.Variants {
 		where := fmt.Sprintf("variant[%d]", i)
 		if variant.Image.Base != "" {
 			fail("%s: image.base cannot be set in a variant", where)
+		}
+		if variant.Image.Preinstalled != nil {
+			fail("%s: image.preinstalled cannot be set in a variant", where)
 		}
 		problems = append(problems, variant.When.problems(where+".when", d.Options)...)
 		problems = append(problems, variant.Fragment.problems(where+".", d.Options)...)
@@ -298,6 +311,9 @@ func (f Fragment) problems(prefix string, options map[string]Option) []string {
 	}
 
 	text("image.base", f.Image.Base)
+	if f.Image.Preinstalled != nil {
+		problems = append(problems, f.Image.Preinstalled.problems(prefix+"image.preinstalled")...)
+	}
 	for _, pkg := range f.Image.Apt {
 		if !validAptPackage.MatchString(pkg) {
 			fail("%simage.apt: %q is not a valid apt package name", prefix, pkg)

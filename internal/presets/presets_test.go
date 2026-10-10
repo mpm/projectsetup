@@ -45,7 +45,7 @@ func TestParseRejectsInvalidDefinitions(t *testing.T) {
 		{"syntax", "schema = ", "x.toml:1"},
 		{"unknown field", preset + "colour = \"red\"\n", "unknown fields"},
 		{"unknown nested field", preset + "[setup]\nscripts = \"x\"\n", "unknown fields"},
-		{"schema", strings.Replace(preset, "schema = 1", "schema = 2", 1), "schema is 2"},
+		{"schema", strings.Replace(preset, "schema = 1", "schema = 3", 1), "schema is 3"},
 		{"kind", header("plugin"), `kind is "plugin"`},
 		{"name", strings.Replace(preset, `name = "x"`, `name = "X"`, 1), `name "X" must match`},
 		{"version", strings.Replace(preset, `"1.0.0"`, `"1.0"`, 1), "MAJOR.MINOR.PATCH"},

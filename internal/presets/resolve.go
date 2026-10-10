@@ -28,7 +28,11 @@ type Selection struct {
 // Resolved is the merged contribution of the selected definitions with all
 // placeholders expanded.
 type Resolved struct {
-	Base string
+	Base         string
+	Preinstalled *Preinstalled
+	// PreinstalledPath is separate from installation PATH contributions. The
+	// generator's consumption policy determines the final containerEnv.PATH.
+	PreinstalledPath []string
 	// Apt holds one package group per contributing block, in contribution order.
 	Apt      [][]string
 	RootRun  []string
@@ -118,10 +122,12 @@ func (r *Registry) Resolve(selection Selection) (Resolved, error) {
 	}
 	merger := merger{
 		result: Resolved{
-			Features: map[string]map[string]any{},
-			Env:      map[string]string{},
-			Services: map[string]Service{},
-			Options:  map[string]map[string]string{},
+			Preinstalled:     preset.Image.Preinstalled.clone(),
+			PreinstalledPath: preset.Image.Preinstalled.toolPath(),
+			Features:         map[string]map[string]any{},
+			Env:              map[string]string{},
+			Services:         map[string]Service{},
+			Options:          map[string]map[string]string{},
 		},
 		owners: map[string]string{},
 	}
@@ -303,6 +309,13 @@ func (m *merger) add(owner string, f Fragment) {
 	m.result.RootRun = append(m.result.RootRun, f.Image.RootRun...)
 	m.result.UserRun = append(m.result.UserRun, f.Image.UserRun...)
 	for _, id := range sortedKeys(f.Features) {
+		if p := m.result.Preinstalled; p != nil {
+			if tool := installerTool(id); tool != "" {
+				if _, declared := p.Tools[tool]; declared {
+					m.errs = append(m.errs, fmt.Errorf("preinstalled tool %q conflicts with definition %q feature %q; omit its installer when consuming the image", tool, owner, id))
+				}
+			}
+		}
 		if !m.claim("feature", id, owner) {
 			continue
 		}

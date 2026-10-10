@@ -765,6 +765,7 @@ const wantListOptionsJSON = `{
   ],
   "definitions": {
     "go": {
+      "definitionSchema": 1,
       "name": "go",
       "kind": "addon",
       "version": "1.0.0",
@@ -779,6 +780,7 @@ const wantListOptionsJSON = `{
       }
     },
     "node": {
+      "definitionSchema": 1,
       "name": "node",
       "kind": "preset",
       "version": "1.0.0",
@@ -802,6 +804,7 @@ const wantListOptionsJSON = `{
       }
     },
     "postgres": {
+      "definitionSchema": 1,
       "name": "postgres",
       "kind": "addon",
       "version": "1.0.0",
@@ -816,6 +819,7 @@ const wantListOptionsJSON = `{
       }
     },
     "python": {
+      "definitionSchema": 1,
       "name": "python",
       "kind": "preset",
       "version": "1.0.0",
@@ -839,6 +843,7 @@ const wantListOptionsJSON = `{
       }
     },
     "rails": {
+      "definitionSchema": 1,
       "name": "rails",
       "kind": "preset",
       "version": "1.0.0",
@@ -853,6 +858,7 @@ const wantListOptionsJSON = `{
       }
     },
     "redis": {
+      "definitionSchema": 1,
       "name": "redis",
       "kind": "addon",
       "version": "1.0.0",
@@ -867,6 +873,7 @@ const wantListOptionsJSON = `{
       }
     },
     "ruby": {
+      "definitionSchema": 1,
       "name": "ruby",
       "kind": "preset",
       "version": "1.0.0",
@@ -881,6 +888,7 @@ const wantListOptionsJSON = `{
       }
     },
     "rust": {
+      "definitionSchema": 1,
       "name": "rust",
       "kind": "addon",
       "version": "1.0.0",
@@ -895,6 +903,7 @@ const wantListOptionsJSON = `{
       }
     },
     "sqlite": {
+      "definitionSchema": 1,
       "name": "sqlite",
       "kind": "addon",
       "version": "1.0.0",

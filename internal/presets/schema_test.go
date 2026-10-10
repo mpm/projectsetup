@@ -154,7 +154,13 @@ func validateSchema(root, schema map[string]any, value any, where string) []stri
 		switch keyword {
 		case "$schema", "$id", "$defs", "title", "description":
 		case "$ref":
-			problems = append(problems, validateSchema(root, resolveRef(root, map[string]any{"$ref": rule}), value, where)...)
+			// Follow one reference at a time so draft 2020-12 sibling
+			// constraints on referenced schemas are still evaluated.
+			name, ok := strings.CutPrefix(rule.(string), "#/$defs/")
+			if !ok {
+				panic("unsupported $ref " + rule.(string))
+			}
+			problems = append(problems, validateSchema(root, root["$defs"].(map[string]any)[name].(map[string]any), value, where)...)
 		case "type":
 			types, ok := rule.([]any)
 			if !ok {
@@ -168,7 +174,7 @@ func validateSchema(root, schema map[string]any, value any, where string) []stri
 				fail("%v is not %v", value, rule)
 			}
 		case "enum":
-			if !slices.Contains(rule.([]any), any(value)) {
+			if !slices.Contains(rule.([]any), jsonNumber(value)) {
 				fail("%q is not one of %v", value, rule)
 			}
 		case "pattern":
@@ -187,6 +193,30 @@ func validateSchema(root, schema map[string]any, value any, where string) []stri
 			if items, ok := value.([]any); ok && float64(len(items)) < rule.(float64) {
 				fail("needs at least %v items", rule)
 			}
+		case "uniqueItems":
+			items, _ := value.([]any)
+			if rule == true {
+				for i, item := range items {
+					for _, previous := range items[:i] {
+						if reflect.DeepEqual(item, previous) {
+							fail("duplicate item %v", item)
+						}
+					}
+				}
+			}
+		case "allOf":
+			for _, part := range rule.([]any) {
+				problems = append(problems, validateSchema(root, part.(map[string]any), value, where)...)
+			}
+		case "if":
+			branch := "else"
+			if len(validateSchema(root, rule.(map[string]any), value, where)) == 0 {
+				branch = "then"
+			}
+			if part, ok := schema[branch].(map[string]any); ok {
+				problems = append(problems, validateSchema(root, part, value, where)...)
+			}
+		case "then", "else":
 		case "items":
 			items, _ := value.([]any)
 			for i, item := range items {

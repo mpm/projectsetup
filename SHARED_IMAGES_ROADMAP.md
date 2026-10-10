@@ -1,6 +1,6 @@
 # Shared Toolchain Images: Implementation Roadmap
 
-Status: Phase 1 declaration design and schema-evolution decisions completed; executable shared-image support is not yet implemented.
+Status: Phase 1 declaration design, schema evolution, and parsing/resolution/normalization/editor/listing support completed; generated installation suppression and executable shared-image verification are not yet implemented.
 
 This roadmap records the shared-image design discussed with the user. It is a handoff for a future implementation session. Read `AGENTS.md` and `HANDOFF.md` first, then this document. `HANDOFF.md` remains the contract for existing behavior; this roadmap describes proposed extensions.
 
@@ -82,7 +82,7 @@ Implement the smallest typed extension that makes a custom shared-image preset r
 
 - [x] Design declarations for preinstalled runtimes/tools and their versions/paths, including GitHub CLI and any core image prerequisites the generator will skip installing. See [Declaration contract](#declaration-contract-design-completed).
 - [x] Decide definition and manifest schema evolution explicitly. Retain support for existing definition snapshots and manifests; default existing definitions to current installation behavior. See [Schema evolution contract](#schema-evolution-contract-decisions-completed).
-- [ ] Extend parsing, registry resolution, normalization, editor schema, and options listing together.
+- [x] Extend parsing, registry resolution, normalization, editor schema, and options listing together. Definition schemas 1/2, literal/ownership validation, selected installer conflicts, deterministic separate preinstalled PATH data, and additive listing metadata are implemented. Mixed selections, schema 2 snapshot/manifest round trips, hash rejection, and absent/empty legacy rendering are tested. Generation consumption remains the next item.
 - [ ] Generate project Dockerfiles and Dev Container configuration without requesting installation of capabilities explicitly provided by the image.
 - [ ] Avoid redundant core apt installation for images that declare the required prerequisites. Preserve project-specific packages and root/user steps.
 - [ ] Account for Dev Container metadata inherited from prebuilt images. Inspect effective feature, environment, user, and lifecycle behavior; baked features must not cause repeated toolchain installation or inherited project setup.
@@ -92,15 +92,17 @@ Implement the smallest typed extension that makes a custom shared-image preset r
 
 Acceptance: two projects can derive from the same shared image, run their expected tools, and add distinct project packages without rebuilding the baked runtimes. Existing presets still generate and validate correctly.
 
+Parsing-item verification: changed Go files were formatted and `go test ./...` and `go vet ./...` passed using `mise exec go@1.27.2` (the default Go shim was unset). Existing golden fixtures also passed `docker compose config` and representative `devcontainer read-configuration` checks. This item changes no generated fixtures or container installation behavior; opt-in build/smoke and shared-artifact verification remain outside this step.
+
 ### Declaration contract (design completed)
 
-This section specifies the first Phase 1 item. It is an implementation contract for subsequent items, **not supported authoring syntax yet**. Current definition schema 1 rejects these fields. Schema numbers and compatibility handling are decided in the schema evolution contract below; parser and editor-schema changes remain the next checklist work. No generated output or runtime behavior changes in these design steps.
+This section specifies the Phase 1 declaration contract. Its syntax is now accepted by the parser and editor schema in definition schema 2; schema 1 rejects these fields. Parsing, resolution, normalization, snapshots, and listings are implemented. Generation consumption, effective metadata inspection, runtime version-file binding, and artifact verification remain subsequent items; declarations alone do not yet alter generated installation or PATH behavior.
 
 #### Shape and ownership
 
 Add an optional `image.preinstalled` contract to the selected preset's **top-level image only**. Like `image.base`, it cannot be contributed by add-ons or variants: it describes the selected base artifact, not something a later project layer installs. An absent contract means existing installation behavior. Empty lists/maps make no claims.
 
-Proposed fields (illustrative values, not verified image releases or references):
+Declaration fields (illustrative values, not verified image releases or references):
 
 ```toml
 [image]
@@ -174,7 +176,7 @@ Implementation tests for the later checklist items should cover absent/empty con
 
 ### Schema evolution contract (decisions completed)
 
-This section completes the second Phase 1 item. It defines the implementation boundary for the following parsing/resolution item; it does not enable shared-image declarations in the current CLI.
+This section records the second Phase 1 item's schema decisions. The following parsing/resolution item now implements these format gates and compatibility rules; generation consumption remains pending.
 
 #### Definition format
 
@@ -183,7 +185,7 @@ This section completes the second Phase 1 item. It defines the implementation bo
 - Absence of `image.preinstalled` in either supported schema means no installed-capability claims. In schema 2, an empty table or a contract whose lists/maps are all empty likewise makes no claims and preserves existing core apt installation, the GitHub CLI feature request, definition installers, and PATH rendering. An empty or omitted `core_packages` makes no package claims; an empty or omitted `tools` makes no tool claims, independently of the other member. Never infer installed capabilities from `image.base`, a preset name, or a definition's version.
 - Represent presence with an optional `*Preinstalled` on `Image`, so validation can distinguish an absent contract from an empty declaration in forbidden schema/ownership positions. Its members and validation rules remain those in the declaration contract; this is not a new installation-policy enum or user option.
 - Keep existing built-ins at `schema = 1` and retain their raw bytes and hashes. Do not mechanically bump their definition release `version` or schema. A definition author explicitly adopting schema 2 changes the raw snapshot/hash; the definition release version remains separate from the format version.
-- Extend `schema/preset.schema.json` in the next item to accept both formats and enforce schema/ownership restrictions. The parser and editor schema must agree. Keep the currently published schema and parser at schema 1 until that coordinated implementation is ready; merely accepting schema 2 now would misleadingly advertise support.
+- `schema/preset.schema.json` and the parser now accept both formats and enforce schema/ownership restrictions together. The editor schema also describes tool fields, reserved names, concrete versions, and unique core packages; `preset validate` additionally checks path cleanliness, executable parent membership, and selected installer conflicts. Acceptance is parsing support, not proof of artifact capabilities or completed generation consumption.
 
 #### Manifest and snapshots
 
@@ -197,8 +199,8 @@ This section completes the second Phase 1 item. It defines the implementation bo
 #### Other versioned formats and verification
 
 - Remote indexes and `sources.toml` remain at their existing independent schema 1; their paths, source records, and digest pinning already accommodate either definition format. Neither is a definition schema or a manifest schema.
-- `init --list-options --json` remains at **listing schema 2**. Installed-capability declarations are fixed snapshot data, not configurable options. Any additive declaration information exposed by the next listing implementation must be derived from the same typed definition and follow the listing's existing additive-field policy; do not synthesize runtime options or duplicate editable state.
-- Existing tests cover strict schema/unknown-field rejection, manifest schema 1 conversion and schema 2 round trips, snapshot hash/version checks, and legacy golden output. Run them for this decision step. The following implementation item must add dual-definition-schema acceptance/rejection, absent/empty-contract compatibility, mixed selections, and schema 2 snapshot/manifest round trips before claiming parser support. Subsequent generation items must demonstrate byte-identical legacy output and the declared installation choices.
+- `init --list-options --json` remains at **listing schema 2**. Installed-capability declarations are fixed snapshot data, not configurable options. Listings now expose additive `definitionSchema` and optional `preinstalled` metadata derived from the typed definition (`corePackages` and `tools`); text options listings label them as fixed declarations. No synthesized runtime options or independently editable manifest state are added.
+- Tests cover strict schema/unknown-field rejection, manifest schema 1 conversion, snapshot hash/version checks, and legacy golden output. Parsing implementation adds dual-definition-schema acceptance/rejection, empty-contract ownership gates, parser/editor agreement, literal/path/version failures, mixed selections, deterministic preinstalled PATH data, installer conflicts (including tags/digests and matching variants), schema 2 snapshot/manifest round trips, and absent/empty-contract rendering compatibility. Subsequent generation items must test the declared installation choices and final combined PATH.
 
 ## Phase 2: Explicit ownership policy
 

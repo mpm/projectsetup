@@ -90,7 +90,7 @@ func Normalize(input Input) (Config, error) {
 	for _, definition := range definitions[1:] {
 		addons = append(addons, definition.Name)
 	}
-	return Config{
+	cfg := Config{
 		ProjectName:    name,
 		Preset:         definitions[0].Name,
 		Addons:         addons,
@@ -109,7 +109,13 @@ func Normalize(input Input) (Config, error) {
 			ComposeProjectName: name,
 			ServiceName:        "app",
 		},
-	}, nil
+	}
+	// Resolve before rendering so invalid selected installer combinations fail
+	// during normalization, including matching variants and mixed schemas.
+	if _, err := Resolve(cfg); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
 }
 
 // selectDefinitions returns the preset followed by the add-ons sorted by
