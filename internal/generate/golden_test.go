@@ -19,8 +19,9 @@ import (
 )
 
 type goldenCase struct {
-	name  string
-	input config.Input
+	name       string
+	input      config.Input
+	renderOnly bool
 }
 
 var goldenCases = []goldenCase{
@@ -116,7 +117,7 @@ var goldenCases = []goldenCase{
 }
 
 func TestGoldenTrees(t *testing.T) {
-	cases := append(append([]goldenCase(nil), goldenCases...), goldenCase{name: "shared-node", input: sharedImageInput(t, true)})
+	cases := append(append([]goldenCase(nil), goldenCases...), goldenCase{name: "shared-node", input: sharedImageInput(t, true)}, goldenCase{name: "fixed-image", input: fixedImageInput(t, 1001, 1002), renderOnly: true})
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			root := t.TempDir()
@@ -127,7 +128,15 @@ func TestGoldenTrees(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Normalize() error = %v", err)
 			}
-			if err := Write(root, cfg, false); err != nil {
+			if tt.renderOnly {
+				files, err := render(cfg)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, f := range files {
+					writeTestFile(t, filepath.Join(root, directoryName, f.name), string(f.data), f.mode)
+				}
+			} else if err := Write(root, cfg, false); err != nil {
 				t.Fatalf("Write() error = %v", err)
 			}
 
@@ -161,7 +170,7 @@ func TestGoldenComposeConfigurations(t *testing.T) {
 		t.Skipf("docker compose is not available: %v: %s", err, output)
 	}
 
-	cases := append(append([]goldenCase(nil), goldenCases...), goldenCase{name: "shared-node"})
+	cases := append(append([]goldenCase(nil), goldenCases...), goldenCase{name: "shared-node"}, goldenCase{name: "fixed-image"})
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			compose := filepath.Join("testdata", "golden", tt.name, "compose.yaml")
@@ -188,7 +197,7 @@ func TestGoldenDevcontainerConfigurations(t *testing.T) {
 		t.Skipf("Docker daemon is unavailable: %v: %s", err, output)
 	}
 
-	for _, name := range []string{"node-opencode", "ruby-opencode", "rails-claude-postgres", "rails-sqlite", "python-uv-claude-postgres", "python-codex", "node-all-agents", "shared-node"} {
+	for _, name := range []string{"node-opencode", "ruby-opencode", "rails-claude-postgres", "rails-sqlite", "python-uv-claude-postgres", "python-codex", "node-all-agents", "shared-node", "fixed-image"} {
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()

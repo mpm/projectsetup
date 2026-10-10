@@ -1,0 +1,11 @@
+schema = 2
+kind = "preset"
+name = "fixed-image"
+version = "1.0.0"
+description = "Ownership-only image fixture"
+[image]
+base = "registry.example/team/toolchain:fixed"
+[image.ownership]
+mode = "fixed"
+uid = 1001
+gid = 1002

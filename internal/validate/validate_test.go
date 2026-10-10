@@ -50,8 +50,8 @@ func TestRuntimeStaticAndContractGates(t *testing.T) {
 	}{
 		{name: "offline shared", contract: "core_packages = ['bash']"},
 		{name: "external static shared", contract: "core_packages = ['bash']", external: true},
-		{name: "absent runtime", runtime: true, failure: "requires nonempty"},
-		{name: "empty runtime", contract: "# empty", runtime: true, failure: "requires nonempty"},
+		{name: "absent runtime", runtime: true, failure: "requires image.ownership or nonempty"},
+		{name: "empty runtime", contract: "# empty", runtime: true, failure: "requires image.ownership or nonempty"},
 		{name: "invalid shared runtime", contract: "core_packages = ['bash']", runtime: true, broken: true, failure: "required generated file"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -326,7 +326,7 @@ func TestCheckBuildRunsAfterStaticValidation(t *testing.T) {
 	}
 	runner.commands = nil
 	diagnostics = validate.Check(root, validate.Options{Runtime: true, Runner: runner})
-	assertDiagnostic(t, diagnostics, validate.Error, "requires nonempty image.preinstalled claims")
+	assertDiagnostic(t, diagnostics, validate.Error, "requires image.ownership or nonempty image.preinstalled claims")
 	if contains(runner.commands, want) {
 		t.Fatal("runtime check built a legacy preset without claims")
 	}

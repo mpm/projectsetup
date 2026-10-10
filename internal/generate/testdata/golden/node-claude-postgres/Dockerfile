@@ -9,7 +9,7 @@ RUN apt-get update \
         libpq-dev postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /home/vscode/.local/bin /home/vscode/.local/state \
-    && chown -R vscode:vscode /home/vscode/.local
+RUN mkdir -p /home/vscode/.local/bin /home/vscode/.local/state /home/vscode/.local/share /home/vscode/.config /home/vscode/.cache \
+    && chown --no-dereference vscode:vscode /home/vscode /home/vscode/.local /home/vscode/.local/bin /home/vscode/.local/state /home/vscode/.local/share /home/vscode/.config /home/vscode/.cache
 
 USER vscode

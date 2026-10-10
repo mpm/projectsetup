@@ -8,18 +8,19 @@ import (
 )
 
 type devcontainerConfig struct {
-	Name              string                    `json:"name"`
-	DockerComposeFile string                    `json:"dockerComposeFile,omitempty"`
-	Service           string                    `json:"service,omitempty"`
-	WorkspaceFolder   string                    `json:"workspaceFolder"`
-	ContainerUser     string                    `json:"containerUser"`
-	RemoteUser        string                    `json:"remoteUser"`
-	Features          map[string]map[string]any `json:"features"`
-	ContainerEnv      map[string]string         `json:"containerEnv"`
-	Mounts            []string                  `json:"mounts,omitempty"`
-	ForwardPorts      []int                     `json:"forwardPorts,omitempty"`
-	PostCreateCommand string                    `json:"postCreateCommand"`
-	ShutdownAction    string                    `json:"shutdownAction,omitempty"`
+	UpdateRemoteUserUID *bool                     `json:"updateRemoteUserUID,omitempty"`
+	Name                string                    `json:"name"`
+	DockerComposeFile   string                    `json:"dockerComposeFile,omitempty"`
+	Service             string                    `json:"service,omitempty"`
+	WorkspaceFolder     string                    `json:"workspaceFolder"`
+	ContainerUser       string                    `json:"containerUser"`
+	RemoteUser          string                    `json:"remoteUser"`
+	Features            map[string]map[string]any `json:"features"`
+	ContainerEnv        map[string]string         `json:"containerEnv"`
+	Mounts              []string                  `json:"mounts,omitempty"`
+	ForwardPorts        []int                     `json:"forwardPorts,omitempty"`
+	PostCreateCommand   string                    `json:"postCreateCommand"`
+	ShutdownAction      string                    `json:"shutdownAction,omitempty"`
 }
 
 func renderDevcontainer(cfg config.Config, resolved presets.Resolved) ([]byte, error) {
@@ -36,6 +37,10 @@ func renderDevcontainer(cfg config.Config, resolved presets.Resolved) ([]byte, e
 		ForwardPorts:      append([]int(nil), cfg.Ports...),
 		PostCreateCommand: ".devcontainer/scripts/post-create.sh",
 		ShutdownAction:    "stopCompose",
+	}
+	if resolved.Ownership != nil {
+		update := false
+		document.UpdateRemoteUserUID = &update
 	}
 	// Definitions cannot set the reserved keys written below.
 	maps.Copy(document.ContainerEnv, resolved.Env)

@@ -81,7 +81,7 @@ func TestCheckRuntimeFlag(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	var stdout, stderr bytes.Buffer
 	err = runCheck(root, []string{"--runtime"}, &stdout, &stderr)
-	if err == nil || !strings.Contains(stderr.String(), "requires nonempty image.preinstalled claims") || stdout.Len() != 0 {
+	if err == nil || !strings.Contains(stderr.String(), "requires image.ownership or nonempty image.preinstalled claims") || stdout.Len() != 0 {
 		t.Fatalf("legacy runtime request: err=%v stdout=%s stderr=%s", err, &stdout, &stderr)
 	}
 	stderr.Reset()

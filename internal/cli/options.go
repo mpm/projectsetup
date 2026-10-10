@@ -30,6 +30,9 @@ func writeOptions(output io.Writer, options config.Options, asJSON bool) error {
 	text.WriteString("Options (--set [DEFINITION.]OPTION=VALUE):\n")
 	for _, name := range append(slices.Clone(options.Presets), options.Addons...) {
 		info := options.Definitions[name]
+		if info.Ownership != nil {
+			fmt.Fprintf(&text, "  %s image ownership (fixed, not --set options): vscode %d:%d; UID adjustment disabled\n", name, info.Ownership.UID, info.Ownership.GID)
+		}
 		if info.Preinstalled != nil {
 			fmt.Fprintf(&text, "  %s image declarations (fixed, not --set options):\n", name)
 			if len(info.Preinstalled.CorePackages) > 0 {

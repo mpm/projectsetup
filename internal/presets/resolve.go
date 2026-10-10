@@ -28,6 +28,7 @@ type Selection struct {
 // Resolved is the merged contribution of the selected definitions with all
 // placeholders expanded.
 type Resolved struct {
+	Ownership    *Ownership
 	Base         string
 	Preinstalled *Preinstalled
 	// PreinstalledPath is separate from installation PATH contributions. The
@@ -50,6 +51,12 @@ type Resolved struct {
 // empty contracts, whose historical installation and metadata behavior remains.
 func (r Resolved) ConsumesPreinstalledImage() bool {
 	return r.Preinstalled != nil && (len(r.Preinstalled.CorePackages) > 0 || len(r.Preinstalled.Tools) > 0)
+}
+
+// RequiresImageVerification includes ownership-only artifacts, which make no
+// tool claims but still need metadata isolation and numeric identity checks.
+func (r Resolved) RequiresImageVerification() bool {
+	return r.ConsumesPreinstalledImage() || r.Ownership != nil
 }
 
 // Registry holds definitions by name.
@@ -128,6 +135,7 @@ func (r *Registry) Resolve(selection Selection) (Resolved, error) {
 	}
 	merger := merger{
 		result: Resolved{
+			Ownership:        preset.Image.Ownership.clone(),
 			Preinstalled:     preset.Image.Preinstalled.clone(),
 			PreinstalledPath: preset.Image.Preinstalled.toolPath(),
 			Features:         map[string]map[string]any{},

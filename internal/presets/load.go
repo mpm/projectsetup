@@ -42,6 +42,7 @@ func (d Definition) SHA256() string {
 
 // Info describes a definition for listings.
 type Info struct {
+	Ownership        *Ownership            `json:"ownership,omitempty"`
 	DefinitionSchema int                   `json:"definitionSchema"`
 	Preinstalled     *Preinstalled         `json:"preinstalled,omitempty"`
 	Name             string                `json:"name"`
@@ -61,7 +62,7 @@ type OptionInfo struct {
 
 // Info returns the listing entry for d.
 func (d Definition) Info() Info {
-	info := Info{DefinitionSchema: d.Schema, Preinstalled: d.Image.Preinstalled.clone(), Name: d.Name, Kind: d.Kind, Version: d.Version, Source: d.Source, Description: d.Description, Options: map[string]OptionInfo{}}
+	info := Info{Ownership: d.Image.Ownership.clone(), DefinitionSchema: d.Schema, Preinstalled: d.Image.Preinstalled.clone(), Name: d.Name, Kind: d.Kind, Version: d.Version, Source: d.Source, Description: d.Description, Options: map[string]OptionInfo{}}
 	for name, option := range d.Options {
 		info.Options[name] = OptionInfo{Description: option.Description, Default: option.Default, Choices: option.Choices, Pattern: option.Pattern}
 	}

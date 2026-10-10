@@ -116,7 +116,24 @@ type Fragment struct {
 	Services  map[string]Service        `toml:"services"`
 }
 
+// Ownership is an assertion about the already built base artifact, not an
+// instruction to renumber accounts in consuming projects. Absence is portable.
+type Ownership struct {
+	Mode string `toml:"mode" json:"mode"`
+	UID  int    `toml:"uid" json:"uid"`
+	GID  int    `toml:"gid" json:"gid"`
+}
+
+func (o *Ownership) clone() *Ownership {
+	if o == nil {
+		return nil
+	}
+	result := *o
+	return &result
+}
+
 type Image struct {
+	Ownership    *Ownership    `toml:"ownership"`
 	Preinstalled *Preinstalled `toml:"preinstalled"`
 	Base         string        `toml:"base"`
 	Apt          []string      `toml:"apt"`
@@ -277,6 +294,23 @@ func (d Definition) problems() []string {
 	if d.Kind == KindAddon && d.Image.Base != "" {
 		fail("image.base can only be set by a preset")
 	}
+	if o := d.Image.Ownership; o != nil {
+		if d.Schema != 2 {
+			fail("image.ownership requires schema 2")
+		}
+		if d.Kind != KindPreset {
+			fail("image.ownership can only be set by a preset")
+		}
+		if o.Mode != "fixed" {
+			fail("image.ownership.mode must be fixed; omit image.ownership for portable UID adjustment")
+		}
+		if o.UID < 1 || o.UID > 2147483647 || o.GID < 1 || o.GID > 2147483647 {
+			fail("image.ownership uid and gid must both be in 1-2147483647")
+		}
+		if strings.ContainsAny(d.Image.Base, "$`") {
+			fail("image.base must be literal with image.ownership")
+		}
+	}
 	if d.Image.Preinstalled != nil {
 		if d.Schema != 2 {
 			fail("image.preinstalled requires schema 2")
@@ -294,6 +328,9 @@ func (d Definition) problems() []string {
 		where := fmt.Sprintf("variant[%d]", i)
 		if variant.Image.Base != "" {
 			fail("%s: image.base cannot be set in a variant", where)
+		}
+		if variant.Image.Ownership != nil {
+			fail("%s: image.ownership cannot be set in a variant", where)
 		}
 		if variant.Image.Preinstalled != nil {
 			fail("%s: image.preinstalled cannot be set in a variant", where)

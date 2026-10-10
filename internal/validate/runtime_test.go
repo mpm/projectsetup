@@ -116,7 +116,7 @@ func TestRuntimeProbeFailuresAndIsolation(t *testing.T) {
 				contract.Tools["team-cli"] = presets.InstalledTool{Version: "release_1", Executable: "/usr/bin/team", Path: []string{"/usr/bin"}}
 			}
 			var diagnostics []Diagnostic
-			validateRuntime("built-image", contract, devcontainerDocument{ContainerEnv: map[string]string{"PATH": "/opt/node/bin:/usr/bin", "TEAM": "literal value"}}, r, func(s Severity, p, f string, args ...any) {
+			validateRuntime("built-image", contract, nil, devcontainerDocument{ContainerEnv: map[string]string{"PATH": "/opt/node/bin:/usr/bin", "TEAM": "literal value"}}, r, func(s Severity, p, f string, args ...any) {
 				diagnostics = append(diagnostics, Diagnostic{s, p, fmt.Sprintf(f, args...)})
 			})
 			if tt.expected == "" && len(diagnostics) != 0 || tt.expected != "" && !strings.Contains(fmt.Sprint(diagnostics), tt.expected) {
@@ -179,7 +179,7 @@ func TestRuntimeAggregatesFailures(t *testing.T) {
 	contract := runtimeContract()
 	contract.Tools["ruby"] = presets.InstalledTool{Version: "3.4.1", Executable: "/opt/ruby/bin/ruby", Path: []string{"/opt/ruby/bin"}}
 	var diagnostics []Diagnostic
-	validateRuntime("built-image", contract, devcontainerDocument{}, r, func(s Severity, p, f string, args ...any) {
+	validateRuntime("built-image", contract, nil, devcontainerDocument{}, r, func(s Severity, p, f string, args ...any) {
 		diagnostics = append(diagnostics, Diagnostic{s, p, fmt.Sprintf(f, args...)})
 	})
 	for _, expected := range []string{"core prerequisites", `tool "node"`, `tool "ruby"`} {

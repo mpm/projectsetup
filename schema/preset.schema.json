@@ -7,7 +7,7 @@
   "additionalProperties": false,
   "required": ["schema", "kind", "name", "version", "description"],
   "properties": {
-    "schema": { "description": "Definition format version; preinstalled declarations require 2.", "enum": [1, 2] },
+    "schema": { "description": "Definition format version; preinstalled and ownership declarations require 2.", "enum": [1, 2] },
     "kind": {
       "description": "A project uses exactly one preset and any number of add-ons.",
       "enum": ["preset", "addon"]
@@ -40,11 +40,11 @@
   "allOf": [
     {
       "if": { "properties": { "schema": { "const": 1 } } },
-      "then": { "properties": { "image": { "not": { "required": ["preinstalled"] } } } }
+      "then": { "properties": { "image": { "not": { "required": ["preinstalled"] }, "properties": { "ownership": { "not": {} } } } } }
     },
     {
       "if": { "properties": { "kind": { "const": "addon" } } },
-      "then": { "properties": { "image": { "not": { "required": ["base"] }, "properties": { "preinstalled": { "not": {} } } } } }
+      "then": { "properties": { "image": { "not": { "required": ["base"] }, "properties": { "preinstalled": { "not": {} }, "ownership": { "not": {} } } } } }
     }
   ],
   "$defs": {
@@ -163,6 +163,7 @@
       "properties": {
         "base": { "description": "Debian or Ubuntu base image (top-level preset only). Nonempty preinstalled claims require a literal reference; preset validate rejects configurable image selection.", "type": "string", "minLength": 1 },
         "preinstalled": { "$ref": "#/$defs/preinstalled" },
+        "ownership": { "$ref": "#/$defs/ownership" },
         "apt": {
           "description": "Packages installed as root in one Dockerfile line per contributing block.",
           "type": "array",
@@ -170,6 +171,17 @@
         },
         "root_run": { "description": "Single-line RUN steps as root, after apt.", "$ref": "#/$defs/strings" },
         "user_run": { "description": "Single-line RUN steps as vscode, after the final USER vscode.", "$ref": "#/$defs/strings" }
+      }
+    },
+    "ownership": {
+      "description": "Fixed vscode IDs already established in the base artifact (schema 2, top-level preset only). Absence retains portable UID adjustment.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "uid", "gid"],
+      "properties": {
+        "mode": { "enum": ["fixed"] },
+        "uid": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+        "gid": { "type": "integer", "minimum": 1, "maximum": 2147483647 }
       }
     },
     "literalPath": {
@@ -290,7 +302,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["when"],
-      "allOf": [ { "properties": { "image": { "not": { "required": ["base"] }, "properties": { "preinstalled": { "not": {} } } } } } ],
+      "allOf": [ { "properties": { "image": { "not": { "required": ["base"] }, "properties": { "preinstalled": { "not": {} }, "ownership": { "not": {} } } } } } ],
       "properties": {
         "when": { "$ref": "#/$defs/condition" },
         "image": { "$ref": "#/$defs/image" },

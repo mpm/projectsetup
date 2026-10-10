@@ -66,6 +66,18 @@ func Write(root string, cfg config.Config, force bool) error {
 		return err
 	}
 
+	// Host sources now exist; reject incompatible fixed IDs/access before replacing
+	// project output. The actual root is used even while files live in staging.
+	resolved, err := config.Resolve(cfg)
+	if err != nil {
+		return err
+	}
+	if resolved.Ownership != nil {
+		diagnostics := validate.Check(root, validate.Options{DevcontainerDir: staging, CheckHostMounts: true})
+		if count := validate.ErrorCount(diagnostics); count > 0 {
+			return fmt.Errorf("validate fixed image ownership: %d error(s): %s", count, diagnostics[0].Message)
+		}
+	}
 	if _, err := os.Stat(target); errors.Is(err, os.ErrNotExist) {
 		if err := os.Rename(staging, target); err != nil {
 			return fmt.Errorf("install generated directory %q: %w", target, err)

@@ -112,7 +112,59 @@ dworm exec -- npm --version
 dworm exec -- gh --version
 ```
 
-First startup runs the normal post-create script, including `npm ci` when both files exist. No application server starts automatically. Actual startup uses host workspace mounts and Dev Container UID adjustment; mount access, AI first-run behavior, fixed UID/GID policy, and large populated-home ownership costs are separate from artifact verification. Do not treat this walkthrough as proof of safe shared-home ownership or measured two-project layer savings; those acceptance checks remain in Phases 2 and 3.
+First startup runs the normal post-create script, including `npm ci` when both files exist. No application server starts automatically. Actual startup uses host workspace mounts and, in this portable example, Dev Container UID adjustment. Fixed-ID consumption is available through the contract below. Host mount access and AI first-run behavior still require startup verification. Do not treat this walkthrough as proof of safe shared-home ownership or measured two-project layer savings; measured two-project layer and ownership acceptance remains in Phase 3.
+
+## Establish fixed IDs before installing toolchains
+
+For a populated shared home, choose a base artifact with the intended `vscode` UID/GID, then add `[image.ownership]` to the consuming preset:
+
+```toml
+[image.ownership]
+mode = "fixed"
+uid = 1000
+gid = 1000
+```
+
+Use your actual positive IDs (maximum 2147483647). On Linux they must equal `id -u` and the primary `id -g` of the invoking user; do not assume every machine uses 1000. macOS fixed-ID support is for Docker Desktop sharing and does not require numeric equality. Other hosts and remote Docker daemons are unsupported. Normal check/staged generation validates host IDs and workspace/AI source write/search access. Startup must still verify effective bind access; runtime artifact probes intentionally mount no host state.
+
+The shared image author establishes IDs before installing any user-owned toolchain. This minimal recipe fragment assumes an existing `vscode` account and primary group, `/home/vscode`, and no populated user installations yet. Replace the base with a trusted, verified Debian/Ubuntu glibc artifact and choose the IDs for its intended consumers:
+
+```dockerfile
+FROM YOUR_VERIFIED_BASE
+USER root
+ARG VSCODE_UID=1000
+ARG VSCODE_GID=1000
+RUN set -eu; \
+    old_group="$(id -gn vscode)"; \
+    uid_owner="$(getent passwd "$VSCODE_UID" | cut -d: -f1 || true)"; \
+    gid_owner="$(getent group "$VSCODE_GID" | cut -d: -f1 || true)"; \
+    if [ -n "$uid_owner" ] && [ "$uid_owner" != vscode ]; then \
+      echo "UID $VSCODE_UID belongs to $uid_owner; select another base or ID" >&2; exit 1; \
+    fi; \
+    if [ -n "$gid_owner" ] && [ "$gid_owner" != "$old_group" ]; then \
+      echo "GID $VSCODE_GID belongs to $gid_owner; select another base or ID" >&2; exit 1; \
+    fi; \
+    groupmod -g "$VSCODE_GID" "$old_group"; \
+    usermod -u "$VSCODE_UID" -g "$VSCODE_GID" vscode; \
+    chown "$VSCODE_UID:$VSCODE_GID" /home/vscode
+# Install root-owned readable runtimes under /opt here where practical.
+# Install any required user-owned tools only after the account IDs above exist.
+ENV HOME=/home/vscode
+USER vscode
+```
+
+Do not use this fragment to renumber an existing populated toolchain; rebuild it from the account-establishment stage. Account collisions fail with an owner and remedy rather than deleting unrelated users/groups. Verify supplementary group membership and sudo configuration for your chosen base. The consumer Dockerfile asserts existing IDs before its installation steps and never mutates accounts; `check --runtime` verifies final numeric IDs. Fixed consumption disables Dev Container UID adjustment, avoiding that mechanism's home-copying layer. Actual savings still need the Phase 3 measurements.
+
+AI mounts remain outside the artifact. The shared installer creates/repairs only exact unmounted container parent directories. It checks mounted sources and nested entries for access, never recursively chowns them, and reports the host source requiring repair. Correct access deliberately on the host or choose a compatible image; do not run recursive ownership repair across credentials, caches, or history.
+
+To exercise the isolated ownership integration test against an existing local compatible image:
+
+```bash
+PROJECTSETUP_OWNERSHIP_TESTS=1 PROJECTSETUP_OWNERSHIP_BASE=YOUR_LOCAL_IMAGE \
+  go test ./internal/generate -run '^TestFixedOwnershipIntegration$' -v
+```
+
+The base needs matching Linux host IDs, the core prerequisites, and `/usr/bin/gh`. The test derives and removes its own images, uses temporary bind sources and a fake offline Codex installer, and never mounts your credentials. If your Compose/Bake version requires a filesystem entitlement for the Dev Container CLI's temporary Dockerfile, grant read access to that test-owned temporary path or use an invocation-scoped `BUILDX_BAKE_ENTITLEMENTS_FS=0` for this isolated test. No host configuration change is required. This test verifies ownership and first-run access; it does not measure shared layers or test macOS sharing.
 
 ## Regenerate offline and adopt updates explicitly
 

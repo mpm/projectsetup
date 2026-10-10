@@ -257,3 +257,74 @@ INSTALLER
 		})
 	}
 }
+
+func TestAIInstallerParentCreationPreservesNestedState(t *testing.T) {
+	home, bin := t.TempDir(), t.TempDir()
+	// Simulate persistent state mounted beneath an initially absent container
+	// .local parent. No ownership command may visit the nested source.
+	shared := t.TempDir()
+	writeTestFile(t, filepath.Join(shared, "sentinel"), "host-state", 0400)
+	if err := os.MkdirAll(filepath.Join(home, ".local/share"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(shared, filepath.Join(home, ".local/share/nested-state")); err != nil {
+		t.Fatal(err)
+	}
+	for _, command := range []string{"sudo", "chown"} {
+		writeTestFile(t, filepath.Join(bin, command), "#!/bin/sh\necho unexpected-ownership-operation >&2\nexit 99\n", 0755)
+	}
+	if output, err := runAIInstaller(t, home, bin); err != nil {
+		t.Fatalf("first-run parents: %v\n%s", err, output)
+	}
+	for _, parent := range []string{".local/bin", ".local/state", ".config", ".cache"} {
+		if info, err := os.Stat(filepath.Join(home, parent)); err != nil || !info.IsDir() {
+			t.Fatalf("parent %s: %v", parent, err)
+		}
+	}
+	info, err := os.Stat(filepath.Join(shared, "sentinel"))
+	if err != nil || info.Mode().Perm() != 0400 {
+		t.Fatalf("state mode changed: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(shared, "sentinel"))
+	if err != nil || string(data) != "host-state" {
+		t.Fatal("nested state changed")
+	}
+}
+
+func TestAIInstallerRejectsUnwritableSharedSources(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root bypasses DAC")
+	}
+	for _, relative := range []string{".opencode", ".opencode/nested/history"} {
+		t.Run(relative, func(t *testing.T) {
+			home, bin := t.TempDir(), t.TempDir()
+			blocked := filepath.Join(home, relative)
+			if strings.HasSuffix(relative, "history") {
+				writeTestFile(t, blocked, "history-sentinel", 0400)
+			} else {
+				if err := os.MkdirAll(blocked, 0500); err != nil {
+					t.Fatal(err)
+				}
+			}
+			t.Cleanup(func() { os.Chmod(blocked, 0700) })
+			for _, command := range []string{"sudo", "chown", "curl"} {
+				writeTestFile(t, filepath.Join(bin, command), "#!/bin/sh\necho unexpected-mutation >&2\nexit 99\n", 0755)
+			}
+			output, err := runAIInstaller(t, home, bin, "opencode")
+			if err == nil || !strings.Contains(output, "host ~/.opencode") || strings.Contains(output, "unexpected-mutation") {
+				t.Fatalf("%v\n%s", err, output)
+			}
+			info, err := os.Stat(blocked)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := os.FileMode(0500)
+			if strings.HasSuffix(relative, "history") {
+				want = 0400
+			}
+			if info.Mode().Perm() != want {
+				t.Fatal("host ownership/mode repair attempted")
+			}
+		})
+	}
+}

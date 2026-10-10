@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 2,
+  "projectName": "fixed-app",
+  "preset": {
+    "name": "fixed-image",
+    "version": "1.0.0",
+    "source": "user",
+    "sha256": "47d937951c93fdab76ee7a84f403380ae6ddab71d044f32bc35d13940c4faf1a"
+  },
+  "addons": [],
+  "options": {},
+  "aiTools": [],
+  "ports": [],
+  "systemPackages": [],
+  "generatedBy": "projectsetup"
+}

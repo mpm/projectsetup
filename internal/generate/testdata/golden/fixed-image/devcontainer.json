@@ -1,0 +1,17 @@
+{
+  "updateRemoteUserUID": false,
+  "name": "fixed-app",
+  "dockerComposeFile": "compose.yaml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/fixed-app",
+  "containerUser": "vscode",
+  "remoteUser": "vscode",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "containerEnv": {
+    "PATH": "/home/vscode/.local/bin:/home/vscode/.opencode/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  },
+  "postCreateCommand": ".devcontainer/scripts/post-create.sh",
+  "shutdownAction": "stopCompose"
+}

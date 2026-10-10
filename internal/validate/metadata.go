@@ -183,10 +183,13 @@ func validateMergedMetadata(output []byte, want devcontainerDocument, fail func(
 	if effective.ContainerUser != "vscode" || effective.RemoteUser != "vscode" {
 		fail("effective containerUser and remoteUser must both be vscode")
 	}
-	if raw := result.Merged["updateRemoteUserUID"]; raw != nil {
+	if want.UpdateRemoteUserUID != nil && !*want.UpdateRemoteUserUID && (effective.UpdateRemoteUserUID == nil || *effective.UpdateRemoteUserUID) {
+		fail("effective updateRemoteUserUID must be false for the fixed-ID image contract")
+	}
+	if raw := result.Merged["updateRemoteUserUID"]; raw != nil && want.UpdateRemoteUserUID == nil {
 		var update bool
 		if err := json.Unmarshal(raw, &update); err != nil || !update {
-			fail("effective updateRemoteUserUID disables or invalidates the default UID adjustment policy; remove the inherited setting until an explicit fixed-ID contract is supported")
+			fail("effective updateRemoteUserUID disables or invalidates the default UID adjustment policy; remove the inherited setting or select an explicit image.ownership fixed-ID contract")
 		}
 	}
 	for _, key := range sortedKeys(want.ContainerEnv) {

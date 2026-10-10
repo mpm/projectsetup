@@ -60,17 +60,18 @@ func (commandRunner) Run(name string, args ...string) ([]byte, error) {
 }
 
 type devcontainerDocument struct {
-	Name              string                    `json:"name"`
-	DockerComposeFile string                    `json:"dockerComposeFile"`
-	Service           string                    `json:"service"`
-	WorkspaceFolder   string                    `json:"workspaceFolder"`
-	ContainerUser     string                    `json:"containerUser"`
-	RemoteUser        string                    `json:"remoteUser"`
-	ContainerEnv      map[string]string         `json:"containerEnv"`
-	Features          map[string]map[string]any `json:"features"`
-	Mounts            []string                  `json:"mounts"`
-	ForwardPorts      []int                     `json:"forwardPorts"`
-	PostCreateCommand string                    `json:"postCreateCommand"`
+	UpdateRemoteUserUID *bool                     `json:"updateRemoteUserUID,omitempty"`
+	Name                string                    `json:"name"`
+	DockerComposeFile   string                    `json:"dockerComposeFile"`
+	Service             string                    `json:"service"`
+	WorkspaceFolder     string                    `json:"workspaceFolder"`
+	ContainerUser       string                    `json:"containerUser"`
+	RemoteUser          string                    `json:"remoteUser"`
+	ContainerEnv        map[string]string         `json:"containerEnv"`
+	Features            map[string]map[string]any `json:"features"`
+	Mounts              []string                  `json:"mounts"`
+	ForwardPorts        []int                     `json:"forwardPorts"`
+	PostCreateCommand   string                    `json:"postCreateCommand"`
 }
 
 func Check(root string, options Options) []Diagnostic {
@@ -150,8 +151,8 @@ func Check(root string, options Options) []Diagnostic {
 		validateProjectConventions(root, cfg, add)
 		validateCompose(root, devDir, cfg, resolved, add)
 	}
-	if options.Runtime && manifestValid && !resolved.ConsumesPreinstalledImage() {
-		add(Error, ".devcontainer/projectsetup.json", "runtime verification requires nonempty image.preinstalled claims; legacy presets retain their explicit integration smoke tests")
+	if options.Runtime && manifestValid && !resolved.RequiresImageVerification() {
+		add(Error, ".devcontainer/projectsetup.json", "runtime verification requires image.ownership or nonempty image.preinstalled claims; legacy presets retain their explicit integration smoke tests")
 	}
 	if options.External || options.Runtime {
 		build := (options.Build || options.Runtime) && ErrorCount(diagnostics) == 0
@@ -267,6 +268,16 @@ func validateDevcontainer(root, devDir string, manifest config.Manifest, resolve
 	}
 	if !equalInts(document.ForwardPorts, manifest.Ports) {
 		add(Error, path, "forwardPorts %v do not match manifest ports %v", document.ForwardPorts, manifest.Ports)
+	}
+	if resolved.Ownership != nil {
+		if document.UpdateRemoteUserUID == nil || *document.UpdateRemoteUserUID {
+			add(Error, path, "updateRemoteUserUID must be false for image.ownership fixed IDs")
+		}
+		if checkHost {
+			validateHostOwnership(root, resolved.Ownership, manifest.AITools, add)
+		}
+	} else if document.UpdateRemoteUserUID != nil && !*document.UpdateRemoteUserUID {
+		add(Error, path, "updateRemoteUserUID must use portable adjustment unless image.ownership declares fixed IDs")
 	}
 	expectedFeatures := resolved.DevcontainerFeatures()
 	for _, id := range sortedKeys(expectedFeatures) {
@@ -612,7 +623,7 @@ func sortedKeys[V any](values map[string]V) []string {
 }
 
 func validateExternal(root, devDir string, compose, build bool, resolved presets.Resolved, document devcontainerDocument, options Options, add func(Severity, string, string, ...any)) {
-	if resolved.ConsumesPreinstalledImage() && !build {
+	if resolved.RequiresImageVerification() && !build {
 		add(Warning, ".devcontainer/Dockerfile", "shared-image Dev Container metadata has not been inspected; run projectsetup check --build before starting the container")
 	}
 	if compose {
@@ -640,15 +651,15 @@ func validateExternal(root, devDir string, compose, build bool, resolved presets
 		return
 	}
 	if build {
-		if resolved.ConsumesPreinstalledImage() && !validateBaseMetadata(root, devDir, resolved.Base, document, options.Runner, add) {
+		if resolved.RequiresImageVerification() && !validateBaseMetadata(root, devDir, resolved.Base, document, options.Runner, add) {
 			return
 		}
 		if output, err := options.Runner.Run("devcontainer", "build", "--workspace-folder", root); err != nil {
 			add(Error, ".devcontainer/devcontainer.json", "devcontainer build failed: %s", commandFailure(err, output))
-		} else if resolved.ConsumesPreinstalledImage() {
+		} else if resolved.RequiresImageVerification() {
 			image, valid := validateBuiltMetadata(root, devDir, output, document, options.Runner, add)
 			if valid && options.Runtime {
-				validateRuntime(image, resolved.Preinstalled, document, options.Runner, add)
+				validateRuntime(image, resolved.Preinstalled, resolved.Ownership, document, options.Runner, add)
 			}
 			if valid && !options.Runtime {
 				add(Warning, ".devcontainer/Dockerfile", "build and metadata checks do not verify installed capabilities; run projectsetup check --runtime")

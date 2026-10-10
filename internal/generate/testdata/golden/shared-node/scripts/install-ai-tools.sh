@@ -7,13 +7,26 @@ fail() {
   exit 1
 }
 
-ensure_writable() {
+# Only core container parents may be repaired. These exact paths cannot be
+# host mounts in generated configurations. Never traverse their descendants.
+ensure_parent() {
   local path="$1"
+  [[ ! -L "$path" ]] || fail "$path is a symlink; repair the container parent directory"
   mkdir -p "$path" 2>/dev/null || sudo mkdir -p "$path"
-  if [[ ! -w "$path" ]]; then
-    sudo chown -R "$(id -u):$(id -g)" "$path"
+  if [[ ! -w "$path" || ! -x "$path" ]]; then
+    sudo chown --no-dereference "$(id -u):$(id -g)" "$path"
   fi
-  [[ -w "$path" ]] || fail "$path is not writable; check the host bind-mount source ownership"
+  [[ -w "$path" && -x "$path" ]] || fail "$path is not writable; repair the container parent directory"
+}
+
+ensure_writable() {
+  local path="$1" source="${2:-$1}"
+  mkdir -p "$path" 2>/dev/null || fail "cannot create $path; repair host source $source for container IDs $(id -u):$(id -g)"
+  [[ -w "$path" && -x "$path" ]] || fail "$path is not writable; repair host source $source for container IDs $(id -u):$(id -g)"
+  local blocked
+  blocked="$(find "$path" -xdev \( -type d \( ! -writable -o ! -executable \) -o -type f ! -writable \) -print -quit 2>/dev/null)" ||
+    fail "cannot inspect $path; repair host source $source access"
+  [[ -z "$blocked" ]] || fail "$blocked is not writable; repair host source $source; no ownership was changed"
 }
 
 update=false
@@ -29,13 +42,6 @@ for tool in "$@"; do
     *) fail "unsupported AI tool: $tool; use [--update] opencode|claude|codex ..." ;;
   esac
 done
-
-# Shared Codex data must already be owned by the host user. Never recursively
-# change ownership of credentials/history to repair container parent directories.
-require_writable() {
-  mkdir -p "$1" || fail "cannot create $1; check the host bind-mount source ownership"
-  [[ -w "$1" ]] || fail "$1 is not writable; fix the host bind-mount source ownership"
-}
 
 install_codex() (
   local installer
@@ -70,17 +76,20 @@ relocate_codex() {
   mv -Tf "$codex_install/bin/.codex-projectsetup-$$" "$codex_install/bin/codex"
 }
 
-ensure_writable "$HOME/.local"
-ensure_writable "$HOME/.local/bin"
-ensure_writable "$HOME/.local/state"
+ensure_parent "$HOME/.local"
+ensure_parent "$HOME/.local/bin"
+ensure_parent "$HOME/.local/state"
+ensure_parent "$HOME/.local/share"
+ensure_parent "$HOME/.config"
+ensure_parent "$HOME/.cache"
 
 for tool in "$@"; do
   case "$tool" in
     opencode)
-      ensure_writable "$HOME/.config/opencode"
-      ensure_writable "$HOME/.local/share/opencode"
-      ensure_writable "$HOME/.opencode"
-      ensure_writable "$HOME/.cache/opencode"
+      ensure_writable "$HOME/.config/opencode" "host ~/.config/opencode"
+      ensure_writable "$HOME/.local/share/opencode" "host ~/.local/share/opencode"
+      ensure_writable "$HOME/.opencode" "host ~/.opencode"
+      ensure_writable "$HOME/.cache/opencode" "host ~/.cache/opencode"
       opencode_binary="$HOME/.opencode/bin/opencode"
       if previous="$("$opencode_binary" --version 2>/dev/null)"; then
         if "$update"; then
@@ -96,8 +105,8 @@ for tool in "$@"; do
       "$opencode_binary" --version || fail "OpenCode installation is not executable; check host/container platform compatibility"
       ;;
     claude)
-      ensure_writable "$HOME/.claude"
-      ensure_writable "$HOME/.local/share/claude"
+      ensure_writable "$HOME/.claude" "host ~/.claude"
+      ensure_writable "$HOME/.local/share/claude" "host ~/.local/share/claude"
       export CLAUDE_CONFIG_DIR="$HOME/.claude"
       claude_binary="$(find "$HOME/.local/share/claude/versions" -mindepth 1 -maxdepth 1 -type f -executable -printf '%T@ %p\n' 2>/dev/null | sort -nr | cut -d' ' -f2- | sed -n '1p' || true)"
       if [[ -z "$claude_binary" ]] || ! "$claude_binary" --version >/dev/null 2>&1; then
@@ -118,8 +127,8 @@ for tool in "$@"; do
       ;;
     codex)
       codex_install="$HOME/.local/share/codex"
-      require_writable "${CODEX_HOME:-$HOME/.codex}"
-      require_writable "$codex_install"
+      ensure_writable "${CODEX_HOME:-$HOME/.codex}" "host CODEX_HOME or ~/.codex"
+      ensure_writable "$codex_install" "host ~/.local/share/codex"
       command -v flock >/dev/null 2>&1 || fail "flock (util-linux) is required to serialize shared Codex updates"
       exec {codex_lock}>"$codex_install/.projectsetup-install.lock"
       flock -x "$codex_lock" || fail "cannot lock shared Codex installation"

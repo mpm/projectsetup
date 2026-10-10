@@ -2,7 +2,7 @@
 
 ## Planned Extensions
 
-Shared-image consumption is implemented through definition schema 2's optional top-level preset `image.preinstalled` contract. See [Consume a digest-pinned shared toolchain](docs/shared-images.md) and the [README declaration contract](README.md#preinstalled-image-declarations) for current syntax, snapshot/refresh behavior, and opt-in metadata/runtime verification. The [Shared Toolchain Images: Implementation Roadmap](SHARED_IMAGES_ROADMAP.md) tracks completed consumption work and pending UID/GID ownership handling, customizable image-family recipes, optional build/export workflow, host integrations, and exact PostgreSQL references. Ownership and measured two-project shared-layer acceptance remain pending.
+Shared-image consumption is implemented through definition schema 2's optional top-level preset `image.preinstalled` and `image.ownership` contracts. See [Consume a digest-pinned shared toolchain](docs/shared-images.md) and the [README declaration contract](README.md#preinstalled-image-declarations) for current syntax, snapshot/refresh behavior, and opt-in metadata/runtime verification. The [Shared Toolchain Images: Implementation Roadmap](SHARED_IMAGES_ROADMAP.md) tracks completed consumption work and customizable image-family recipes, optional build/export workflow, host integrations, and exact PostgreSQL references. Fixed ownership policy and targeted AI parent repair are implemented; measured two-project shared-layer acceptance remains pending. See [Fixed image ownership](README.md#fixed-image-ownership) for host restrictions and the [image-author recipe](docs/shared-images.md#establish-fixed-ids-before-installing-toolchains) for establishing IDs before installing toolchains.
 
 ## Purpose
 
@@ -506,8 +506,8 @@ Maintain one canonical embedded `install-ai-tools.sh` used by all presets. It sh
 Required behavior:
 
 - `set -euo pipefail`
-- Repair ownership of required parent directories when Dev Container features created them as root.
-- Assert bind mounts are writable.
+- Repair only exact unmounted container parent directories when Dev Container features created them as root; reject symlink parents. Never recursively chown a home, toolchain, mount, or parent spanning mounted state.
+- Assert bind mounts and nested files/directories are writable, with directory search access; identify the host source needing repair without changing host ownership.
 - Validate binaries with `--version`.
 - By default install only missing or invalid tools through their native installers, except incompatible existing Codex binaries must fail for host repair. Explicit `--update TOOL...` updates requested tools, reports versions, and verifies the result. Reject invalid arguments before mutations.
 - Keep OpenCode at `~/.opencode/bin/opencode` with a link in `~/.local/bin`.
@@ -702,7 +702,7 @@ Presets and add-ons are described by TOML definition files instead of Go code. `
 
 Definitions cannot change:
 
-- The `vscode` user, `/home/vscode`, `containerUser`, `remoteUser`, and the final Dockerfile `USER vscode`.
+- The `vscode` user, `/home/vscode`, `containerUser`, `remoteUser`, and the final Dockerfile `USER vscode`. A schema 2 top-level preset may assert fixed positive UID/GID through `[image.ownership]` (`mode = "fixed"`, `uid`, `gid`); the base must already provide those IDs. Fixed policy renders `updateRemoteUserUID: false`; absence preserves portable adjustment. Linux requires matching host primary IDs, macOS Docker Desktop uses file sharing without numeric equality, and other fixed-policy hosts/remote daemons are unsupported.
 - The Compose project name, the `app` service, its build, command, workspace volume, and `workspaceFolder`.
 - AI tool mounts, AI environment variables, and the canonical `install-ai-tools.sh`. Post-create runs AI setup before any definition script.
 - The GitHub CLI feature and the core `containerEnv.PATH` entries. A schema 2 preset's fixed `image.preinstalled.tools.gh` declaration suppresses the feature; declared tool paths supplement the generated PATH using the core's deterministic ordering.

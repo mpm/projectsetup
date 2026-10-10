@@ -185,6 +185,10 @@ func validateSchema(root, schema map[string]any, value any, where string) []stri
 			if text, ok := value.(string); ok && float64(len(text)) < rule.(float64) {
 				fail("%q is shorter than %v", text, rule)
 			}
+		case "maximum":
+			if n, ok := jsonNumber(value).(float64); ok && n > rule.(float64) {
+				fail("%v exceeds maximum %v", value, rule)
+			}
 		case "minimum":
 			if number, ok := jsonNumber(value).(float64); ok && number < rule.(float64) {
 				fail("%v is below %v", number, rule)

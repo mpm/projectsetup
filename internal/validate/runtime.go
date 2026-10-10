@@ -64,7 +64,7 @@ test "$found" -ef "$1"
 // The caller has already validated base and final CLI-merged metadata. This
 // owned container has no project/credential mounts, no network or image startup
 // command, and is never brought up through Dev Container lifecycle execution.
-func validateRuntime(image string, contract *presets.Preinstalled, document devcontainerDocument, runner Runner, add func(Severity, string, string, ...any)) {
+func validateRuntime(image string, contract *presets.Preinstalled, ownership *presets.Ownership, document devcontainerDocument, runner Runner, add func(Severity, string, string, ...any)) {
 	fail := func(format string, args ...any) {
 		add(Error, ".devcontainer/Dockerfile", "runtime verification: "+format, args...)
 	}
@@ -104,6 +104,15 @@ func validateRuntime(image string, contract *presets.Preinstalled, document devc
 	}
 	if output, err := execute("/bin/bash", "--noprofile", "--norc", "-c", coreRuntimeProbe); err != nil {
 		fail("core prerequisites/user/home probe in %q failed: %s; repair the image's Debian/Ubuntu glibc prerequisites and writable vscode home", image, commandFailure(err, output))
+	}
+	if ownership != nil {
+		probe := fmt.Sprintf(`set -eu; test "$(id -u)" = %d; test "$(id -g)" = %d`, ownership.UID, ownership.GID)
+		if output, err := execute("/bin/bash", "--noprofile", "--norc", "-c", probe); err != nil {
+			fail("vscode UID/GID differs from fixed contract %d:%d: %s; rebuild the base with configured IDs before installing toolchains", ownership.UID, ownership.GID, commandFailure(err, output))
+		}
+	}
+	if contract == nil {
+		return
 	}
 	for _, key := range sortedKeys(contract.Tools) {
 		tool := contract.Tools[key]
