@@ -284,6 +284,9 @@ func (d Definition) problems() []string {
 		if d.Kind != KindPreset {
 			fail("image.preinstalled can only be set by a preset")
 		}
+		if (len(d.Image.Preinstalled.Tools) > 0 || len(d.Image.Preinstalled.CorePackages) > 0) && strings.ContainsAny(d.Image.Base, "$`") {
+			fail("image.base must be literal when image.preinstalled makes claims; select a separate preset for each fixed artifact")
+		}
 	}
 	problems = append(problems, d.Fragment.problems("", d.Options)...)
 

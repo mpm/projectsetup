@@ -143,6 +143,7 @@ func (r *Registry) Resolve(selection Selection) (Resolved, error) {
 			return Resolved{}, err
 		}
 		merger.result.Options[definition.Name] = values
+		merger.errs = append(merger.errs, definition.fixedRuntimeOptionProblems(values)...)
 		fragments := []Fragment{definition.Fragment}
 		for _, variant := range definition.Variants {
 			if variant.When.matches(preset.Name, addons, values) {

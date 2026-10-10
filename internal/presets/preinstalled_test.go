@@ -17,6 +17,26 @@ executable = "/opt/node/bin/node"
 path = ["/opt/node/bin", "/usr/bin"]
 `
 
+func TestPreinstalledRequiresFixedBase(t *testing.T) {
+	for _, base := range []string{"example:${option:flavor}", "example:${project:name}", "example:$TAG", "example:`tag`"} {
+		for _, contract := range []string{installedNode, "[image.preinstalled]\ncore_packages = ['git']\n", "[image.preinstalled]\n", ""} {
+			t.Run(base+"/"+contract, func(t *testing.T) {
+				definition := mustParse(t, sharedPreset+contract)
+				definition.Image.Base = base
+				definition.Options = map[string]Option{"flavor": {Default: "full", Choices: []string{"full"}}}
+				_, err := NewRegistry(definition)
+				claims := contract == installedNode || strings.Contains(contract, "core_packages")
+				if !claims && err != nil {
+					t.Fatal(err)
+				}
+				if claims && (err == nil || !strings.Contains(err.Error(), "image.base must be literal")) {
+					t.Fatalf("registry = %v", err)
+				}
+			})
+		}
+	}
+}
+
 func TestPreinstalledParserAndEditorSchema(t *testing.T) {
 	schema := loadSchema(t)
 	tests := []struct{ name, source, want string }{

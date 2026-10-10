@@ -376,10 +376,29 @@ func validateDockerfile(root, devDir string, cfg config.Config, resolved presets
 	}
 }
 
-// validateProjectConventions compares the configured preset options with
-// the values the preset's detection rules read from the project.
+// validateProjectConventions checks fixed image runtimes against explicit pins,
+// then compares other options with the preset's detected project conventions.
 func validateProjectConventions(root string, cfg config.Config, add func(Severity, string, string, ...any)) {
 	const manifestPath = ".devcontainer/projectsetup.json"
+	definition := cfg.Definitions[0]
+	if contract := definition.Image.Preinstalled; contract != nil {
+		for _, runtime := range presets.RuntimeTools {
+			tool, declared := contract.Tools[runtime]
+			if !declared {
+				continue
+			}
+			versions, err := detect.RuntimeVersionFiles(root, runtime)
+			if err != nil {
+				add(Error, ".", "detect %s version files: %v", runtime, err)
+				continue
+			}
+			for _, file := range sortedKeys(versions) {
+				if !presets.RuntimeVersionsAgree(tool.Version, versions[file]) {
+					add(Error, file, "project specifies %s %q but preset %q image.preinstalled.tools.%s.version is fixed at %q; select a compatible image/preset or correct the project version file", runtime, versions[file], cfg.Preset, runtime, tool.Version)
+				}
+			}
+		}
+	}
 	registry, err := presets.NewRegistry(cfg.Definitions...)
 	if err != nil {
 		add(Error, manifestPath, "load selected definitions: %v", err)
@@ -394,12 +413,25 @@ func validateProjectConventions(root string, cfg config.Config, add func(Severit
 	if !found {
 		return
 	}
-	definition := cfg.Definitions[0]
 	for _, name := range sortedKeys(detail.Options) {
 		values := detail.Options[name]
 		configured := cfg.Options[cfg.Preset][name]
 		field := "options." + cfg.Preset + "." + name
 		if len(definition.Options[name].Detect.Sources) > 0 {
+			// Fixed runtimes are checked against explicit version files above.
+			// A legacy inference regex (notably requires-python) can extract a
+			// lower bound from a range; it is not an exact installed-version pin.
+			if contract := definition.Image.Preinstalled; contract != nil {
+				bound := false
+				for _, runtime := range presets.RuntimeTools {
+					if _, declared := contract.Tools[runtime]; declared && (name == "version" || name == runtime+"_version") {
+						bound = true
+					}
+				}
+				if bound {
+					continue
+				}
+			}
 			if !languageVersionsAgree(configured, values[0]) {
 				add(Error, manifestPath, "%s is %q but the project specifies %q", field, configured, values[0])
 			}
@@ -424,8 +456,7 @@ func validateProjectConventions(root string, cfg config.Config, add func(Severit
 	}
 }
 
-// languageVersionsAgree accepts a configured release line for a detected
-// patch version and the reverse.
+// languageVersionsAgree preserves legacy option detection comparisons.
 func languageVersionsAgree(configured, detected string) bool {
 	return configured == detected ||
 		strings.HasPrefix(configured, detected+".") ||

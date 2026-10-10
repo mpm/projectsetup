@@ -317,3 +317,29 @@ func cleanVersion(value string) string {
 	}
 	return ""
 }
+
+// RuntimeVersionFiles reads explicit runtime version files independently of
+// preset detection and options. Every present file is checked: precedence for
+// inferred defaults must not hide contradictory explicit pins. Requirement
+// expressions in package manifests are deliberately not exact-version files.
+func RuntimeVersionFiles(root, runtime string) (map[string]string, error) {
+	files := map[string][]string{
+		"node":   {".node-version", ".nvmrc"},
+		"ruby":   {".ruby-version"},
+		"python": {".python-version"},
+	}
+	p := &project{root: root, files: map[string]projectFile{}}
+	values := map[string]string{}
+	for _, file := range files[runtime] {
+		data, found, err := p.read(file)
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			if value := cleanVersion(string(data)); value != "" {
+				values[file] = value
+			}
+		}
+	}
+	return values, nil
+}

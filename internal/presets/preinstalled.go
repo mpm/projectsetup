@@ -35,9 +35,61 @@ type InstalledTool struct {
 }
 
 var installedVersion = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*)?(?:\+[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*)?$`)
+var runtimeReleaseLine = regexp.MustCompile(`^[0-9]+(?:\.[0-9]+)?$`)
 
 var knownTools = []string{"node", "ruby", "python", "go", "rust", "gh"}
 var movingVersions = []string{"latest", "lts", "stable", "nightly"}
+
+// RuntimeTools have runtime version meanings independent of preset names.
+var RuntimeTools = []string{"node", "ruby", "python", "go", "rust"}
+
+// RuntimeVersionsAgree retains release-line/patch compatibility, but does not
+// interpret ranges or moving selectors as versions.
+func RuntimeVersionsAgree(configured, detected string) bool {
+	if (!installedVersion.MatchString(configured) && !runtimeReleaseLine.MatchString(configured)) ||
+		(!installedVersion.MatchString(detected) && !runtimeReleaseLine.MatchString(detected)) {
+		return false
+	}
+	return configured == detected ||
+		(runtimeReleaseLine.MatchString(detected) && strings.HasPrefix(configured, detected+".")) ||
+		(runtimeReleaseLine.MatchString(configured) && strings.HasPrefix(detected, configured+"."))
+}
+
+// fixedRuntimeOptionProblems treats conventional runtime options as constraints,
+// never selectors for the fixed base. Other options retain their own semantics.
+func (d Definition) fixedRuntimeOptionProblems(values map[string]string) []error {
+	if d.Image.Preinstalled == nil {
+		return nil
+	}
+	var runtimes []string
+	for _, name := range RuntimeTools {
+		if _, ok := d.Image.Preinstalled.Tools[name]; ok {
+			runtimes = append(runtimes, name)
+		}
+	}
+	var problems []error
+	check := func(option, runtime string) {
+		if value, ok := values[option]; ok {
+			installed := d.Image.Preinstalled.Tools[runtime].Version
+			if !RuntimeVersionsAgree(installed, value) {
+				problems = append(problems, fmt.Errorf("option %s.%s is %q but image.preinstalled.tools.%s.version is fixed at %q; select a different image/preset to change the runtime", d.Name, option, value, runtime, installed))
+			}
+		}
+	}
+	for _, runtime := range runtimes {
+		check(runtime+"_version", runtime)
+	}
+	if _, ok := values["version"]; ok {
+		switch len(runtimes) {
+		case 0:
+		case 1:
+			check("version", runtimes[0])
+		default:
+			problems = append(problems, fmt.Errorf("option %s.version is ambiguous for multiple preinstalled runtimes; omit it or use TOOL_version compatibility constraints", d.Name))
+		}
+	}
+	return problems
+}
 
 // CoreAptPackages returns only core prerequisites not supplied by the image,
 // in the historical installation order. Project contributions stay separate.

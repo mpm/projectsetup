@@ -161,7 +161,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "base": { "description": "Debian or Ubuntu base image (top-level preset only).", "type": "string", "minLength": 1 },
+        "base": { "description": "Debian or Ubuntu base image (top-level preset only). Nonempty preinstalled claims require a literal reference; preset validate rejects configurable image selection.", "type": "string", "minLength": 1 },
         "preinstalled": { "$ref": "#/$defs/preinstalled" },
         "apt": {
           "description": "Packages installed as root in one Dockerfile line per contributing block.",
@@ -192,7 +192,7 @@
       }
     },
     "preinstalled": {
-      "description": "Fixed base-image claims (schema 2, top-level preset only). Parsing does not verify the artifact; generation consumption is pending.",
+      "description": "Fixed base-image claims (schema 2, top-level preset only). Runtime version options are compatibility constraints, not image selectors; preset validate checks consistency. Static checks compare Node, Ruby and Python version files, but do not verify the artifact.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
