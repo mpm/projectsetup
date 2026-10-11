@@ -1,38 +1,56 @@
-# projectsetup v0.9.0
+# projectsetup v0.10.0
 
-## What changed
+Reuse a shared toolchain image across projects while keeping each project's dependencies, setup, and AI state separate. This release adds explicit image capability contracts, build and runtime verification, and a measured local image-family workflow.
 
-- Presets and add-ons are now TOML definition files. The built-in Node, Ruby, Rails, and Python presets and the PostgreSQL and SQLite add-ons are embedded definitions and generate the same files as before, apart from the PATH fix below.
-- New built-in add-ons: **Go** (1.27 by default), **Rust** with rustup and Cargo (1.99 by default), and a **Redis** sidecar (`redis:8-trixie`, with `REDIS_URL=redis://redis:6379`). Their tools are on `containerEnv.PATH`, so `dworm exec` finds them without a login shell.
-- New `init` flags: repeatable `--addon NAME` and `--set [DEFINITION.]OPTION=VALUE`. `--node-version`, `--ruby-version`, `--python-version`, `--package-manager`, `--database`, and `--postgres-version` remain as aliases.
-- User definitions in `~/.config/projectsetup/presets/` (or `$PROJECTSETUP_CONFIG_DIR/presets`). New `preset` commands: `list [--json]`, `show NAME`, `validate FILE`, and `eject NAME --as NEW` to copy a definition for editing.
-- Remote definitions: `preset add URL|github:owner/repo[/path][@ref]` installs one definition or an `index.toml` over HTTPS after showing its content. `sources.toml` pins each file's URL and SHA-256 hash. `preset update [NAME]` shows a diff before installing, and `preset remove NAME` deletes a remote definition. `init`, `check`, and `upgrade` never use the network.
-- `schema/preset.schema.json` provides editor completion and validation for definition files.
-- Generated projects contain a copy of their definitions in `.devcontainer/presets/`, and `projectsetup.json` uses **manifest schema 2**, which records each definition's name, version, source, and SHA-256 hash and every option value. `check` and `upgrade` use the copies; `upgrade --refresh-presets` uses the currently installed definitions instead.
-- Fix: `dworm exec -- node`, `dworm exec -- python`, and the tools they install failed with "command not found" in Node, Rails, and Python projects. The Node and Python features add their directories to PATH through their own `containerEnv`, which the generated `containerEnv.PATH` replaces. The presets now list `/usr/local/share/nvm/current/bin` (Node and Rails) and `/usr/local/python/current/bin` and `/usr/local/py-utils/bin` (Python). The opt-in smoke tests check each preset's runtime through a non-login `docker exec`.
-- `upgrade` and `init --force` no longer refuse a directory that contains `devcontainer-lock.json`, which the Dev Container CLI writes when it starts the container. The file is removed with the other generated files and written again on the next start.
-- Project detection, and `check`'s rules for features, environment, PATH, apt packages, and sidecar services, now come from the definitions.
-- `init --list-options --json` uses listing schema version 2. `packageManagers`, `databases`, and `defaults` are replaced by `addons`, `definitions` (every definition with its options, defaults, and accepted values), and `defaultAITools`. Tools that read the version 1 fields must be updated.
+## Shared toolchain images
+
+- **Definition schema 2** adds optional `image.preinstalled` declarations for tools, exact releases, executable paths, PATH entries, and core apt packages. Generation reuses declared capabilities, omits covered core installers, and keeps tools available to non-login `dworm exec`. Conflicting known installers and incompatible project version pins fail before files are replaced.
+- **Build verification** inspects inherited Dev Container metadata before building and checks the resulting image's user, home, and effective configuration. Unsafe inherited lifecycle commands and mounts are rejected.
+- **`projectsetup check --runtime`** builds and verifies declared capabilities through isolated, network-disabled probes as `vscode`. It checks supported tool versions, executable lookup, core prerequisites, and writable home without mounting a workspace or credentials or running project lifecycle scripts. Independent failures are aggregated; unsupported custom version probes fail explicitly.
+- **Fixed image ownership** lets a preset declare the image's existing `vscode` UID/GID and disable Dev Container UID adjustment. Consumers assert the IDs rather than renumbering a populated toolchain. Linux requires matching invoking-user IDs and accessible workspace/AI sources; macOS support targets Docker Desktop sharing. Remote Docker daemons are unsupported for fixed ownership.
+- **Explicit Linux host integrations** add typed bind declarations, including optional Wayland access, with source and numeric-access validation. These integrations remain opt-in consumer configuration.
+- **Customizable local image-family recipes** demonstrate a Debian foundation, Node toolchain child, and native-development child, with verified archive checksums, artifact locks, and two independent project consumers. The recorded Linux amd64 run shares approximately 407.9 MiB of saved uncompressed layer-tar payload (49.5% of a hypothetical independent-copy sum). This measures shared layer payload, not reclaimed daemon disk space.
+
+Start with [shared-image consumption](https://github.com/mpm/projectsetup/blob/v0.10.0/docs/shared-images.md), [building a local family](https://github.com/mpm/projectsetup/blob/v0.10.0/docs/image-family.md), and the [measured acceptance evidence](https://github.com/mpm/projectsetup/blob/v0.10.0/docs/image-family-evidence.md).
+
+The reference recipes are Linux amd64 examples, not a published image catalog. Local tags are checked against recorded content IDs; portable registry consumption requires a real repository digest. A first-class image build/export command remains deferred. Ordinary generation and checks do not establish that an image actually contains its declared tools; request runtime verification explicitly.
+
+## PostgreSQL image pins
+
+`--postgres-image` selects a literal maintenance tag, optionally with a SHA-256 registry digest, while `--postgres-version` retains the data-compatibility major. Validation rejects moving tags, malformed references, and mismatched majors. Upgrade and regeneration preserve the pin; `--postgres-image ''` restores the major-only default.
+
+The selected major still controls the data-volume layout. Configuration regeneration does not migrate or delete database data. See [exact PostgreSQL references](https://github.com/mpm/projectsetup/blob/v0.10.0/docs/exact-postgres.md).
+
+## AI installer repairs
+
+- Rerunning the generated `install-ai-tools.sh` **without arguments now checks all AI tools selected for that container**. Previously, an empty tool list silently skipped every tool. Explicit arguments still override the defaults; `--update` still requires tool names.
+- Claude's container command links to a particular binary in the host-mounted versions directory. Rerunning the helper refreshes that link after host updates or cleanup, selecting the highest executable version by version number rather than file modification time and validating it with `--version`. Missing or invalid installations use the native installer.
+- AI parent-directory repairs remain targeted. The helper validates mounted state access and reports the host source needing repair without recursively changing host ownership.
 
 ## Existing projects
 
-`upgrade` reads the schema 1 manifest of a configuration generated by an earlier release, maps it to the built-in definitions, and writes schema 2 together with `.devcontainer/presets/`. Apart from the PATH fix, the generated Dockerfile, `devcontainer.json`, and scripts are unchanged, and the rewritten `compose.yaml` is equivalent under `docker compose config`. PostgreSQL projects keep their recorded major version, and manifests without one are still treated as PostgreSQL 17.
+Install v0.10.0, review any local generated-file edits, and run:
 
-Because of the PATH fix, `check` reports an error such as `containerEnv.PATH must include /usr/local/share/nvm/current/bin` for Node, Rails, and Python projects generated by earlier releases. Ruby projects pass unchanged. Run `projectsetup upgrade` and recreate the container to fix it.
+```bash
+projectsetup upgrade
+projectsetup check
+```
 
-Do not edit the files in `.devcontainer/presets/`; `check` reports copies that no longer match the manifest. To customize a built-in, run `projectsetup preset eject NAME --as NEW`, edit the copy, and select the new name.
+This refreshes generated scripts while retaining recorded options, AI selection, image references, and exact definition snapshots. To repair selected agents in an existing running container afterward:
 
-## Security
+```bash
+dworm exec -- .devcontainer/scripts/install-ai-tools.sh
+```
 
-Definitions run shell code and install features in a container that mounts your AI tool credentials and receives your forwarded SSH agent. Install remote definitions only from sources you trust, review what `preset add` and `preset update` print, and pin `github:` locations to a tag or commit.
+Shared images are opt-in through custom presets; built-in presets keep their existing installation behavior. Definition schemas 1 and 2 are supported, and generated manifests remain schema 2. Older projectsetup versions cannot consume schema 2 definitions or manifests containing the new optional fields.
+
+To adopt a changed shared image, deliberately update its custom definition and measured declarations, run `projectsetup upgrade --refresh-presets`, verify the artifact with `projectsetup check --runtime`, and recreate the container. Ordinary upgrade retains the recorded artifact; it does not pull a new image or replace a running container. Database major upgrades require a separate migration.
 
 ## Validation
 
-Passed on Linux amd64 with Docker 29.9.0 and Dev Container CLI 0.89.0:
+- `go test ./...`, `go vet ./...`, and generated-fixture Docker Compose and Dev Container configuration checks passed on the release code.
+- Regression tests cover no-argument AI selection, explicit overrides, deleted Claude targets, and version ordering despite reversed file timestamps.
+- The checked-in image-family evidence records real Linux amd64 builds, runtime checks, two-project startup and dependency setup, fixed-ID behavior, and shared-layer measurements. These opt-in acceptance runs were recorded during feature development; they were not repeated for release packaging.
+- The local image-family workflow was not verified on arm64 or macOS. Runtime probes verify image capabilities; they do not replace first-start validation of host mounts or application setup.
 
-- `go test ./...` and `go vet ./...` with Go 1.27.2; `gofmt -l` reported no files. The unit and golden tests include `docker compose config` and `devcontainer read-configuration` for every fixture.
-- The opt-in build and smoke tests for all seven fixtures (`node-opencode`, `ruby-opencode`, `rails-opencode`, `python-pip`, `ruby-go`, `node-rust`, `python-redis`). Through a non-login `docker exec` as `vscode`, the containers reported Go 1.27.2, Rust 1.99.0, Node v26.10.0, Python 3.14.8, and Ruby 4.0.7, and `redis-cli -u "$REDIS_URL" ping` returned `PONG`.
-- With `dworm` v0.8.2, `dworm exec -- node --version` failed in a Node project generated by v0.8.0, which is the bug fixed above.
-- Node, Rails, Python, and Ruby projects generated by v0.8.0 behave under `check` and `upgrade` as described in [Existing projects](#existing-projects).
-
-Not verified: arm64/macOS hosts, and `preset add` against a real GitHub repository (it is tested against local HTTPS servers).
+[All changes since v0.9.0](https://github.com/mpm/projectsetup/compare/v0.9.0...v0.10.0)
