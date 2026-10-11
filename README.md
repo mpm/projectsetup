@@ -585,6 +585,14 @@ dworm exec -- .devcontainer/scripts/install-ai-tools.sh --update codex
 dworm exec -- .devcontainer/scripts/install-ai-tools.sh --update opencode codex
 ```
 
+To check all selected agents and repair their command links without requesting updates, rerun the generated script without arguments:
+
+```bash
+dworm exec -- .devcontainer/scripts/install-ai-tools.sh
+```
+
+Claude's container command links to a specific version in the host-mounted `~/.local/share/claude/versions` directory. Host updates and cleanup can leave that link pointing to an old or deleted binary. Rerunning the script selects the highest executable version by version number, validates it, and replaces the link. If that binary is missing or invalid, it runs the native installer.
+
 Use only agents selected for that container, so their installation and state mounts are available. The shared installer also accepts `--update claude`. It reports versions and validates the resulting executable, propagating download or update failures. Normal post-create setup installs missing tools and leaves working versions alone.
 
 For an older container without the updated script, OpenCode can already update itself:

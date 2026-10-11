@@ -29,6 +29,16 @@ ensure_writable() {
   [[ -z "$blocked" ]] || fail "$blocked is not writable; repair host source $source; no ownership was changed"
 }
 
+# A no-argument rerun checks the tools selected when this script was generated.
+if (( $# == 0 )); then
+  set -- claude codex opencode
+fi
+
+latest_claude_binary() {
+  find "$HOME/.local/share/claude/versions" -mindepth 1 -maxdepth 1 -type f -executable -print 2>/dev/null |
+    LC_ALL=C sort -Vr | sed -n '1p' || true
+}
+
 update=false
 if [[ "${1:-}" == --update ]]; then
   update=true
@@ -108,18 +118,18 @@ for tool in "$@"; do
       ensure_writable "$HOME/.claude" "host ~/.claude"
       ensure_writable "$HOME/.local/share/claude" "host ~/.local/share/claude"
       export CLAUDE_CONFIG_DIR="$HOME/.claude"
-      claude_binary="$(find "$HOME/.local/share/claude/versions" -mindepth 1 -maxdepth 1 -type f -executable -printf '%T@ %p\n' 2>/dev/null | sort -nr | cut -d' ' -f2- | sed -n '1p' || true)"
+      claude_binary="$(latest_claude_binary)"
       if [[ -z "$claude_binary" ]] || ! "$claude_binary" --version >/dev/null 2>&1; then
         command -v curl >/dev/null 2>&1 || fail "curl is required to install Claude Code"
         curl -fsSL https://claude.ai/install.sh | bash || fail "Claude Code installer failed"
-        claude_binary="$(find "$HOME/.local/share/claude/versions" -mindepth 1 -maxdepth 1 -type f -executable -printf '%T@ %p\n' 2>/dev/null | sort -nr | cut -d' ' -f2- | sed -n '1p' || true)"
+        claude_binary="$(latest_claude_binary)"
       fi
       [[ -n "$claude_binary" ]] || fail "Claude installer did not create a persisted version binary"
       ln -sfn "$claude_binary" "$HOME/.local/bin/claude"
       "$HOME/.local/bin/claude" --version || fail "Claude Code installation is not executable"
       if "$update"; then
         "$HOME/.local/bin/claude" update || fail "Claude Code update failed"
-        claude_binary="$(find "$HOME/.local/share/claude/versions" -mindepth 1 -maxdepth 1 -type f -executable -printf '%T@ %p\n' 2>/dev/null | sort -nr | cut -d' ' -f2- | sed -n '1p' || true)"
+        claude_binary="$(latest_claude_binary)"
         [[ -n "$claude_binary" ]] || fail "Claude update did not leave a persisted version binary"
         ln -sfn "$claude_binary" "$HOME/.local/bin/claude"
         "$HOME/.local/bin/claude" --version || fail "Updated Claude Code is not executable"

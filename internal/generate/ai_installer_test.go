@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mpm/projectsetup/internal/config"
 )
 
 func writeTestFile(t *testing.T, path, content string, mode os.FileMode) {
@@ -20,12 +22,24 @@ func writeTestFile(t *testing.T, path, content string, mode os.FileMode) {
 	}
 }
 
-func runAIInstaller(t *testing.T, home, bin string, args ...string) (string, error) {
+func writeAIInstaller(t *testing.T, tools string) string {
 	t.Helper()
-	script, err := filepath.Abs("templates/install-ai-tools.sh")
+	content, err := executeTemplate("install-ai-tools.sh.tmpl", data{AITools: tools})
 	if err != nil {
 		t.Fatal(err)
 	}
+	script := filepath.Join(t.TempDir(), "install-ai-tools.sh")
+	writeTestFile(t, script, string(content), 0755)
+	return script
+}
+
+func runAIInstaller(t *testing.T, home, bin string, args ...string) (string, error) {
+	t.Helper()
+	return runAIInstallerScript(t, writeAIInstaller(t, ""), home, bin, args...)
+}
+
+func runAIInstallerScript(t *testing.T, script, home, bin string, args ...string) (string, error) {
+	t.Helper()
 	command := exec.Command("bash", append([]string{script}, args...)...)
 	command.Env = append(os.Environ(), "HOME="+home, "CODEX_HOME="+filepath.Join(home, ".codex"),
 		"PATH="+bin+":"+filepath.Join(home, ".local/bin")+":"+os.Getenv("PATH"))
@@ -324,6 +338,106 @@ func TestAIInstallerRejectsUnwritableSharedSources(t *testing.T) {
 			}
 			if info.Mode().Perm() != want {
 				t.Fatal("host ownership/mode repair attempted")
+			}
+		})
+	}
+}
+
+func TestGeneratedAIInstallerDefaultsAndOverrides(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		selected   []config.AITool
+		args       []string
+		wantClaude bool
+		wantErr    bool
+	}{
+		{name: "selected Claude", selected: []config.AITool{config.AIToolClaude}, wantClaude: true},
+		{name: "no selected tools", selected: []config.AITool{}},
+		{name: "explicit override", selected: []config.AITool{config.AIToolClaude}, args: []string{"opencode"}},
+		{name: "update still requires selection", selected: []config.AITool{config.AIToolClaude}, args: []string{"--update"}, wantErr: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			home, bin := t.TempDir(), t.TempDir()
+			cfg, err := config.Normalize(config.Input{Root: t.TempDir(), Preset: "node", AITools: tt.selected})
+			if err != nil {
+				t.Fatal(err)
+			}
+			files, err := render(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			script := filepath.Join(t.TempDir(), "install-ai-tools.sh")
+			for _, f := range files {
+				if f.name == "scripts/install-ai-tools.sh" {
+					writeTestFile(t, script, string(f.data), f.mode)
+				}
+			}
+			writeTestFile(t, filepath.Join(bin, "curl"), "#!/bin/sh\necho unexpected-download >&2\nexit 99\n", 0755)
+			writeTestFile(t, filepath.Join(home, ".opencode/bin/opencode"), "#!/bin/sh\necho opencode-test\n", 0755)
+			version := filepath.Join(home, ".local/share/claude/versions/2.10.0")
+			writeTestFile(t, version, "#!/bin/sh\necho claude-test\n", 0755)
+			output, err := runAIInstallerScript(t, script, home, bin, tt.args...)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("%v\n%s", err, output)
+			}
+			_, linkErr := os.Readlink(filepath.Join(home, ".local/bin/claude"))
+			if (linkErr == nil) != tt.wantClaude {
+				t.Fatalf("Claude link: %v\n%s", linkErr, output)
+			}
+			if !tt.wantClaude {
+				return
+			}
+			// Host cleanup deletes the selected version; a new host version appears.
+			if err := os.Remove(version); err != nil {
+				t.Fatal(err)
+			}
+			replacement := filepath.Join(filepath.Dir(version), "2.11.0")
+			writeTestFile(t, replacement, "#!/bin/sh\necho claude-repaired\n", 0755)
+			output, err = runAIInstallerScript(t, script, home, bin)
+			if err != nil || !strings.Contains(output, "claude-repaired") {
+				t.Fatalf("rerun: %v\n%s", err, output)
+			}
+			if target, err := os.Readlink(filepath.Join(home, ".local/bin/claude")); err != nil || target != replacement {
+				t.Fatalf("link = %q: %v", target, err)
+			}
+		})
+	}
+}
+
+func TestClaudeRepairsLinkToHighestVersion(t *testing.T) {
+	for _, state := range []string{"missing", "older version", "deleted version"} {
+		t.Run(state, func(t *testing.T) {
+			home, bin := t.TempDir(), t.TempDir()
+			writeTestFile(t, filepath.Join(bin, "curl"), "#!/bin/sh\necho unexpected-download >&2\nexit 99\n", 0755)
+			versions := filepath.Join(home, ".local/share/claude/versions")
+			newest := filepath.Join(versions, "2.10.0")
+			older := filepath.Join(versions, "2.9.0")
+			writeTestFile(t, newest, "#!/bin/sh\necho claude-newest\n", 0755)
+			writeTestFile(t, older, "#!/bin/sh\necho claude-older\n", 0755)
+			// A restored old release has a newer timestamp than the highest version.
+			past := time.Now().Add(-time.Hour)
+			if err := os.Chtimes(newest, past, past); err != nil {
+				t.Fatal(err)
+			}
+			link := filepath.Join(home, ".local/bin/claude")
+			if state != "missing" {
+				if err := os.MkdirAll(filepath.Dir(link), 0755); err != nil {
+					t.Fatal(err)
+				}
+				target := older
+				if state == "deleted version" {
+					target = filepath.Join(versions, "2.8.0")
+				}
+				if err := os.Symlink(target, link); err != nil {
+					t.Fatal(err)
+				}
+			}
+			output, err := runAIInstaller(t, home, bin, "claude")
+			if err != nil || !strings.Contains(output, "claude-newest") {
+				t.Fatalf("%v\n%s", err, output)
+			}
+			if target, err := os.Readlink(link); err != nil || target != newest {
+				t.Fatalf("link = %q: %v", target, err)
 			}
 		})
 	}

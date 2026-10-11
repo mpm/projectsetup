@@ -26,7 +26,7 @@ Identical version settings in separate project builds do not guarantee identical
 - Built-in runtime presets request Dev Container features. Merely replacing their base does not stop them requesting those features.
 - Generated Dev Container configuration requests the GitHub CLI feature unless the preset declares `gh`, and includes declared tool paths in `containerEnv.PATH` independently of image PATH.
 - `internal/generate/templates/Dockerfile.tmpl` installs only undeclared core apt packages, preserves explicit project packages, and omits apt entirely when no packages remain. It creates required container parents with non-recursive ownership changes.
-- `internal/generate/templates/install-ai-tools.sh` repairs only exact unmounted container parents and checks AI mounts/nested entries with host-source diagnostics; it never recursively chowns host state.
+- `internal/generate/templates/install-ai-tools.sh.tmpl` repairs only exact unmounted container parents and checks AI mounts/nested entries with host-source diagnostics; it never recursively chowns host state.
 - Schema 2 top-level presets can assert fixed `vscode` UID/GID; generated `updateRemoteUserUID: false` disables adjustment only for that policy, with portable defaults preserved.
 - The built-in PostgreSQL add-on retains an explicit major and supports exact tagged/optional-digest references through typed `postgresImage` and `--postgres-image`; generic options retain their shell-safe character restriction.
 - Static validation checks declared/generated configuration; `check --build` also inspects base/final effective metadata for nonempty preinstalled claims or fixed ownership, but does not run runtime smoke checks.

@@ -506,7 +506,7 @@ Use the official standalone installer with installation-only `CODEX_HOME=~/.loca
 
 File-based Codex credentials and all local history/session state are shared. Doctor checks auth.json metadata only and warns about missing file-based login or keyring/auto configuration. Never silently rewrite host Codex configuration, print credentials, or recursively chown its state directory.
 
-Maintain one canonical embedded `install-ai-tools.sh` used by all presets. It should accept selected tools as arguments rather than having preset-specific copies.
+Maintain one canonical embedded `install-ai-tools.sh` used by all presets. It should accept selected tools as arguments rather than having preset-specific copies. Render the selected tools as defaults so a no-argument rerun checks those tools; explicit arguments override the defaults.
 
 Required behavior:
 
@@ -516,7 +516,7 @@ Required behavior:
 - Validate binaries with `--version`.
 - By default install only missing or invalid tools through their native installers, except incompatible existing Codex binaries must fail for host repair. Explicit `--update TOOL...` updates requested tools, reports versions, and verifies the result. Reject invalid arguments before mutations.
 - Keep OpenCode at `~/.opencode/bin/opencode` with a link in `~/.local/bin`.
-- Discover and link the newest persisted Claude binary under `~/.local/share/claude/versions`.
+- Discover and link the newest persisted Claude binary by version number (not modification time) under `~/.local/share/claude/versions`.
 - Ensure OpenCode's unmounted `~/.local/state` is writable.
 - Fail with actionable errors.
 

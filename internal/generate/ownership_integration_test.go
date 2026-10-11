@@ -132,10 +132,7 @@ path = ["/usr/bin"]
 	bin, installation, state, nested := t.TempDir(), t.TempDir(), t.TempDir(), t.TempDir()
 	fakeCodexCurl(t, bin)
 	writeTestFile(t, filepath.Join(nested, "sentinel"), "nested-host-state", 0400)
-	script, err := filepath.Abs("templates/install-ai-tools.sh")
-	if err != nil {
-		t.Fatal(err)
-	}
+	script := writeAIInstaller(t, "")
 	args := []string{"run", "--rm", "--network", "none", "--user", "vscode", "--env", "PATH=/fixtures:/usr/bin:/bin", "--env", "CODEX_HOME=/home/vscode/.codex", "--mount", "type=bind,source=" + script + ",target=/installer,readonly", "--mount", "type=bind,source=" + bin + ",target=/fixtures,readonly", "--mount", "type=bind,source=" + installation + ",target=/home/vscode/.local/share/codex", "--mount", "type=bind,source=" + state + ",target=/home/vscode/.codex", "--mount", "type=bind,source=" + nested + ",target=/home/vscode/.local/state/nested,readonly", "--entrypoint", "/bin/bash", image, "/installer", "codex"}
 	output := run(args...)
 	if !strings.Contains(output, "codex-1") {

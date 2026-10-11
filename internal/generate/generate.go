@@ -130,9 +130,9 @@ func render(cfg config.Config) ([]file, error) {
 	if err != nil {
 		return nil, err
 	}
-	aiInstaller, err := templateFiles.ReadFile("templates/install-ai-tools.sh")
+	aiInstaller, err := executeTemplate("install-ai-tools.sh.tmpl", templateData(cfg, resolved))
 	if err != nil {
-		return nil, fmt.Errorf("read embedded AI installer: %w", err)
+		return nil, fmt.Errorf("render AI installer: %w", err)
 	}
 	compose, err := renderCompose(cfg, resolved)
 	if err != nil {

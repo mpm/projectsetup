@@ -184,7 +184,7 @@ func TestAIInstallerInstallsClaudeFromCleanState(t *testing.T) {
 	home := t.TempDir()
 	bin := t.TempDir()
 	installer := filepath.Join(root, "install-ai-tools.sh")
-	data, err := templateFiles.ReadFile("templates/install-ai-tools.sh")
+	data, err := executeTemplate("install-ai-tools.sh.tmpl", data{})
 	if err != nil {
 		t.Fatal(err)
 	}
