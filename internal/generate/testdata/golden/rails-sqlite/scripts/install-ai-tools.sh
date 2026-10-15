@@ -23,10 +23,14 @@ ensure_writable() {
   local path="$1" source="${2:-$1}"
   mkdir -p "$path" 2>/dev/null || fail "cannot create $path; repair host source $source for container IDs $(id -u):$(id -g)"
   [[ -w "$path" && -x "$path" ]] || fail "$path is not writable; repair host source $source for container IDs $(id -u):$(id -g)"
+  # Vendor libraries and Git pack files can deliberately be read-only. An
+  # owner-owned readable file can be chmodded/replaced by this user if needed;
+  # do not mutate its mode merely to run a shared installation. Directories
+  # still need read/write/search access, and foreign read-only files fail.
   local blocked
-  blocked="$(find "$path" -xdev \( -type d \( ! -writable -o ! -executable \) -o -type f ! -writable \) -print -quit 2>/dev/null)" ||
+  blocked="$(find "$path" -xdev \( -type d \( ! -readable -o ! -writable -o ! -executable \) -o -type f \( ! -readable -o \( ! -writable ! -uid "$(id -u)" \) \) \) -print -quit 2>/dev/null)" ||
     fail "cannot inspect $path; repair host source $source access"
-  [[ -z "$blocked" ]] || fail "$blocked is not writable; repair host source $source; no ownership was changed"
+  [[ -z "$blocked" ]] || fail "$blocked lacks required read/write/search or file-owner access; repair host source $source; no ownership was changed"
 }
 
 # A no-argument rerun checks the tools selected when this script was generated.

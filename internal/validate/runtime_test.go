@@ -24,6 +24,7 @@ func TestReportedRuntimeVersions(t *testing.T) {
 		{"pnpm", "10.1.0", "10.1.0\n"},
 		{"yarn", "4.6.0", "4.6.0\n"},
 		{"bundler", "2.6.2", "Bundler version 2.6.2"},
+		{"bundler", "4.0.22", "4.0.22\n"},
 		{"pip", "25.0", "pip 25.0 from /usr/lib/python (python 3.13)"},
 		{"uv", "0.6.0", "uv 0.6.0 (abcdef 2025-01-01)"},
 		{"poetry", "2.1.0", "Poetry (version 2.1.0)"},

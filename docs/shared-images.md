@@ -98,6 +98,10 @@ projectsetup check --runtime
 
 `--build` preflights the locally available base's effective Dev Container metadata, builds the project, and inspects final metadata and user/HOME. It does not execute project setup or prove installed releases. `--runtime` implies another build and metadata inspection, then checks core prerequisites, writable image home, and every declared executable/release through isolated non-login execution as `vscode`. It uses no network, workspace, credentials, or lifecycle scripts and removes its owned probes. Images and build cache remain. Unsupported custom tool version probes fail explicitly; these three tool identities have supported probes.
 
+Bundler declarations use tool identity `bundler` and the actual `bundle`
+executable. Its runtime probe accepts both the traditional `Bundler version X`
+output and Bundler 4's bare `X`, while requiring the exact declared version.
+
 After successful checks, start each project using the normal workflow:
 
 ```bash
@@ -156,6 +160,13 @@ USER vscode
 Do not use this fragment to renumber an existing populated toolchain; rebuild it from the account-establishment stage. Account collisions fail with an owner and remedy rather than deleting unrelated users/groups. Verify supplementary group membership and sudo configuration for your chosen base. The consumer Dockerfile asserts existing IDs before its installation steps and never mutates accounts; `check --runtime` verifies final numeric IDs. Fixed consumption disables Dev Container UID adjustment, avoiding that mechanism's home-copying layer. The separate [Phase 3 measurements](image-family-evidence.md) confirm matching-ID startup without an additional UID-adjustment layer.
 
 AI mounts remain outside the artifact. The shared installer creates/repairs only exact unmounted container parent directories. It checks mounted sources and nested entries for access, never recursively chowns them, and reports the host source requiring repair. Correct access deliberately on the host or choose a compatible image; do not run recursive ownership repair across credentials, caches, or history.
+
+Mounted directories require read/write/search access. Regular files must be readable
+and either writable or owned by the container user: read-only owner-owned vendor
+libraries and Git pack files are valid and retain their modes. Unreadable files,
+foreign non-writable files and inaccessible directories fail with the host source
+requiring repair. This avoids rejecting valid Codex distributions without repairing
+permissions across host state.
 
 To exercise the isolated ownership integration test against an existing local compatible image:
 

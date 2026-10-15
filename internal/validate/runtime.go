@@ -21,7 +21,7 @@ var versionPatterns = map[string]*regexp.Regexp{
 	"npm":     regexp.MustCompile(`^([^\s]+)\s*$`),
 	"pnpm":    regexp.MustCompile(`^([^\s]+)\s*$`),
 	"yarn":    regexp.MustCompile(`^([^\s]+)\s*$`),
-	"bundler": regexp.MustCompile(`^Bundler version ([^\s]+)\s*$`),
+	"bundler": regexp.MustCompile(`^(?:Bundler version )?([^\s]+)\s*$`),
 	"pip":     regexp.MustCompile(`^pip ([^\s]+) from `),
 	"uv":      regexp.MustCompile(`^uv ([^\s]+)(?:\s|$)`),
 	"poetry":  regexp.MustCompile(`^Poetry \(version ([^\s)]+)\)\s*$`),

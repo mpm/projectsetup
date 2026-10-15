@@ -314,7 +314,7 @@ func TestAIInstallerRejectsUnwritableSharedSources(t *testing.T) {
 			home, bin := t.TempDir(), t.TempDir()
 			blocked := filepath.Join(home, relative)
 			if strings.HasSuffix(relative, "history") {
-				writeTestFile(t, blocked, "history-sentinel", 0400)
+				writeTestFile(t, blocked, "history-sentinel", 0000)
 			} else {
 				if err := os.MkdirAll(blocked, 0500); err != nil {
 					t.Fatal(err)
@@ -334,12 +334,58 @@ func TestAIInstallerRejectsUnwritableSharedSources(t *testing.T) {
 			}
 			want := os.FileMode(0500)
 			if strings.HasSuffix(relative, "history") {
-				want = 0400
+				want = 0000
 			}
 			if info.Mode().Perm() != want {
 				t.Fatal("host ownership/mode repair attempted")
 			}
 		})
+	}
+}
+
+func TestAIInstallerPreservesOwnedReadOnlyCodexFiles(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root bypasses DAC")
+	}
+	home, bin := t.TempDir(), t.TempDir()
+	fakeCodexCurl(t, bin)
+	t.Setenv("TEST_FAILURE", "")
+	t.Setenv("TEST_CODEX_VERSION", "1")
+	files := []struct {
+		path string
+		mode os.FileMode
+	}{
+		{".codex/packages/standalone/releases/1/voice/lib/libvoice.so", 0555},
+		{".codex/.tmp/plugins/.git/objects/pack/test.pack", 0444},
+		{".local/share/codex/vendor/libvoice.so", 0555},
+		{".codex/auth.json", 0600},
+	}
+	for _, file := range files {
+		writeTestFile(t, filepath.Join(home, file.path), "retained-sentinel", file.mode)
+	}
+	for _, command := range []string{"sudo", "chown", "chmod"} {
+		writeTestFile(t, filepath.Join(bin, command), "#!/bin/sh\necho unexpected-permission-repair >&2\nexit 99\n", 0755)
+	}
+	// Use an already installed executable: this rerun must never download or
+	// change vendor file modes, while still repairing the container command link.
+	writeTestFile(t, filepath.Join(home, ".local/share/codex/bin/codex"), "#!/bin/sh\necho codex-existing\n", 0755)
+	t.Setenv("TEST_FAILURE", "download")
+	if output, err := runAIInstaller(t, home, bin, "codex"); err != nil {
+		t.Fatalf("read-only vendor files: %v\n%s", err, output)
+	}
+	for _, file := range files {
+		path := filepath.Join(home, file.path)
+		info, err := os.Stat(path)
+		if err != nil || info.Mode().Perm() != file.mode {
+			t.Fatalf("mode changed for %s: %v", file.path, err)
+		}
+		content, err := os.ReadFile(path)
+		if err != nil || string(content) != "retained-sentinel" {
+			t.Fatalf("content changed for %s: %v", file.path, err)
+		}
+	}
+	if output, err := exec.Command(filepath.Join(home, ".local/bin/codex"), "--version").CombinedOutput(); err != nil || !strings.Contains(string(output), "codex-existing") {
+		t.Fatalf("Codex command link: %v\n%s", err, output)
 	}
 }
 
