@@ -12,7 +12,7 @@ import (
 const usage = `Usage:
   projectsetup init [flags]
   projectsetup init --list-options [--json]
-  projectsetup upgrade [--ai TOOLS] [--refresh-presets]
+  projectsetup upgrade [--ai TOOLS] [--addon NAME]... [--remove-addon NAME]... [--refresh-presets]
   projectsetup preset list [--json]
   projectsetup preset show NAME
   projectsetup preset validate FILE

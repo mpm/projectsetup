@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/mpm/projectsetup/internal/config"
 	"github.com/mpm/projectsetup/internal/generate"
@@ -17,6 +19,9 @@ func runUpgrade(root string, args []string, stdout, stderr io.Writer) error {
 	flags.SetOutput(stderr)
 	aiValue := flags.String("ai", "", "replace AI selection with comma-separated opencode, claude, codex; or none")
 	refresh := flags.Bool("refresh-presets", false, "use the current built-in and user definitions instead of the project copies")
+	var addValues, removeValues repeatedStrings
+	flags.Var(&addValues, "addon", "add an add-on from the installed definitions (repeatable)")
+	flags.Var(&removeValues, "remove-addon", "remove a selected add-on (repeatable)")
 	if err := flags.Parse(args); err != nil {
 		if err == flag.ErrHelp {
 			return nil
@@ -69,10 +74,20 @@ func runUpgrade(root string, args []string, stdout, stderr io.Writer) error {
 	if !config.SameSelection(config.NewManifest(cfg), manifest) {
 		return fmt.Errorf("refusing to upgrade %q because its manifest values are not normalized", devDir)
 	}
-	if *refresh || tools != nil {
-		if *refresh {
-			if input.Registry, err = presets.Load(); err != nil {
+	addonsChanged := len(addValues) > 0 || len(removeValues) > 0
+	if *refresh || tools != nil || addonsChanged {
+		var local *presets.Registry
+		if *refresh || len(addValues) > 0 {
+			if local, err = presets.Load(); err != nil {
 				return fmt.Errorf("load preset definitions: %w", err)
+			}
+		}
+		if *refresh {
+			input.Registry = local
+		}
+		if addonsChanged {
+			if input, err = changeAddons(input, local, addValues, removeValues); err != nil {
+				return err
 			}
 		}
 		if tools != nil {
@@ -87,4 +102,67 @@ func runUpgrade(root string, args []string, stdout, stderr io.Writer) error {
 	}
 	_, err = fmt.Fprintf(stdout, "Upgraded .devcontainer for %s (%s). Recreate the container to apply mount or environment changes.\n", cfg.ProjectName, cfg.Preset)
 	return err
+}
+
+// changeAddons adds definitions from the local registry and removes selected
+// add-ons, keeping every other recorded value. Without --refresh-presets the
+// retained definitions stay the project copies.
+func changeAddons(input config.Input, local *presets.Registry, add, remove []string) (config.Input, error) {
+	selected := input.Addons
+	for _, name := range remove {
+		if !slices.Contains(selected, name) {
+			return input, fmt.Errorf("--remove-addon %q: add-on is not selected (selected: %s)", name, describeAddons(selected))
+		}
+	}
+	definitions := []presets.Definition{}
+	for _, name := range append([]string{input.Preset}, selected...) {
+		if slices.Contains(remove, name) {
+			continue
+		}
+		definition, _ := input.Registry.Lookup(name)
+		definitions = append(definitions, definition)
+	}
+	addons := slices.DeleteFunc(slices.Clone(selected), func(name string) bool { return slices.Contains(remove, name) })
+	for _, name := range add {
+		if slices.Contains(remove, name) {
+			return input, fmt.Errorf("--addon %q is also passed to --remove-addon", name)
+		}
+		if slices.Contains(selected, name) {
+			return input, fmt.Errorf("--addon %q: add-on is already selected; use --refresh-presets to adopt its installed definition", name)
+		}
+		if slices.Contains(addons, name) {
+			continue
+		}
+		definition, ok := local.Lookup(name)
+		if !ok || definition.Kind != presets.KindAddon {
+			return input, fmt.Errorf("--addon: unsupported add-on %q (expected %s)", name, config.DescribeChoices(local.Names(presets.KindAddon)))
+		}
+		definitions = append(definitions, definition)
+		addons = append(addons, name)
+	}
+	if input.Registry != local {
+		registry, err := presets.NewRegistry(definitions...)
+		if err != nil {
+			return input, fmt.Errorf("combine recorded and added definitions: %w", err)
+		}
+		input.Registry = registry
+	}
+	options := map[string]map[string]string{}
+	for name, values := range input.Options {
+		if !slices.Contains(remove, name) {
+			options[name] = values
+		}
+	}
+	if slices.Contains(remove, "postgres") {
+		input.PostgresImage = ""
+	}
+	input.Addons, input.Options = addons, options
+	return input, nil
+}
+
+func describeAddons(names []string) string {
+	if len(names) == 0 {
+		return "none"
+	}
+	return strings.Join(names, ", ")
 }

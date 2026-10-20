@@ -1237,3 +1237,108 @@ func TestRunUpgradeMovesHostIntegrationsToCompose(t *testing.T) {
 		t.Fatalf("upgrade did not move the integration:\n%s\n%s", upgradedCompose, upgradedDevcontainer)
 	}
 }
+
+const upgradeToolsAddon = `schema = 2
+kind = "addon"
+name = "tools"
+version = "1.0.0"
+description = "User tools"
+[options.flavor]
+default = "plain"
+choices = ["plain", "extra"]
+[container]
+path = ["/opt/tools/bin"]
+`
+
+func TestUpgradeChangesOnlyAddonSelection(t *testing.T) {
+	userDir := useConfigDir(t)
+	if err := os.MkdirAll(userDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	userFile := filepath.Join(userDir, "tools.toml")
+	if err := os.WriteFile(userFile, []byte(upgradeToolsAddon), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := presets.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CODEX_HOME", "")
+	cfg, err := config.Normalize(config.Input{Root: root, Registry: registry, ProjectName: "keep-me", Preset: "python", Addons: []string{"postgres", "tools"}, PostgresImage: "postgres:17.6-bookworm", Options: map[string]map[string]string{"python": {"version": "3.12", "package_manager": "uv"}, "postgres": {"version": "17"}, "tools": {"flavor": "extra"}}, AITools: []config.AITool{config.AIToolCodex}, Ports: []int{8000}, SystemPackages: []string{"make"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := generate.Write(root, cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	original := config.NewManifest(cfg)
+	// Retained definitions keep their project copies, not the installed ones.
+	editFile(t, userFile, `version = "1.0.0"`, `version = "2.0.0"`)
+
+	if err := runUpgrade(root, []string{"--addon", "redis", "--addon", "redis"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	got := readManifest(t, root)
+	redis, _ := presets.Builtin().Lookup("redis")
+	want := original
+	want.Addons = []presets.Ref{original.Addons[0], redis.Ref(), original.Addons[1]}
+	want.Options = maps.Clone(original.Options)
+	want.Options["redis"] = map[string]string{"version": "8"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("after --addon: manifest = %#v\nwant %#v", got, want)
+	}
+	if diagnostics := validate.Check(root, validate.Options{}); validate.ErrorCount(diagnostics) != 0 {
+		t.Fatal(diagnostics)
+	}
+
+	if err := runUpgrade(root, []string{"--remove-addon", "postgres", "--remove-addon", "tools"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	got = readManifest(t, root)
+	want.Addons = []presets.Ref{want.Addons[1]}
+	want.Options = map[string]map[string]string{"python": original.Options["python"], "redis": want.Options["redis"]}
+	want.PostgresImage = ""
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("after --remove-addon: manifest = %#v\nwant %#v", got, want)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".devcontainer", "presets", "tools.toml")); !os.IsNotExist(err) {
+		t.Fatalf("removed definition copy remains: %v", err)
+	}
+
+	// A newly added user definition comes from the installed registry with defaults.
+	if err := runUpgrade(root, []string{"--addon", "tools"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := readManifest(t, root); got.Addons[1].Version != "2.0.0" || got.Options["tools"]["flavor"] != "plain" || !reflect.DeepEqual(got.AITools, original.AITools) {
+		t.Fatalf("added user definition: %#v", got)
+	}
+
+	before, _ := os.ReadFile(filepath.Join(root, ".devcontainer", "projectsetup.json"))
+	for _, tt := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"--addon", "missing"}, `unsupported add-on "missing"`},
+		{[]string{"--addon", "node"}, `unsupported add-on "node"`},
+		{[]string{"--addon", "redis"}, `"redis": add-on is already selected`},
+		{[]string{"--remove-addon", "postgres"}, `"postgres": add-on is not selected (selected: redis, tools)`},
+		{[]string{"--addon", "sqlite", "--remove-addon", "sqlite"}, "not selected"},
+		{[]string{"--addon", "go", "--remove-addon", "redis", "--addon", "redis"}, "also passed to --remove-addon"},
+	} {
+		err := runUpgrade(root, tt.args, &bytes.Buffer{}, &bytes.Buffer{})
+		if err == nil || !strings.Contains(err.Error(), tt.want) {
+			t.Errorf("upgrade %v error = %v; want %q", tt.args, err, tt.want)
+		}
+	}
+	if after, _ := os.ReadFile(filepath.Join(root, ".devcontainer", "projectsetup.json")); !bytes.Equal(before, after) {
+		t.Fatal("rejected upgrade changed manifest")
+	}
+	if err := runUpgrade(root, []string{"--refresh-presets", "--remove-addon", "redis"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := readManifest(t, root); len(got.Addons) != 1 || got.Addons[0].Version != "2.0.0" || got.Options["python"]["version"] != "3.12" {
+		t.Fatalf("refresh with removal: %#v", got)
+	}
+}

@@ -213,7 +213,16 @@ To change only the selected agents while upgrading:
 projectsetup upgrade --ai opencode,codex
 ```
 
-The list replaces the previous selection; use `--ai none` to disable all agents. Plain `upgrade` preserves the selection. Agent lists accept any combination and are deduplicated and sorted. Recreate the container after adding or removing mounts or changing its environment; regenerating files alone does not change an existing container. Upgrading configuration does not update working agent binaries.
+To add or remove add-ons without re-specifying the rest of the setup:
+
+```bash
+projectsetup upgrade --addon wayland
+projectsetup upgrade --addon redis --remove-addon sqlite
+```
+
+Both flags are repeatable. `--addon NAME` takes the definition from the installed built-in and user definitions (the same registry `init` uses) and fills in its option defaults; `--remove-addon NAME` drops a selected add-on together with its recorded options, and removing `postgres` also drops its explicit image reference. Every other recorded value is kept: preset, retained add-ons, option values, PostgreSQL major and image reference, agents, ports, and packages. Retained definitions keep their project copies unless you also pass `--refresh-presets`. The result goes through the same validation as `init`, so unknown names, presets, add-ons that are already selected or not selected, conflicting host integrations, and incompatible combinations fail without changing files. Removing an add-on does not delete its sidecar's named volumes.
+
+The `--ai` list replaces the previous agent selection; use `--ai none` to disable all agents. Plain `upgrade` preserves the selection. Agent lists accept any combination and are deduplicated and sorted. Recreate the container after adding or removing mounts or changing its environment; regenerating files alone does not change an existing container. Upgrading configuration does not update working agent binaries.
 
 ## Validate a configuration
 
