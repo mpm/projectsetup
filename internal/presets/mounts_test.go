@@ -171,3 +171,18 @@ read_only = false
 		t.Fatal("legacy empty declaration accepted")
 	}
 }
+
+func TestBindMountComposeSource(t *testing.T) {
+	for _, tt := range []struct{ source, target, want string }{
+		{"/run/fixed.sock", "/run/host.sock", "/run/fixed.sock"},
+		{"${localEnv:HOME}/.local/share/acp-tools", "/opt/acp-tools", "${HOME:?export it on the host for projectsetup host integration /opt/acp-tools}/.local/share/acp-tools"},
+		{"${localEnv:XDG_RUNTIME_DIR}/${localEnv:WAYLAND_DISPLAY}", "/run/host-wayland/wayland-0", "${XDG_RUNTIME_DIR:?export it on the host for projectsetup host integration /run/host-wayland/wayland-0}/${WAYLAND_DISPLAY:?export it on the host for projectsetup host integration /run/host-wayland/wayland-0}"},
+		{"${localEnv:HOME}/config.json", "/run/{odd}/config.json", "${HOME:?export it on the host for a projectsetup host integration}/config.json"},
+	} {
+		t.Run(tt.source, func(t *testing.T) {
+			if got := (BindMount{Source: tt.source, Target: tt.target}).ComposeSource(); got != tt.want {
+				t.Fatalf("ComposeSource() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

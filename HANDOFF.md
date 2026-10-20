@@ -711,7 +711,7 @@ Definitions cannot change:
 - The Compose project name, the `app` service, its build, command, workspace volume, and `workspaceFolder`.
 - AI tool mounts, AI environment variables, and the canonical `install-ai-tools.sh`. Post-create runs AI setup before any definition script.
 - The GitHub CLI feature and the core `containerEnv.PATH` entries. A schema 2 preset's fixed `image.preinstalled.tools.gh` declaration suppresses the feature; declared tool paths supplement the generated PATH using the core's deterministic ordering.
-- Core host mounts and credential forwarding. Schema 2 presets/add-ons may contribute explicit typed `[[container.mounts]]` integrations (including matching variants), but cannot overlap core workspace/AI/system paths or expose host `.ssh`/`.gitconfig`. Sidecar volumes remain named volumes only. See [Explicit host integrations](README.md#explicit-host-integrations) for source kinds, localEnv references, offline checks, Linux local-daemon restrictions, and snapshot behavior.
+- Core host mounts and credential forwarding. Schema 2 presets/add-ons may contribute explicit typed `[[container.mounts]]` integrations (including matching variants), rendered as long-syntax `compose.yaml` app binds because the Dev Container CLI drops `readonly` from `devcontainer.json` mounts of Compose projects, but cannot overlap core workspace/AI/system paths or expose host `.ssh`/`.gitconfig`. Sidecar volumes remain named volumes only. See [Explicit host integrations](README.md#explicit-host-integrations) for source kinds, localEnv references, offline checks, Linux local-daemon restrictions, and snapshot behavior.
 
 ### Definition files
 

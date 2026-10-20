@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 2,
+  "projectName": "host-integrations",
+  "preset": {
+    "name": "node",
+    "version": "1.0.0",
+    "source": "builtin",
+    "sha256": "ebfea2380619d859da2078471a3793b6690f52b69e9fedf264722d3f3e448a47"
+  },
+  "addons": [
+    {
+      "name": "integrations",
+      "version": "1.0.0",
+      "source": "user",
+      "sha256": "58aacd3041fa922b5744f07fe29d15a3d6c24e2500f4806f984c70b51501dfaf"
+    }
+  ],
+  "options": {
+    "node": {
+      "package_manager": "npm",
+      "version": "26"
+    }
+  },
+  "aiTools": [],
+  "ports": [],
+  "systemPackages": [],
+  "generatedBy": "projectsetup"
+}

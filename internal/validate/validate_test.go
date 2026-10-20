@@ -485,3 +485,88 @@ func TestCheckAcceptsComposeFromEarlierReleases(t *testing.T) {
 		assertDiagnostic(t, validate.Check(root, validate.Options{}), validate.Error, tt.want)
 	}
 }
+
+const integrationAddon = `schema = 2
+kind = "addon"
+name = "integrations"
+version = "1.0.0"
+description = "Host integrations"
+[[container.mounts]]
+source = "${localEnv:PROJECTSETUP_TEST_TOOLS}"
+target = "/opt/tools"
+source_kind = "directory"
+read_only = true
+[[container.mounts]]
+source = "${localEnv:PROJECTSETUP_TEST_TOOLS}/settings.json"
+target = "/run/settings.json"
+source_kind = "file"
+read_only = false
+`
+
+func TestHostIntegrationsMustBeComposeBinds(t *testing.T) {
+	tools := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tools, "settings.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PROJECTSETUP_TEST_TOOLS", tools)
+	t.Setenv("DOCKER_HOST", "")
+	t.Setenv("DOCKER_CONTEXT", "")
+	t.Setenv("DOCKER_CONFIG", t.TempDir())
+	addon, err := presets.Parse([]byte(integrationAddon), "integrations.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addon.Source = "user"
+	node, _ := presets.Builtin().Lookup("node")
+	registry, err := presets.NewRegistry(node, addon)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: "node", Addons: []string{"integrations"}, Registry: registry, AITools: []config.AITool{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := generate.Write(root, cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	composePath := filepath.Join(root, ".devcontainer", "compose.yaml")
+	devcontainerPath := filepath.Join(root, ".devcontainer", "devcontainer.json")
+	compose, _ := os.ReadFile(composePath)
+	devcontainer, _ := os.ReadFile(devcontainerPath)
+	toolsSource := "${PROJECTSETUP_TEST_TOOLS:?export it on the host for projectsetup host integration /opt/tools}"
+	readOnlyBind := "      - type: bind\n        source: " + toolsSource + "\n        target: /opt/tools\n        read_only: true\n"
+	if !strings.Contains(string(compose), readOnlyBind) || strings.Contains(string(devcontainer), "mounts") {
+		t.Fatalf("compose.yaml:\n%s\ndevcontainer.json:\n%s", compose, devcontainer)
+	}
+	if diagnostics := validate.Check(root, validate.Options{CheckHostMounts: true}); validate.ErrorCount(diagnostics) != 0 {
+		t.Fatal(diagnostics)
+	}
+	legacyMount := `"mounts": ["source=${localEnv:PROJECTSETUP_TEST_TOOLS},target=/opt/tools,type=bind,readonly"],
+  "postCreateCommand"`
+	for _, tt := range []struct {
+		name, file, old, replacement, want string
+	}{
+		{"read-only dropped", composePath, readOnlyBind, strings.TrimSuffix(readOnlyBind, "        read_only: true\n"), `host integration "/opt/tools" must have read_only true`},
+		{"read-write made read-only", composePath, "target: /run/settings.json\n", "target: /run/settings.json\n        read_only: true\n", `host integration "/run/settings.json" must have read_only false`},
+		{"optional variable", composePath, toolsSource, "${PROJECTSETUP_TEST_TOOLS}", `host integration "/opt/tools" source is "${PROJECTSETUP_TEST_TOOLS}"`},
+		{"missing", composePath, readOnlyBind, "", `must bind-mount host integration "${localEnv:PROJECTSETUP_TEST_TOOLS}" to "/opt/tools" (read_only true)`},
+		{"short syntax", composePath, readOnlyBind, "      - " + tools + ":/opt/tools:ro\n", "unexpected volume"},
+		{"leftover devcontainer mount", devcontainerPath, `"postCreateCommand"`, legacyMount, "must be declared in compose.yaml, not devcontainer.json mounts"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			original, _ := os.ReadFile(tt.file)
+			defer os.WriteFile(tt.file, original, 0o644)
+			if !strings.Contains(string(original), tt.old) {
+				t.Fatalf("%s does not contain %q", tt.file, tt.old)
+			}
+			if err := os.WriteFile(tt.file, []byte(strings.Replace(string(original), tt.old, tt.replacement, 1)), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			assertDiagnostic(t, validate.Check(root, validate.Options{CheckHostMounts: true}), validate.Error, tt.want)
+		})
+	}
+	t.Setenv("PROJECTSETUP_TEST_TOOLS", "")
+	assertDiagnostic(t, validate.Check(root, validate.Options{CheckHostMounts: true}), validate.Error, "requires exported host variable PROJECTSETUP_TEST_TOOLS")
+}

@@ -276,31 +276,21 @@ func TestComposeFailurePreventsBuildAndMetadataProbes(t *testing.T) {
 	}
 }
 
-func TestMergedHostMountInterpolation(t *testing.T) {
-	t.Setenv("XDG_RUNTIME_DIR", "/run/user/1000")
-	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
+// Typed host integrations belong in compose.yaml; the same bind appearing in
+// effective Dev Container metadata would lose its read-only flag under Compose.
+func TestMergedMetadataRejectsHostIntegrationMounts(t *testing.T) {
+	t.Setenv("HOME", "/test-host")
 	want, data := validMetadataDocument()
-	readonly := true
-	mount := presets.BindMount{Source: "${localEnv:XDG_RUNTIME_DIR}/${localEnv:WAYLAND_DISPLAY}", Target: "/run/host-wayland/wayland-0", SourceKind: "socket", ReadOnly: &readonly}
-	want.Mounts = []string{mount.DevcontainerMount()}
+	want.Mounts = []string{"source=${localEnv:HOME}/.opencode,target=/home/vscode/.opencode,type=bind"}
 	var result map[string]map[string]any
 	if err := json.Unmarshal(data, &result); err != nil {
 		t.Fatal(err)
 	}
-	result["mergedConfiguration"]["mounts"] = []string{"source=/run/user/1000/wayland-0,target=/run/host-wayland/wayland-0,type=bind,readonly"}
+	result["mergedConfiguration"]["mounts"] = []string{"source=/test-host/.opencode,target=/home/vscode/.opencode,type=bind", "source=/run/user/1000/wayland-0,target=/run/host-wayland/wayland-0,type=bind,readonly"}
 	data, _ = json.Marshal(result)
-	validateMergedMetadata(data, want, func(format string, args ...any) { t.Errorf(format, args...) })
-	result["mergedConfiguration"]["mounts"] = []string{"source=/run/user/1000/wayland-0,target=/run/host-wayland/wayland-0,type=bind,readonly", "source=/host,target=/unexpected,type=bind"}
-	data, _ = json.Marshal(result)
-	failed := false
-	validateMergedMetadata(data, want, func(string, ...any) { failed = true })
-	if !failed {
-		t.Fatal("unexpected inherited mount accepted")
-	}
-	t.Setenv("WAYLAND_DISPLAY", "")
-	failed = false
-	validateMergedMetadata(data, want, func(string, ...any) { failed = true })
-	if !failed {
-		t.Fatal("missing host reference accepted")
+	var failures []string
+	validateMergedMetadata(data, want, func(format string, args ...any) { failures = append(failures, fmt.Sprintf(format, args...)) })
+	if len(failures) != 1 || !strings.Contains(failures[0], "compose.yaml") {
+		t.Fatalf("failures = %v", failures)
 	}
 }

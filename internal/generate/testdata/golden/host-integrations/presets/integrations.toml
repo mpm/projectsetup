@@ -1,0 +1,20 @@
+schema = 2
+kind = "addon"
+name = "integrations"
+version = "1.0.0"
+description = "Read-only and read-write host integrations"
+[[container.mounts]]
+source = "${localEnv:HOME}/.local/share/acp-tools"
+target = "/opt/acp-tools"
+source_kind = "directory"
+read_only = true
+[[container.mounts]]
+source = "${localEnv:PROJECTSETUP_TEST_CONFIG}"
+target = "/run/host-config/settings.json"
+source_kind = "file"
+read_only = false
+[[container.mounts]]
+source = "${localEnv:XDG_RUNTIME_DIR}/projectsetup-test.sock"
+target = "/run/host-agent.sock"
+source_kind = "socket"
+read_only = true

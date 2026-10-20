@@ -9,3 +9,7 @@ services:
     user: vscode
     volumes:
       - ..:/workspaces/wayland-app
+      - type: bind
+        source: ${XDG_RUNTIME_DIR:?export it on the host for projectsetup host integration /run/host-wayland/wayland-0}/${WAYLAND_DISPLAY:?export it on the host for projectsetup host integration /run/host-wayland/wayland-0}
+        target: /run/host-wayland/wayland-0
+        read_only: true

@@ -298,20 +298,11 @@ func validateDevcontainer(root, devDir string, manifest config.Manifest, resolve
 			add(Error, path, "feature %q reinstalls preinstalled tool %q; remove its installer when consuming the image", id, tool)
 		}
 	}
-	for _, mount := range resolved.Mounts {
-		if !containsString(document.Mounts, mount.DevcontainerMount()) {
-			add(Error, path, "declared host integration mount %q is missing or changed", mount.Target)
-		}
-	}
-	if len(resolved.Mounts) > 0 {
-		expected := append([]string(nil), expectedAIMounts(manifest.AITools)...)
-		for _, mount := range resolved.Mounts {
-			expected = append(expected, mount.DevcontainerMount())
-		}
-		for _, mount := range document.Mounts {
-			if !containsString(expected, mount) {
-				add(Error, path, "unexpected mount %q; declare host integrations in the selected definition", mount)
-			}
+	for _, mount := range document.Mounts {
+		if integrationTarget(resolved.Mounts, mountField(mount, "target")) {
+			add(Error, path, "host integration mount %q must be declared in compose.yaml, not devcontainer.json mounts, because the Dev Container CLI drops read-only flags for Compose projects; regenerate with projectsetup upgrade", mount)
+		} else if len(resolved.Mounts) > 0 && !containsString(expectedAIMounts(manifest.AITools), mount) {
+			add(Error, path, "unexpected mount %q; declare host integrations in the selected definition", mount)
 		}
 	}
 	if checkHost {
@@ -359,14 +350,7 @@ func validateDevcontainer(root, devDir string, manifest config.Manifest, resolve
 				}
 			}
 			for _, mount := range document.Mounts {
-				declared := false
-				for _, integration := range resolved.Mounts {
-					if mount == integration.DevcontainerMount() {
-						declared = true
-						break
-					}
-				}
-				if declared {
+				if integrationTarget(resolved.Mounts, mountField(mount, "target")) {
 					continue
 				}
 				source := mountField(mount, "source")
@@ -561,6 +545,7 @@ func validateCompose(root, devDir string, cfg config.Config, resolved presets.Re
 		if containsTool(cfg.AITools, config.AIToolCodex) && !containsBind(app.Volumes, config.CodexStateSource, cfg.Container.Home+"/.codex") {
 			add(Error, file, "service %s must bind-mount %q to %s/.codex when Codex is selected", appName, config.CodexStateSource, cfg.Container.Home)
 		}
+		validateComposeIntegrations(file, appName, app.Volumes, cfg, resolved.Mounts, add)
 	}
 	for _, name := range sortedKeys(document.Services) {
 		if _, ok := resolved.Services[name]; !ok && name != appName {
@@ -597,6 +582,55 @@ func validateCompose(root, devDir string, cfg config.Config, resolved presets.Re
 			add(Error, file, "service %s must depend on %s with condition %s", appName, name, want.AppDependsOn)
 		}
 	}
+}
+
+// validateComposeIntegrations requires each typed bind as a long-syntax app
+// volume with its Compose source and access mode, and rejects other app
+// volumes when integrations are selected.
+func validateComposeIntegrations(file, appName string, volumes []any, cfg config.Config, mounts []presets.BindMount, add func(Severity, string, string, ...any)) {
+	for _, mount := range mounts {
+		readOnly := mount.ReadOnly != nil && *mount.ReadOnly
+		volume, ok := bindVolume(volumes, mount.Target)
+		if !ok {
+			add(Error, file, "service %s must bind-mount host integration %q to %q (read_only %t); regenerate with projectsetup upgrade", appName, mount.Source, mount.Target, readOnly)
+			continue
+		}
+		if volume["source"] != mount.ComposeSource() {
+			add(Error, file, "service %s host integration %q source is %q; expected %q", appName, mount.Target, volume["source"], mount.ComposeSource())
+		}
+		actual, _ := volume["read_only"].(bool)
+		if actual != readOnly {
+			add(Error, file, "service %s host integration %q must have read_only %t", appName, mount.Target, readOnly)
+		}
+	}
+	if len(mounts) == 0 {
+		return
+	}
+	for _, volume := range volumes {
+		if volume == "..:"+cfg.Workspace.ContainerPath {
+			continue
+		}
+		mount, _ := volume.(map[string]any)
+		target, _ := mount["target"].(string)
+		if mount["type"] == "bind" && (integrationTarget(mounts, target) || (containsTool(cfg.AITools, config.AIToolCodex) && mount["source"] == config.CodexStateSource && target == cfg.Container.Home+"/.codex")) {
+			continue
+		}
+		add(Error, file, "service %s has unexpected volume %v; declare host integrations in the selected definition", appName, volume)
+	}
+}
+
+func bindVolume(volumes []any, target string) (map[string]any, bool) {
+	for _, volume := range volumes {
+		mount, ok := volume.(map[string]any)
+		if ok && mount["type"] == "bind" && mount["target"] == target {
+			return mount, true
+		}
+	}
+	return nil, false
+}
+
+func integrationTarget(mounts []presets.BindMount, target string) bool {
+	return slices.ContainsFunc(mounts, func(mount presets.BindMount) bool { return mount.Target == target })
 }
 
 func containsVolume(volumes []any, want string) bool {

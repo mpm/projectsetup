@@ -119,7 +119,7 @@ var goldenCases = []goldenCase{
 }
 
 func TestGoldenTrees(t *testing.T) {
-	cases := append(append([]goldenCase(nil), goldenCases...), goldenCase{name: "shared-node", input: sharedImageInput(t, true)}, goldenCase{name: "fixed-image", input: fixedImageInput(t, 1001, 1002), renderOnly: true}, goldenCase{name: "wayland", input: waylandInput(t), renderOnly: true})
+	cases := append(append([]goldenCase(nil), goldenCases...), goldenCase{name: "shared-node", input: sharedImageInput(t, true)}, goldenCase{name: "fixed-image", input: fixedImageInput(t, 1001, 1002), renderOnly: true}, goldenCase{name: "wayland", input: waylandInput(t), renderOnly: true}, goldenCase{name: "host-integrations", input: hostIntegrationsInput(t), renderOnly: true})
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			root := t.TempDir()
@@ -172,11 +172,12 @@ func TestGoldenComposeConfigurations(t *testing.T) {
 		t.Skipf("docker compose is not available: %v: %s", err, output)
 	}
 
-	cases := append(append([]goldenCase(nil), goldenCases...), goldenCase{name: "shared-node"}, goldenCase{name: "fixed-image"}, goldenCase{name: "wayland"})
+	cases := append(append([]goldenCase(nil), goldenCases...), goldenCase{name: "shared-node"}, goldenCase{name: "fixed-image"}, goldenCase{name: "wayland"}, goldenCase{name: "host-integrations"})
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			compose := filepath.Join("testdata", "golden", tt.name, "compose.yaml")
 			command := exec.Command(docker, "compose", "-f", compose, "config")
+			command.Env = append(os.Environ(), hostIntegrationEnv...)
 			if output, err := command.CombinedOutput(); err != nil {
 				t.Fatalf("docker compose config: %v\n%s", err, output)
 			}
@@ -199,7 +200,7 @@ func TestGoldenDevcontainerConfigurations(t *testing.T) {
 		t.Skipf("Docker daemon is unavailable: %v: %s", err, output)
 	}
 
-	for _, name := range []string{"postgres-exact-17", "postgres-exact-18", "node-opencode", "ruby-opencode", "rails-claude-postgres", "rails-sqlite", "python-uv-claude-postgres", "python-codex", "node-all-agents", "shared-node", "fixed-image", "wayland"} {
+	for _, name := range []string{"postgres-exact-17", "postgres-exact-18", "node-opencode", "ruby-opencode", "rails-claude-postgres", "rails-sqlite", "python-uv-claude-postgres", "python-codex", "node-all-agents", "shared-node", "fixed-image", "wayland", "host-integrations"} {
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
@@ -209,6 +210,7 @@ func TestGoldenDevcontainerConfigurations(t *testing.T) {
 				t.Fatalf("prepare fixture workspace: %v", err)
 			}
 			command := exec.CommandContext(ctx, devcontainer, "read-configuration", "--workspace-folder", root, "--log-level", "trace")
+			command.Env = append(os.Environ(), hostIntegrationEnv...)
 			if output, err := command.CombinedOutput(); err != nil {
 				t.Fatalf("devcontainer read-configuration: %v\n%s", err, output)
 			}

@@ -15,7 +15,7 @@ func validateHostIntegrations(mounts []presets.BindMount, ownership *presets.Own
 	if len(mounts) == 0 {
 		return
 	}
-	const file = ".devcontainer/devcontainer.json"
+	const file = ".devcontainer/compose.yaml"
 	if problem := hostIntegrationPlatformProblem(runtime.GOOS, os.Getenv("DOCKER_HOST"), os.Getenv("DOCKER_CONTEXT")); problem != "" {
 		add(Error, file, "%s", problem)
 		return

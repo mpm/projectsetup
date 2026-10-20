@@ -15,9 +15,6 @@
     "PATH": "/home/vscode/.local/bin:/home/vscode/.opencode/bin:/usr/local/share/nvm/current/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
     "WAYLAND_DISPLAY": "/run/host-wayland/wayland-0"
   },
-  "mounts": [
-    "source=${localEnv:XDG_RUNTIME_DIR}/${localEnv:WAYLAND_DISPLAY},target=/run/host-wayland/wayland-0,type=bind,readonly"
-  ],
   "postCreateCommand": ".devcontainer/scripts/post-create.sh",
   "shutdownAction": "stopCompose"
 }

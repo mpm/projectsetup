@@ -1,0 +1,19 @@
+{
+  "name": "host-integrations",
+  "dockerComposeFile": "compose.yaml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/host-integrations",
+  "containerUser": "vscode",
+  "remoteUser": "vscode",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "26"
+    }
+  },
+  "containerEnv": {
+    "PATH": "/home/vscode/.local/bin:/home/vscode/.opencode/bin:/usr/local/share/nvm/current/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  },
+  "postCreateCommand": ".devcontainer/scripts/post-create.sh",
+  "shutdownAction": "stopCompose"
+}

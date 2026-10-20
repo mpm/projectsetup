@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
-
-	"github.com/mpm/projectsetup/internal/presets"
 )
 
 type inspectedImage struct {
@@ -207,28 +205,18 @@ func validateMergedMetadata(output []byte, want devcontainerDocument, fail func(
 	if len(effective.Features) != len(want.Features) || (len(want.Features) > 0 && !reflect.DeepEqual(effective.Features, want.Features)) {
 		fail("effective feature requests differ from the generated installation plan; baked feature IDs are metadata, not installer requests")
 	}
+	// Generated devcontainer.json mounts are the AI mounts, which reference only
+	// HOME; typed host integrations live in compose.yaml, outside this metadata.
 	wantMounts := make([]string, len(want.Mounts))
 	home, err := os.UserHomeDir()
 	if err != nil && len(want.Mounts) > 0 {
 		fail("resolve expected AI mounts for effective metadata: %v", err)
 	}
 	for index, mount := range want.Mounts {
-		mount = strings.ReplaceAll(mount, "${localEnv:HOME}", home)
-		source := mountField(mount, "source")
-		if !strings.Contains(source, "${localEnv:") {
-			wantMounts[index] = mount
-			continue
-		}
-		resolvedSource, resolveErr := presets.ResolveHostSource(source, os.LookupEnv)
-		if resolveErr != nil {
-			fail("resolve expected bind mount metadata: %v", resolveErr)
-		} else {
-			mount = strings.Replace(mount, "source="+source, "source="+resolvedSource, 1)
-		}
-		wantMounts[index] = mount
+		wantMounts[index] = strings.ReplaceAll(mount, "${localEnv:HOME}", home)
 	}
 	if len(effective.Mounts) != len(wantMounts) || (len(wantMounts) > 0 && !reflect.DeepEqual(effective.Mounts, wantMounts)) {
-		fail("effective mounts differ from the generated mounts; remove inherited project or credential mounts")
+		fail("effective mounts differ from the generated mounts; remove inherited project or credential mounts, and keep host integrations in compose.yaml")
 	}
 	var remoteEnv map[string]*string
 	if raw := result.Merged["remoteEnv"]; raw != nil {

@@ -26,6 +26,17 @@ func renderCompose(cfg config.Config, resolved presets.Resolved) ([]byte, error)
 			))
 		}
 	}
+	for _, mount := range resolved.Mounts {
+		volume := mapping(
+			str("type"), str("bind"),
+			str("source"), str(mount.ComposeSource()),
+			str("target"), str(mount.Target),
+		)
+		if mount.ReadOnly != nil && *mount.ReadOnly {
+			volume.Content = append(volume.Content, str("read_only"), &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "true"})
+		}
+		appVolumes.Content = append(appVolumes.Content, volume)
+	}
 	app := mapping(
 		str("build"), mapping(str("context"), str(".."), str("dockerfile"), str(".devcontainer/Dockerfile")),
 		str("command"), str("sleep infinity"),

@@ -77,13 +77,20 @@ func ResolveHostSource(source string, lookup func(string) (string, bool)) (strin
 	return resolved, nil
 }
 
-// DevcontainerMount is shared by generation and validation.
-func (m BindMount) DevcontainerMount() string {
-	value := "source=" + m.Source + ",target=" + m.Target + ",type=bind"
-	if m.ReadOnly != nil && *m.ReadOnly {
-		value += ",readonly"
+// ComposeSource is the Compose long-syntax bind source shared by generation
+// and validation. Typed binds are rendered into compose.yaml because the Dev
+// Container CLI rewrites devcontainer.json mounts for Compose projects into
+// short syntax and drops their read-only flag. Each localEnv reference becomes
+// a required Compose variable, so missing or empty variables still fail.
+func (m BindMount) ComposeSource() string {
+	// Compose names the variable itself; a brace would end the message early.
+	message := "export it on the host for projectsetup host integration " + m.Target
+	if strings.ContainsAny(m.Target, "{}") {
+		message = "export it on the host for a projectsetup host integration"
 	}
-	return value
+	return hostReference.ReplaceAllStringFunc(m.Source, func(ref string) string {
+		return "${" + hostReference.FindStringSubmatch(ref)[1] + ":?" + message + "}"
+	})
 }
 
 func pathsOverlap(a, b string) bool {

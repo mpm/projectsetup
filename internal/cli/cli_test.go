@@ -1169,3 +1169,71 @@ func TestRunInitPostgresVersion(t *testing.T) {
 		})
 	}
 }
+
+const readOnlyToolsAddon = `schema = 2
+kind = "addon"
+name = "tools"
+version = "1.0.0"
+description = "Shared read-only tools"
+[[container.mounts]]
+source = "${localEnv:PROJECTSETUP_TEST_TOOLS}"
+target = "/opt/tools"
+source_kind = "directory"
+read_only = true
+`
+
+// Releases before v0.11.0 rendered typed binds into devcontainer.json, where
+// the Dev Container CLI dropped read-only for Compose; upgrade moves them.
+func TestRunUpgradeMovesHostIntegrationsToCompose(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PROJECTSETUP_TEST_TOOLS", t.TempDir())
+	t.Setenv("DOCKER_HOST", "")
+	t.Setenv("DOCKER_CONTEXT", "")
+	t.Setenv("DOCKER_CONFIG", t.TempDir())
+	addon, err := presets.Parse([]byte(readOnlyToolsAddon), "tools.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addon.Source = presets.SourceUser
+	node, _ := presets.Builtin().Lookup("node")
+	registry, err := presets.NewRegistry(node, addon)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "tools-app", Preset: "node", Addons: []string{"tools"}, Registry: registry, AITools: []config.AITool{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := generate.Write(root, cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	devDir := filepath.Join(root, ".devcontainer")
+	compose, _ := os.ReadFile(filepath.Join(devDir, "compose.yaml"))
+	devcontainer, _ := os.ReadFile(filepath.Join(devDir, "devcontainer.json"))
+	bind := "      - type: bind\n        source: ${PROJECTSETUP_TEST_TOOLS:?export it on the host for projectsetup host integration /opt/tools}\n        target: /opt/tools\n        read_only: true\n"
+	legacyCompose := strings.Replace(string(compose), bind, "", 1)
+	legacyDevcontainer := strings.Replace(string(devcontainer), `  "postCreateCommand"`, `  "mounts": [
+    "source=${localEnv:PROJECTSETUP_TEST_TOOLS},target=/opt/tools,type=bind,readonly"
+  ],
+  "postCreateCommand"`, 1)
+	if legacyCompose == string(compose) || legacyDevcontainer == string(devcontainer) {
+		t.Fatalf("unexpected generated files:\n%s\n%s", compose, devcontainer)
+	}
+	for name, data := range map[string]string{"compose.yaml": legacyCompose, "devcontainer.json": legacyDevcontainer} {
+		if err := os.WriteFile(filepath.Join(devDir, name), []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if diagnostics := validate.Check(root, validate.Options{}); validate.ErrorCount(diagnostics) != 2 {
+		t.Fatalf("legacy layout diagnostics = %#v", diagnostics)
+	}
+	if err := runUpgrade(root, nil, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	upgradedCompose, _ := os.ReadFile(filepath.Join(devDir, "compose.yaml"))
+	upgradedDevcontainer, _ := os.ReadFile(filepath.Join(devDir, "devcontainer.json"))
+	if !bytes.Equal(upgradedCompose, compose) || !bytes.Equal(upgradedDevcontainer, devcontainer) {
+		t.Fatalf("upgrade did not move the integration:\n%s\n%s", upgradedCompose, upgradedDevcontainer)
+	}
+}
