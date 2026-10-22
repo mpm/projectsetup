@@ -1,6 +1,7 @@
 {
   "schemaVersion": 2,
   "projectName": "rails-app",
+  "worktreeRoot": "${localEnv:HOME}/.local/share/projectsetup/worktrees",
   "preset": {
     "name": "rails",
     "version": "1.0.0",

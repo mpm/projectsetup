@@ -25,6 +25,7 @@ func validateHostOwnership(root string, ownership *presets.Ownership, tools []co
 		add(Error, ".devcontainer/devcontainer.json", "resolve host ownership sources: %v", err)
 		return
 	}
+	paths = append(paths, config.WorktreeRootPath(home))
 	for _, directory := range config.AIHostDirectories(tools) {
 		source, err := config.AIHostDirectory(directory, home, os.Getenv)
 		if err != nil {

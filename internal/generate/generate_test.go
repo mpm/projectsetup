@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/mpm/projectsetup/internal/config"
+	yaml "go.yaml.in/yaml/v3"
 )
 
 func TestWriteGeneratesSupportedPresets(t *testing.T) {
@@ -96,6 +97,15 @@ func TestWriteGeneratesSupportedPresets(t *testing.T) {
 				if !strings.Contains(string(compose), "condition: service_healthy") || !strings.Contains(string(compose), "image: postgres:18-trixie") || !strings.Contains(string(compose), "postgres-data:/var/lib/postgresql\n") {
 					t.Fatalf("compose.yaml lacks PostgreSQL health dependency:\n%s", compose)
 				}
+				var document struct {
+					Services map[string]any `yaml:"services"`
+				}
+				if err := yaml.Unmarshal(compose, &document); err != nil {
+					t.Fatal(err)
+				}
+				if len(document.Services) != 2 || document.Services["app"] == nil || document.Services["postgres"] == nil {
+					t.Fatalf("PostgreSQL output services = %v; want exactly app plus one postgres sidecar", document.Services)
+				}
 			} else if strings.Contains(string(compose), "postgres:") || strings.Contains(string(compose), "postgres-data") {
 				t.Fatalf("compose.yaml contains an unselected PostgreSQL service:\n%s", compose)
 			}
@@ -112,7 +122,35 @@ func TestWriteGeneratesSupportedPresets(t *testing.T) {
 					t.Errorf("host mount directory %s was not created", relative)
 				}
 			}
+			worktreeRoot := config.WorktreeRootPath(home)
+			if info, err := os.Stat(worktreeRoot); err != nil || !info.IsDir() {
+				t.Errorf("worktree root was not created: %v", err)
+			} else if info.Mode().Perm() != 0o700 {
+				t.Errorf("new worktree root mode = %o, want 700", info.Mode().Perm())
+			}
 		})
+	}
+}
+
+func TestWriteRejectsInvalidWorktreeRootWithoutReplacingOutput(t *testing.T) {
+	root, home := t.TempDir(), t.TempDir()
+	t.Setenv("HOME", home)
+	cfg, err := config.Normalize(config.Input{Root: root, Preset: "node", AITools: []config.AITool{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	worktreeRoot := config.WorktreeRootPath(home)
+	if err := os.MkdirAll(filepath.Dir(worktreeRoot), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(worktreeRoot, []byte("not a directory\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Write(root, cfg, false); err == nil || !strings.Contains(err.Error(), "not a directory") {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, directoryName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("failed generation installed output: %v", err)
 	}
 }
 

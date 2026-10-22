@@ -1,6 +1,7 @@
 {
   "schemaVersion": 2,
   "projectName": "ruby-go",
+  "worktreeRoot": "${localEnv:HOME}/.local/share/projectsetup/worktrees",
   "preset": {
     "name": "ruby",
     "version": "1.0.0",

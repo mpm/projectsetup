@@ -15,6 +15,7 @@
     "TEAM_MODE": "development"
   },
   "mounts": [
+    "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
     "source=${localEnv:HOME}/.config/opencode,target=/home/vscode/.config/opencode,type=bind",
     "source=${localEnv:HOME}/.local/share/opencode,target=/home/vscode/.local/share/opencode,type=bind",
     "source=${localEnv:HOME}/.opencode,target=/home/vscode/.opencode,type=bind",

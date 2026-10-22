@@ -23,6 +23,7 @@ const PresetsDir = "presets"
 type Manifest struct {
 	SchemaVersion  int                          `json:"schemaVersion"`
 	ProjectName    string                       `json:"projectName"`
+	WorktreeRoot   string                       `json:"worktreeRoot,omitempty"`
 	Preset         presets.Ref                  `json:"preset"`
 	Addons         []presets.Ref                `json:"addons"`
 	Options        map[string]map[string]string `json:"options"`
@@ -53,6 +54,7 @@ func NewManifest(config Config) Manifest {
 		PostgresImage:  config.PostgresImage,
 		SchemaVersion:  SchemaVersion,
 		ProjectName:    config.ProjectName,
+		WorktreeRoot:   config.WorktreeRoot,
 		Addons:         []presets.Ref{},
 		Options:        map[string]map[string]string{},
 		AITools:        append(make([]AITool, 0, len(config.AITools)), config.AITools...),
@@ -79,6 +81,7 @@ func NewManifest(config Config) Manifest {
 func (m Manifest) Input(root string, registry *presets.Registry) Input {
 	input := Input{
 		PostgresImage:  m.PostgresImage,
+		WorktreeRoot:   m.WorktreeRoot,
 		Root:           root,
 		Registry:       registry,
 		ProjectName:    m.ProjectName,
@@ -196,6 +199,14 @@ func SameSelection(a, b Manifest) bool {
 		for i := range right {
 			right[i] = presets.Ref{Name: right[i].Name}
 		}
+	}
+	// Schema 1 and schema 2 manifests written before v0.12.0 did not record the
+	// additive core worktree root. Upgrade treats absence as the canonical value.
+	if a.WorktreeRoot == "" {
+		a.WorktreeRoot = WorktreeRoot
+	}
+	if b.WorktreeRoot == "" {
+		b.WorktreeRoot = WorktreeRoot
 	}
 	a.SchemaVersion, b.SchemaVersion = 0, 0
 	a.Preset, b.Preset = presets.Ref{}, presets.Ref{}

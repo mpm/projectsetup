@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mpm/projectsetup/internal/config"
 	"github.com/mpm/projectsetup/internal/presets"
 )
 
@@ -244,6 +245,18 @@ func TestMergedAIMountInterpolation(t *testing.T) {
 	result["mergedConfiguration"]["mounts"] = []string{"source=/test-host/.opencode,target=/home/vscode/.opencode,type=bind"}
 	data, _ = json.Marshal(result)
 	validateMergedMetadata(data, want, func(format string, args ...any) { t.Errorf(format, args...) })
+}
+
+func TestMergedWorkspaceHostMountInterpolation(t *testing.T) {
+	want, data := validMetadataDocument()
+	want.Mounts = []string{config.WorkspaceHostMount}
+	var result map[string]map[string]any
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatal(err)
+	}
+	result["mergedConfiguration"]["mounts"] = []string{"source=/project,target=/project,type=bind"}
+	data, _ = json.Marshal(result)
+	validateMergedMetadataAt("/project", data, want, func(format string, args ...any) { t.Errorf(format, args...) })
 }
 
 func TestBaseDockerVolumesRejectedBeforeProbe(t *testing.T) {

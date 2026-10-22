@@ -22,6 +22,7 @@ var validSystemPackage = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9+.-]*$`)
 
 type Input struct {
 	PostgresImage PostgresImageRef
+	WorktreeRoot  string
 	Root          string
 	// Registry provides the definitions; nil means the built-in definitions.
 	Registry    *presets.Registry
@@ -37,6 +38,13 @@ type Input struct {
 }
 
 func Normalize(input Input) (Config, error) {
+	worktreeRoot := input.WorktreeRoot
+	if worktreeRoot == "" {
+		worktreeRoot = WorktreeRoot
+	}
+	if worktreeRoot != WorktreeRoot {
+		return Config{}, fmt.Errorf("worktreeRoot must be the canonical projectsetup path %q", WorktreeRoot)
+	}
 	registry := input.Registry
 	if registry == nil {
 		registry = presets.Builtin()
@@ -93,6 +101,7 @@ func Normalize(input Input) (Config, error) {
 	}
 	cfg := Config{
 		PostgresImage:  input.PostgresImage,
+		WorktreeRoot:   worktreeRoot,
 		ProjectName:    name,
 		Preset:         definitions[0].Name,
 		Addons:         addons,

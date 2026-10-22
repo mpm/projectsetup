@@ -194,11 +194,12 @@ func TestHostIntegrationsRenderAsComposeBinds(t *testing.T) {
 			}
 		}
 	}
-	if mounts, ok := devcontainer["mounts"]; ok {
-		t.Fatalf("devcontainer.json mounts = %v; integrations belong in compose.yaml", mounts)
+	if mounts := devcontainer["mounts"]; !reflect.DeepEqual(mounts, []any{config.WorkspaceHostMount}) {
+		t.Fatalf("devcontainer.json mounts = %v; want only the core host-path workspace mount", mounts)
 	}
 	want := []any{
 		"..:/workspaces/host-integrations",
+		map[string]any{"type": "bind", "source": config.ComposeWorktreeRoot, "target": config.ComposeWorktreeRoot, "bind": map[string]any{"create_host_path": false}},
 		map[string]any{"type": "bind", "source": "${HOME:?export it on the host for projectsetup host integration /opt/acp-tools}/.local/share/acp-tools", "target": "/opt/acp-tools", "read_only": true},
 		map[string]any{"type": "bind", "source": "${XDG_RUNTIME_DIR:?export it on the host for projectsetup host integration /run/host-agent.sock}/projectsetup-test.sock", "target": "/run/host-agent.sock", "read_only": true},
 		map[string]any{"type": "bind", "source": "${PROJECTSETUP_TEST_CONFIG:?export it on the host for projectsetup host integration /run/host-config/settings.json}", "target": "/run/host-config/settings.json"},
@@ -234,7 +235,7 @@ func TestHostIntegrationComposeResolution(t *testing.T) {
 		{"bind", "/run/user/1000/projectsetup-test.sock", "/run/host-agent.sock", true},
 		{"bind", "/srv/settings.json", "/run/host-config/settings.json", false},
 	}
-	if got := document.Services["app"].Volumes[1:]; !reflect.DeepEqual(got, want) {
+	if got := document.Services["app"].Volumes[2:]; !reflect.DeepEqual(got, want) {
 		t.Fatalf("resolved binds = %#v\nwant %#v", got, want)
 	}
 	for _, empty := range []string{"PROJECTSETUP_TEST_CONFIG=", "XDG_RUNTIME_DIR="} {
@@ -269,6 +270,9 @@ func TestSmokeHostIntegrationAccessModes(t *testing.T) {
 		t.Fatal(err)
 	}
 	root, home, runtimeDir := t.TempDir(), t.TempDir(), t.TempDir()
+	if err := os.MkdirAll(config.WorktreeRootPath(home), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	settings := filepath.Join(home, "settings.json")
 	writeTestFile(t, filepath.Join(home, ".local/share/acp-tools/marker"), "tools\n", 0o644)
 	writeTestFile(t, settings, "{}\n", 0o644)

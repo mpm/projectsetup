@@ -10,5 +10,10 @@ services:
     volumes:
       - ..:/workspaces/node-all-agents
       - type: bind
+        source: ${HOME:?export HOME for the projectsetup worktree root}/.local/share/projectsetup/worktrees
+        target: ${HOME:?export HOME for the projectsetup worktree root}/.local/share/projectsetup/worktrees
+        bind:
+          create_host_path: false
+      - type: bind
         source: ${CODEX_HOME:-${HOME}/.codex}
         target: /home/vscode/.codex

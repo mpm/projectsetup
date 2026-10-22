@@ -103,6 +103,7 @@ func TestPostgresImageNormalizationAndManifest(t *testing.T) {
 				Preset         json.RawMessage `json:"preset"`
 				Addons         json.RawMessage `json:"addons"`
 				Options        json.RawMessage `json:"options"`
+				WorktreeRoot   json.RawMessage `json:"worktreeRoot"`
 				AITools        json.RawMessage `json:"aiTools"`
 				Ports          json.RawMessage `json:"ports"`
 				SystemPackages json.RawMessage `json:"systemPackages"`

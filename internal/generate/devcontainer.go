@@ -57,7 +57,7 @@ func renderDevcontainer(cfg config.Config, resolved presets.Resolved) ([]byte, e
 }
 
 func aiMounts(cfg config.Config) []string {
-	var mounts []string
+	mounts := []string{config.WorkspaceHostMount}
 	for _, tool := range cfg.AITools {
 		switch tool {
 		case config.AIToolOpenCode:

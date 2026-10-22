@@ -1,38 +1,32 @@
-# projectsetup v0.11.0
+# projectsetup v0.12.0
 
-This release makes read-only host integrations actually read-only, and lets `upgrade` add and remove add-ons.
-
-## Fixes
-
-- **Read-only typed binds are honored under Compose.** Schema 2 `[[container.mounts]]` integrations were rendered into `devcontainer.json` `mounts`. For Compose projects (every generated project), Dev Container CLI 0.89.0 rewrites those into a short-syntax Compose override and drops `readonly`, so a `read_only = true` bind was writable in the container (`docker inspect` showed `RW=true`). Integrations are now `app` volumes in `compose.yaml` in long syntax (`type: bind`, `source`, `target`, `read_only: true`), like the Codex state mount. Each `${localEnv:NAME}` source reference becomes `${NAME:?export it on the host for projectsetup host integration TARGET}`, so a missing or empty variable still stops container creation and names the variable and target. Definition snapshots in `.devcontainer/presets/` keep the `${localEnv:NAME}` form.
-- **Checks follow the new location.** `check` requires each integration's Compose bind with its exact source and access mode, rejects other `app` volumes while integrations are selected, and rejects integrations left in `devcontainer.json` `mounts`, pointing to `projectsetup upgrade`. `check --build` accepts only the generated AI mounts in effective Dev Container metadata.
+This release adds host-path-preserving primary-checkout and shared-worktree mounts for orchestrated Git worktrees without changing the normal Dev Container workspace.
 
 ## New
 
-- **`upgrade --addon NAME` and `--remove-addon NAME`** (both repeatable). Added add-ons come from the installed built-in and user definitions and get their option defaults. Removed add-ons drop their recorded options, and removing `postgres` also drops its image reference. Everything else (preset, retained add-ons and their project copies, option values, PostgreSQL major and image, agents, ports, packages) is kept, and the result is validated like `init`. Combine with `--refresh-presets` to also adopt updated definitions for retained ones.
+- Every `devcontainer.json` mounts `${localWorkspaceFolder}` to the identical container path. The existing `/workspaces/<project>` workspace and `workspaceFolder` are unchanged.
+- Every existing `app` service bind-mounts `${HOME}/.local/share/projectsetup/worktrees` at the identical path. It uses Compose long syntax with `bind.create_host_path: false`; no sidecar, service, project, network, or volume is added.
+- `init` and `upgrade` create the global root as the invoking user, prefer mode `0700` for newly created directories, and verify directory plus write/search access before atomically installing generated output. Compose is never allowed to create the source.
+- Manifest schema 2 now includes the required canonical symbolic field `"worktreeRoot": "${localEnv:HOME}/.local/share/projectsetup/worktrees"`. It is not configurable and the schema number remains 2. Older strict binaries reject the unknown field rather than silently dropping the mount.
+
+## Validation and compatibility
+
+- `check` semantically validates both core mounts, identical worktree source/target, app-only placement, `create_host_path: false`, host-root access, and merged Dev Container metadata. Definition mounts that overlap the primary checkout or worktree root are rejected.
+- Schema 1 and pre-v0.12 schema 2 manifests that omit `worktreeRoot` remain readable by `upgrade`. `check` gives actionable upgrade guidance; a present noncanonical value is invalid. Upgrade preserves all existing selections and writes current schema 2 output.
+- Golden fixtures cover every preset combination. Tests also cover v0.11-style upgrade, atomic host-preparation failures, definition collisions, external Compose/Dev Container parsing, and PostgreSQL remaining exactly one sidecar.
+- `PROJECTSETUP_WORKTREE_TESTS=1 go test ./internal/generate -run TestSmokeHostPathWorktree` is an opt-in reversible runtime test. It creates a real linked Git worktree under an isolated global root, starts one uniquely named fixture, verifies both identical host-path mounts and Git access from the container, and removes only that fixture container/network and temporary data. It never removes volumes.
 
 ## Existing projects
 
-Projects with host integrations should upgrade, then recreate the container so the read-only mode takes effect:
+Regenerate and recreate the container:
 
 ```bash
 projectsetup upgrade
 projectsetup check
-dworm rebuild
+dworm down
+dworm up -d
 ```
 
-To adopt an add-on without re-running `init --force`:
+The worktree root is shared across generated app containers. Keep only intended development worktrees below it. Massimo is responsible for collision-safe child names using project digest plus stable checkout ID; projectsetup does not namespace by repository basename.
 
-```bash
-projectsetup upgrade --addon NAME
-```
-
-Projects without host integrations get identical output. There are no manifest or definition schema changes.
-
-## Validation
-
-- `go test ./...` and `go vet ./...` passed on the release code.
-- New golden and table tests cover read-only and read-write directory, file and socket binds, Compose interpolation of missing or empty variables, validation of moved, changed and leftover mounts, upgrading a project in the old layout, and add-on changes on upgrade (including rejected names and retained project copies).
-- The opt-in `TestSmokeHostIntegrationAccessModes` started a real container with `devcontainer up` (Dev Container CLI 0.89.0, Docker Compose 5.6.0, Linux amd64). `docker inspect` showed `RW=false` for read-only directory and socket binds and `RW=true` for a read-write file. A write to the read-only directory failed, and a write to the read-write file reached the host.
-
-[All changes since v0.10.1](https://github.com/mpm/projectsetup/compare/v0.10.1...v0.11.0)
+[All changes since v0.11.0](https://github.com/mpm/projectsetup/compare/v0.11.0...v0.12.0)

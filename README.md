@@ -199,6 +199,8 @@ projectsetup upgrade
 
 The command regenerates from `.devcontainer/projectsetup.json`, preserving its preset, add-ons, option values, tools, ports, and packages. It only replaces recognized projectsetup output containing known generated files; hand-written configurations and unsupported manifest schemas are refused. `devcontainer-lock.json`, which the Dev Container CLI writes when it starts the container, is removed and written again on the next start.
 
+Projects generated before v0.12.0 do not record `worktreeRoot`. `projectsetup check` reports this with `projectsetup upgrade` guidance. Upgrade keeps manifest schema 2, adds the canonical shared worktree root and both core host-path mounts, and creates the host root before atomically replacing `.devcontainer`. Schema 1 projects upgrade through the same path.
+
 `upgrade` uses the definition copies in `.devcontainer/presets/`, so the result does not depend on the definitions installed on this machine. To pick up newer versions of the built-in, user, or installed remote definitions, add `--refresh-presets`. It keeps the recorded option values and fills in defaults only for options the newer definitions add:
 
 ```bash
@@ -232,7 +234,7 @@ projectsetup check --build
 projectsetup check --runtime
 ```
 
-`check` validates the manifest, generated files and script modes, users and workspace paths, Compose service configuration, AI mounts, ports, option values against detected version files and lockfiles, and the features, environment, PATH entries, apt packages, and sidecar services that the selected definitions contribute. It reads the definitions from `.devcontainer/presets/` and fails when a copy does not match the hash recorded in the manifest. When installed, it also runs `docker compose config` and `devcontainer read-configuration`. Configurations with schema 1 manifests from earlier releases are checked against the built-in definitions. Node, Rails, and Python configurations from v0.8.0 and earlier fail because they lack PATH entries that `dworm exec` needs; `projectsetup upgrade` adds them.
+`check` validates the manifest, generated files and script modes, users and workspace paths, Compose service configuration, core and AI mounts, ports, option values against detected version files and lockfiles, and the features, environment, PATH entries, apt packages, and sidecar services that the selected definitions contribute. It reads the definitions from `.devcontainer/presets/` and fails when a copy does not match the hash recorded in the manifest. When installed, it also runs `docker compose config` and `devcontainer read-configuration`. Schema 1 and older schema 2 manifests remain readable for upgrade, but `check` tells users to upgrade them because they lack `worktreeRoot` and its mounts. Node, Rails, and Python configurations from v0.8.0 and earlier also lack PATH entries that `dworm exec` needs; `projectsetup upgrade` adds them.
 
 `check --build` runs the static and external checks first, then executes:
 
@@ -303,12 +305,23 @@ projectsetup doctor
 
 Every setup uses Compose with an `app` service and a project-scoped network. Add-ons with sidecars, such as PostgreSQL and Redis, add their services and named data volumes. `presets/` holds a copy of each selected definition. The scripts are executable.
 
+The ordinary workspace remains `..:/workspaces/<project>` with `workspaceFolder` set to that path. In addition, every `devcontainer.json` contains exactly this core bind so absolute Git links back to the primary checkout resolve inside the container:
+
+```text
+source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind
+```
+
+Every `app` service also bind-mounts `${HOME}/.local/share/projectsetup/worktrees` at the identical absolute path with Compose long syntax and `bind.create_host_path: false`. `init` and `upgrade` create that global invoking-user root before success, using mode `0700` for newly created directories, and require it to be a directory with write/search access. Compose never creates it. The root is intentionally shared across generated projects so an orchestrator can place collision-safe children there (for example, project digest plus stable checkout ID); projectsetup does not add a basename namespace. Definitions cannot overlap either host-path core mount and cannot add another app/service/network/volume for this feature.
+
+This exposes the primary checkout and every child below the global worktree root to the `app` container. Keep only intended development worktrees under that root. Sidecars do not receive either mount.
+
 `projectsetup.json` is the generated configuration manifest and source of truth for validation. It uses schema 2:
 
 ```json
 {
   "schemaVersion": 2,
   "projectName": "example",
+  "worktreeRoot": "${localEnv:HOME}/.local/share/projectsetup/worktrees",
   "preset": {"name": "node", "version": "1.0.0", "source": "builtin", "sha256": "..."},
   "addons": [{"name": "postgres", "version": "1.0.0", "source": "builtin", "sha256": "..."}],
   "options": {"node": {"package_manager": "npm", "version": "26"}, "postgres": {"version": "18"}},
@@ -319,7 +332,7 @@ Every setup uses Compose with an `app` service and a project-scoped network. Add
 }
 ```
 
-`options` records every option of every selected definition, including defaults; definitions without options have no entry.
+`worktreeRoot` is a required, non-configurable symbolic value in newly generated manifests. A present noncanonical value is invalid. The field is additive without a schema bump; older strict binaries reject it as unknown instead of regenerating while silently dropping the mount. `options` records every option of every selected definition, including defaults; definitions without options have no entry.
 
 If `.devcontainer` already exists, generation stops. `--force` replaces it only when `projectsetup.json` identifies it as generated by `projectsetup` and it contains only the known generated paths and the Dev Container CLI's `devcontainer-lock.json`; unrelated files are never overwritten. `--force` keeps the recorded option values of add-ons that remain selected unless you set them explicitly, including the PostgreSQL major and optional `postgresImage` reference. A retained reference must match the major; see [PostgreSQL](#postgresql). Generation is staged and validated before installation.
 
@@ -347,7 +360,7 @@ projectsetup preset remove NAME
 
 Every generated project gets a copy of the exact definition files it was generated from in `.devcontainer/presets/`. The manifest records each definition's name, version, source, and SHA-256 hash. `check` and `upgrade` use these copies, so a project keeps working on a machine that does not have its user or remote definitions, and changing a definition does not affect existing projects until you run `projectsetup upgrade --refresh-presets` there. Do not edit the copies: `check` reports a copy whose hash differs from the manifest.
 
-The CLI and editor schema accept **definition schemas 1 and 2**, including mixed-schema preset/add-on selections. Built-ins remain schema 1 with their original bytes and hashes. Schema 2 adds the optional top-level preset `image.preinstalled` and `image.ownership` declarations described below. Older binaries reject unknown ownership fields rather than silently discarding them. Manifest schema 2 is unchanged: the exact preset snapshot pins the declaration, base image, and format number. Ordinary checks/upgrades retain those bytes; `upgrade --refresh-presets` explicitly adopts registry changes. Remote indexes and `sources.toml` remain schema 1.
+The CLI and editor schema accept **definition schemas 1 and 2**, including mixed-schema preset/add-on selections. Built-ins remain schema 1 with their original bytes and hashes. Schema 2 adds the optional top-level preset `image.preinstalled` and `image.ownership` declarations described below. Older binaries reject unknown ownership fields rather than silently discarding them. The manifest schema number remains 2: the exact preset snapshot pins the declaration, base image, and format number, while the independent core `worktreeRoot` field records the fixed mount contract. Ordinary checks/upgrades retain definition bytes; `upgrade --refresh-presets` explicitly adopts registry changes. Remote indexes and `sources.toml` remain schema 1.
 
 ### Preinstalled image declarations
 
@@ -491,7 +504,7 @@ Rules:
 - Contributions are applied in this order: the preset, then add-ons sorted by name. Each definition's top-level block comes first, followed by its matching variants in file order. A variant can override its own definition's feature options, `env` values, and service fields, but two definitions cannot set the same feature, environment variable, or service.
 - Feature PATH changes made through the feature's own `containerEnv` are replaced by the generated `containerEnv.PATH`, which `dworm exec` uses. List the directories the feature adds in `container.path`. The feature's other environment variables are kept.
 
-Definitions cannot change the parts that `dworm` and the AI tools rely on: the `vscode` user and `/home/vscode`, the `app` service with its build, command, and workspace mount, the AI tool installer, mounts, and environment, the GitHub CLI feature, and the core PATH entries. `PATH`, `HOME`, `USER`, `CODEX_HOME`, and `CLAUDE_CONFIG_DIR` cannot be set, a sidecar cannot be named `app`, and sidecar volumes are named volumes. Definition schema 2 supports constrained opt-in [host integrations](#explicit-host-integrations) alongside these core mounts.
+Definitions cannot change the parts that `dworm` and the AI tools rely on: the `vscode` user and `/home/vscode`, the `app` service with its build, command, normal workspace mount, primary-checkout host-path mount, global worktree-root mount, the AI tool installer, mounts, and environment, the GitHub CLI feature, and the core PATH entries. `PATH`, `HOME`, `USER`, `CODEX_HOME`, and `CLAUDE_CONFIG_DIR` cannot be set, a sidecar cannot be named `app`, and sidecar volumes are named volumes. Definition schema 2 supports constrained opt-in [host integrations](#explicit-host-integrations) alongside these core mounts.
 
 ### Remote definitions
 
@@ -536,7 +549,7 @@ No application server is started automatically. Start the server yourself with `
 
 ## AI persistence
 
-`init` creates the selected tools' host bind-mount source directories. OpenCode uses:
+`init` creates the global worktree root described under [Generated files](#generated-files) and the selected tools' host bind-mount source directories. OpenCode uses:
 
 ```text
 ~/.config/opencode
@@ -667,7 +680,7 @@ Because every generated project uses Docker Compose, typed binds are rendered in
 
 Only Linux with a local Unix Docker endpoint and the default Docker context is supported. Nondefault contexts (including a configured `currentContext`), remote endpoints, macOS, and Windows fail with guidance when integration sources are checked. Portable images assume Dev Container UID/GID adjustment to the caller; fixed images use their declared IDs and require the Phase 2 host match. Checks require the selected source kind, numeric primary-ID access, and search access through source ancestors; socket access requires write permission even for a read-only bind. Permission diagnostics conservatively use mode bits: supplementary groups and ACL grants cannot prove container access. Repair host permissions deliberately or select a matching image; projectsetup never changes integration source ownership. Actual compositor/container connection remains the final access check.
 
-The unchanged manifest schema 2 pins exact TOML snapshots, preserving references rather than machine paths. Plain `upgrade` keeps those bytes; `upgrade --refresh-presets` explicitly adopts updated declarations. Built-ins and definitions without mounts keep their existing output. Definition schema 1 rejects mounts, and older binaries reject the new schema 2 field rather than silently dropping it. Static checks stay offline. For selected integrations, `check --build` also validates base/final effective Dev Container metadata: its mounts must be exactly the generated AI mounts, so inherited mounts and integration mounts outside `compose.yaml` are rejected, as are unexpected lifecycle hooks. Artifact runtime probes remain mount-free and do not test the display connection.
+Manifest schema 2 pins exact TOML snapshots, preserving references rather than machine paths. Plain `upgrade` keeps those bytes; `upgrade --refresh-presets` explicitly adopts updated declarations. Definition schema 1 rejects integration mounts, and older binaries reject their unknown definition field rather than silently dropping it. Static checks stay offline. For selected integrations, `check --build` also validates base/final effective Dev Container metadata: its mounts must be exactly the generated primary-checkout and AI mounts, so inherited mounts and integration mounts outside `compose.yaml` are rejected, as are unexpected lifecycle hooks. Artifact runtime probes remain mount-free and do not test the display connection.
 
 To exercise a real compositor with a local image whose `vscode` IDs match the host:
 

@@ -1,6 +1,7 @@
 {
   "schemaVersion": 2,
   "projectName": "python-redis",
+  "worktreeRoot": "${localEnv:HOME}/.local/share/projectsetup/worktrees",
   "preset": {
     "name": "python",
     "version": "1.0.0",

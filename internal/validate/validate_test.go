@@ -301,6 +301,81 @@ func TestCheckRejectsIncompleteOptions(t *testing.T) {
 	assertDiagnostic(t, validate.Check(root, validate.Options{}), validate.Error, "manifest values are not normalized")
 }
 
+func TestCheckRequiresCanonicalWorktreeManifestAndCoreMounts(t *testing.T) {
+	root, home := t.TempDir(), t.TempDir()
+	t.Setenv("HOME", home)
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: "node", AITools: []config.AITool{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := generate.Write(root, cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	manifestPath := filepath.Join(root, ".devcontainer", "projectsetup.json")
+	manifest, _ := os.ReadFile(manifestPath)
+	for _, tt := range []struct{ name, old, replacement, want string }{
+		{"missing manifest field", "  \"worktreeRoot\": \"" + config.WorktreeRoot + "\",\n", "", "run projectsetup upgrade"},
+		{"noncanonical manifest field", config.WorktreeRoot, "/tmp/worktrees", "must be the canonical"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := os.WriteFile(manifestPath, []byte(strings.Replace(string(manifest), tt.old, tt.replacement, 1)), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			assertDiagnostic(t, validate.Check(root, validate.Options{}), validate.Error, tt.want)
+		})
+	}
+	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	devcontainerPath := filepath.Join(root, ".devcontainer", "devcontainer.json")
+	devcontainer, _ := os.ReadFile(devcontainerPath)
+	if err := os.WriteFile(devcontainerPath, []byte(strings.Replace(string(devcontainer), config.WorkspaceHostMount, "source=/wrong,target=/wrong,type=bind", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	assertDiagnostic(t, validate.Check(root, validate.Options{}), validate.Error, "required core mount")
+	if err := os.WriteFile(devcontainerPath, devcontainer, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	composePath := filepath.Join(root, ".devcontainer", "compose.yaml")
+	compose, _ := os.ReadFile(composePath)
+	if err := os.WriteFile(composePath, []byte(strings.Replace(string(compose), "create_host_path: false", "create_host_path: true", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	assertDiagnostic(t, validate.Check(root, validate.Options{}), validate.Error, "Compose never creates")
+	postgresRoot := t.TempDir()
+	postgresCfg, err := config.Normalize(config.Input{Root: postgresRoot, ProjectName: "postgres", Preset: "node", Addons: []string{"postgres"}, AITools: []config.AITool{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := generate.Write(postgresRoot, postgresCfg, false); err != nil {
+		t.Fatal(err)
+	}
+	postgresCompose := filepath.Join(postgresRoot, ".devcontainer", "compose.yaml")
+	data, _ := os.ReadFile(postgresCompose)
+	worktreeBind := "      - type: bind\n        source: " + config.ComposeWorktreeRoot + "\n        target: " + config.ComposeWorktreeRoot + "\n        bind:\n          create_host_path: false\n"
+	data = []byte(strings.Replace(string(data), "    volumes:\n      - postgres-data:/var/lib/postgresql\n", "    volumes:\n"+worktreeBind+"      - postgres-data:/var/lib/postgresql\n", 1))
+	if err := os.WriteFile(postgresCompose, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	assertDiagnostic(t, validate.Check(postgresRoot, validate.Options{}), validate.Error, "not sidecar postgres")
+}
+
+func TestCheckRequiresAccessiblePreparedWorktreeRoot(t *testing.T) {
+	root, home := t.TempDir(), t.TempDir()
+	t.Setenv("HOME", home)
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "example", Preset: "node", AITools: []config.AITool{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := generate.Write(root, cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(config.WorktreeRootPath(home)); err != nil {
+		t.Fatal(err)
+	}
+	assertDiagnostic(t, validate.Check(root, validate.Options{CheckHostMounts: true}), validate.Error, "run projectsetup upgrade to create and validate it")
+}
+
 func TestCheckBuildRunsAfterStaticValidation(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", t.TempDir())
@@ -423,6 +498,11 @@ services:
     volumes:
       - ..:/workspaces/example
       - type: bind
+        source: ${HOME:?export HOME for the projectsetup worktree root}/.local/share/projectsetup/worktrees
+        target: ${HOME:?export HOME for the projectsetup worktree root}/.local/share/projectsetup/worktrees
+        bind:
+          create_host_path: false
+      - type: bind
         source: "${CODEX_HOME:-${HOME}/.codex}"
         target: /home/vscode/.codex
     depends_on:
@@ -537,7 +617,7 @@ func TestHostIntegrationsMustBeComposeBinds(t *testing.T) {
 	devcontainer, _ := os.ReadFile(devcontainerPath)
 	toolsSource := "${PROJECTSETUP_TEST_TOOLS:?export it on the host for projectsetup host integration /opt/tools}"
 	readOnlyBind := "      - type: bind\n        source: " + toolsSource + "\n        target: /opt/tools\n        read_only: true\n"
-	if !strings.Contains(string(compose), readOnlyBind) || strings.Contains(string(devcontainer), "mounts") {
+	if !strings.Contains(string(compose), readOnlyBind) || !strings.Contains(string(devcontainer), config.WorkspaceHostMount) {
 		t.Fatalf("compose.yaml:\n%s\ndevcontainer.json:\n%s", compose, devcontainer)
 	}
 	if diagnostics := validate.Check(root, validate.Options{CheckHostMounts: true}); validate.ErrorCount(diagnostics) != 0 {

@@ -175,9 +175,10 @@ func TestGoldenComposeConfigurations(t *testing.T) {
 	cases := append(append([]goldenCase(nil), goldenCases...), goldenCase{name: "shared-node"}, goldenCase{name: "fixed-image"}, goldenCase{name: "wayland"}, goldenCase{name: "host-integrations"})
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
+			home := prepareFixtureWorktreeRoot(t)
 			compose := filepath.Join("testdata", "golden", tt.name, "compose.yaml")
 			command := exec.Command(docker, "compose", "-f", compose, "config")
-			command.Env = append(os.Environ(), hostIntegrationEnv...)
+			command.Env = append(os.Environ(), append(hostIntegrationEnv, "HOME="+home)...)
 			if output, err := command.CombinedOutput(); err != nil {
 				t.Fatalf("docker compose config: %v\n%s", err, output)
 			}
@@ -209,8 +210,9 @@ func TestGoldenDevcontainerConfigurations(t *testing.T) {
 			if err := replaceTree(filepath.Join(root, directoryName), fixture); err != nil {
 				t.Fatalf("prepare fixture workspace: %v", err)
 			}
+			home := prepareFixtureWorktreeRoot(t)
 			command := exec.CommandContext(ctx, devcontainer, "read-configuration", "--workspace-folder", root, "--log-level", "trace")
-			command.Env = append(os.Environ(), hostIntegrationEnv...)
+			command.Env = append(os.Environ(), append(hostIntegrationEnv, "HOME="+home)...)
 			if output, err := command.CombinedOutput(); err != nil {
 				t.Fatalf("devcontainer read-configuration: %v\n%s", err, output)
 			}
@@ -233,10 +235,12 @@ func TestBuildPresetFixtures(t *testing.T) {
 	for _, name := range []string{"node-opencode", "ruby-opencode", "rails-opencode", "python-pip", "ruby-go", "node-rust", "python-redis"} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
+			home := prepareFixtureWorktreeRoot(t)
 			if err := replaceTree(filepath.Join(root, directoryName), filepath.Join("testdata", "golden", name)); err != nil {
 				t.Fatalf("prepare fixture workspace: %v", err)
 			}
 			command := exec.Command(devcontainer, "build", "--workspace-folder", root)
+			command.Env = append(os.Environ(), "HOME="+home)
 			if output, err := command.CombinedOutput(); err != nil {
 				t.Fatalf("devcontainer build: %v\n%s", err, output)
 			}
@@ -272,7 +276,7 @@ func TestSmokePresetFixtures(t *testing.T) {
 		name := fixture.name
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
-			home := t.TempDir()
+			home := prepareFixtureWorktreeRoot(t)
 			if err := replaceTree(filepath.Join(root, directoryName), filepath.Join("testdata", "golden", name)); err != nil {
 				t.Fatalf("prepare fixture workspace: %v", err)
 			}
@@ -446,6 +450,15 @@ func replaceTree(destination, source string) error {
 	})
 }
 
+func prepareFixtureWorktreeRoot(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	if err := os.MkdirAll(config.WorktreeRootPath(home), 0o700); err != nil {
+		t.Fatalf("prepare fixture worktree root: %v", err)
+	}
+	return home
+}
+
 func TestCodexComposeStateResolution(t *testing.T) {
 	docker, err := exec.LookPath("docker")
 	if err != nil {
@@ -456,7 +469,7 @@ func TestCodexComposeStateResolution(t *testing.T) {
 	}
 	for _, custom := range []string{"", "/tmp/custom codex state"} {
 		t.Run(custom, func(t *testing.T) {
-			home := t.TempDir()
+			home := prepareFixtureWorktreeRoot(t)
 			command := exec.Command(docker, "compose", "-f", "testdata/golden/python-codex/compose.yaml", "config", "--format", "json")
 			command.Env = append(os.Environ(), "HOME="+home, "CODEX_HOME="+custom)
 			output, err := command.Output()

@@ -10,6 +10,11 @@ services:
     volumes:
       - ..:/workspaces/wayland-app
       - type: bind
+        source: ${HOME:?export HOME for the projectsetup worktree root}/.local/share/projectsetup/worktrees
+        target: ${HOME:?export HOME for the projectsetup worktree root}/.local/share/projectsetup/worktrees
+        bind:
+          create_host_path: false
+      - type: bind
         source: ${XDG_RUNTIME_DIR:?export it on the host for projectsetup host integration /run/host-wayland/wayland-0}/${WAYLAND_DISPLAY:?export it on the host for projectsetup host integration /run/host-wayland/wayland-0}
         target: /run/host-wayland/wayland-0
         read_only: true

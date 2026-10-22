@@ -1,6 +1,7 @@
 {
   "schemaVersion": 2,
   "projectName": "node-all-agents",
+  "worktreeRoot": "${localEnv:HOME}/.local/share/projectsetup/worktrees",
   "preset": {
     "name": "node",
     "version": "1.0.0",

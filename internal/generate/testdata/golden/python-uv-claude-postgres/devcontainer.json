@@ -21,6 +21,7 @@
     "PGUSER": "projectsetup"
   },
   "mounts": [
+    "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
     "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind",
     "source=${localEnv:HOME}/.local/share/claude,target=/home/vscode/.local/share/claude,type=bind",
     "source=${localEnv:HOME}/.config/opencode,target=/home/vscode/.config/opencode,type=bind",

@@ -1,6 +1,7 @@
 {
   "schemaVersion": 2,
   "projectName": "fixed-app",
+  "worktreeRoot": "${localEnv:HOME}/.local/share/projectsetup/worktrees",
   "preset": {
     "name": "fixed-image",
     "version": "1.0.0",

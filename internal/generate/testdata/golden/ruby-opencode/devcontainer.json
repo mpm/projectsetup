@@ -16,6 +16,7 @@
     "PATH": "/home/vscode/.local/bin:/home/vscode/.opencode/bin:/home/vscode/.local/share/mise/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   },
   "mounts": [
+    "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
     "source=${localEnv:HOME}/.config/opencode,target=/home/vscode/.config/opencode,type=bind",
     "source=${localEnv:HOME}/.local/share/opencode,target=/home/vscode/.local/share/opencode,type=bind",
     "source=${localEnv:HOME}/.opencode,target=/home/vscode/.opencode,type=bind",

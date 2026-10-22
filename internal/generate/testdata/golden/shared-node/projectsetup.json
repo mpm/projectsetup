@@ -1,6 +1,7 @@
 {
   "schemaVersion": 2,
   "projectName": "shared-app",
+  "worktreeRoot": "${localEnv:HOME}/.local/share/projectsetup/worktrees",
   "preset": {
     "name": "shared-node",
     "version": "1.0.0",

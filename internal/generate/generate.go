@@ -223,7 +223,7 @@ func checkGeneratedContents(target string) error {
 func createHostMountDirectories(cfg config.Config) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return fmt.Errorf("locate host home directory for AI mounts: %w", err)
+		return fmt.Errorf("locate host home directory for core mounts: %w", err)
 	}
 	for _, relative := range config.AIHostDirectories(cfg.AITools) {
 		path, err := config.AIHostDirectory(relative, home, os.Getenv)
@@ -233,6 +233,29 @@ func createHostMountDirectories(cfg config.Config) error {
 		if err := os.MkdirAll(path, 0o755); err != nil {
 			return fmt.Errorf("create host mount source %q: %w", path, err)
 		}
+	}
+	worktreeRoot := config.WorktreeRootPath(home)
+	if err := os.MkdirAll(worktreeRoot, 0o700); err != nil {
+		return fmt.Errorf("create worktree root %q: %w", worktreeRoot, err)
+	}
+	info, err := os.Stat(worktreeRoot)
+	if err != nil {
+		return fmt.Errorf("inspect worktree root %q: %w", worktreeRoot, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("worktree root %q is not a directory", worktreeRoot)
+	}
+	probe, err := os.CreateTemp(worktreeRoot, ".projectsetup-access-")
+	if err != nil {
+		return fmt.Errorf("worktree root %q requires write and search access: %w", worktreeRoot, err)
+	}
+	probeName := probe.Name()
+	if err := probe.Close(); err != nil {
+		_ = os.Remove(probeName)
+		return fmt.Errorf("close worktree root access probe %q: %w", probeName, err)
+	}
+	if err := os.Remove(probeName); err != nil {
+		return fmt.Errorf("remove worktree root access probe %q: %w", probeName, err)
 	}
 	return nil
 }

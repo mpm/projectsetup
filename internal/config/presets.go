@@ -2,6 +2,9 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/mpm/projectsetup/internal/presets"
 )
@@ -42,6 +45,18 @@ func Resolve(cfg Config) (presets.Resolved, error) {
 	if err != nil {
 		return presets.Resolved{}, err
 	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return presets.Resolved{}, fmt.Errorf("locate host home directory for core mounts: %w", err)
+	}
+	coreTargets := []string{cfg.Workspace.HostPath, WorktreeRootPath(home)}
+	for _, mount := range resolved.Mounts {
+		for _, target := range coreTargets {
+			if pathsOverlap(mount.Target, target) {
+				return presets.Resolved{}, fmt.Errorf("host mount target %q overlaps core-managed path %q", mount.Target, target)
+			}
+		}
+	}
 	if cfg.PostgresImage != "" {
 		if err := validatePostgresImage(cfg); err != nil {
 			return presets.Resolved{}, err
@@ -54,4 +69,10 @@ func Resolve(cfg Config) (presets.Resolved, error) {
 		resolved.Services["postgres"] = service
 	}
 	return resolved, nil
+}
+
+func pathsOverlap(a, b string) bool {
+	a, b = filepath.Clean(a), filepath.Clean(b)
+	return a == b || a == string(filepath.Separator) || b == string(filepath.Separator) ||
+		strings.HasPrefix(a, b+string(filepath.Separator)) || strings.HasPrefix(b, a+string(filepath.Separator))
 }

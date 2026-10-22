@@ -16,6 +16,7 @@
     "PATH": "/home/vscode/.local/bin:/home/vscode/.opencode/bin:/usr/local/python/current/bin:/usr/local/py-utils/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   },
   "mounts": [
+    "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
     "source=${localEnv:HOME}/.local/share/codex,target=/home/vscode/.local/share/codex,type=bind"
   ],
   "postCreateCommand": ".devcontainer/scripts/post-create.sh",

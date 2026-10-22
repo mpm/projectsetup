@@ -99,6 +99,7 @@ func DescribeChoices[T ~string](values []T) string {
 // contribution order, the preset first and then add-ons sorted by name.
 type Config struct {
 	PostgresImage PostgresImageRef
+	WorktreeRoot  string
 	ProjectName   string
 	Preset        string
 	Addons        []string
@@ -127,6 +128,20 @@ type Container struct {
 
 // CodexStateSource uses Compose interpolation, which supports nested defaults.
 const CodexStateSource = "${CODEX_HOME:-${HOME}/.codex}"
+
+const (
+	// WorktreeRoot is symbolic so manifests stay portable between users while
+	// preserving the host path inside the container.
+	WorktreeRoot = "${localEnv:HOME}/.local/share/projectsetup/worktrees"
+	// ComposeWorktreeRoot requires HOME at container startup and uses the same
+	// interpolated value as both bind source and target.
+	ComposeWorktreeRoot = "${HOME:?export HOME for the projectsetup worktree root}/.local/share/projectsetup/worktrees"
+	WorkspaceHostMount  = "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind"
+)
+
+func WorktreeRootPath(home string) string {
+	return filepath.Join(home, ".local", "share", "projectsetup", "worktrees")
+}
 
 func AIHostDirectory(relative, home string, getenv func(string) string) (string, error) {
 	if relative == ".codex" {

@@ -19,6 +19,9 @@
     "PGPASSWORD": "projectsetup",
     "PGUSER": "projectsetup"
   },
+  "mounts": [
+    "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind"
+  ],
   "postCreateCommand": ".devcontainer/scripts/post-create.sh",
   "shutdownAction": "stopCompose"
 }

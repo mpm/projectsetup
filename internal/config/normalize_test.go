@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -33,7 +34,7 @@ func TestNormalize(t *testing.T) {
 				SystemPackages: []string{"libpq-dev", "curl", "libpq-dev"},
 			},
 			want: Config{
-				ProjectName: "my-project", Preset: "node", Addons: []string{},
+				WorktreeRoot: WorktreeRoot, ProjectName: "my-project", Preset: "node", Addons: []string{},
 				Options:     map[string]map[string]string{"node": {"package_manager": "npm", "version": "26"}},
 				Definitions: definitions("node"),
 				AITools:     []AITool{AIToolOpenCode},
@@ -47,7 +48,7 @@ func TestNormalize(t *testing.T) {
 			input: Input{Root: "/tmp/api", Preset: "python", Addons: []string{"sqlite", "postgres", "sqlite"},
 				AITools: []AITool{}, Options: map[string]map[string]string{"python": {"package_manager": "uv"}, "postgres": {"version": " 17 "}}},
 			want: Config{
-				ProjectName: "api", Preset: "python", Addons: []string{"postgres", "sqlite"},
+				WorktreeRoot: WorktreeRoot, ProjectName: "api", Preset: "python", Addons: []string{"postgres", "sqlite"},
 				Options: map[string]map[string]string{
 					"python":   {"package_manager": "uv", "version": "3.14"},
 					"postgres": {"version": "17"},
@@ -62,7 +63,7 @@ func TestNormalize(t *testing.T) {
 			name:  "ruby defaults",
 			input: Input{Root: "/tmp/gem", Preset: "ruby", AITools: []AITool{}},
 			want: Config{
-				ProjectName: "gem", Preset: "ruby", Addons: []string{},
+				WorktreeRoot: WorktreeRoot, ProjectName: "gem", Preset: "ruby", Addons: []string{},
 				Options:     map[string]map[string]string{"ruby": {"version": "4.0"}},
 				Definitions: definitions("ruby"),
 				AITools:     []AITool{}, Ports: []int{}, SystemPackages: []string{},
@@ -81,6 +82,7 @@ func TestNormalize(t *testing.T) {
 		{name: "rejects invalid port", input: Input{Root: "/tmp/api", Preset: "python", Ports: []int{70000}}, wantErr: "outside the valid range"},
 		{name: "rejects unsafe system package", input: Input{Root: "/tmp/api", Preset: "python", SystemPackages: []string{"curl; false"}}, wantErr: "not a valid apt package"},
 		{name: "rejects unsafe language version", input: Input{Root: "/tmp/api", Preset: "rails", Options: map[string]map[string]string{"rails": {"version": "3.3\nRUN false"}}}, wantErr: "option rails.version"},
+		{name: "rejects noncanonical worktree root", input: Input{Root: "/tmp/api", Preset: "node", WorktreeRoot: "/tmp/worktrees"}, wantErr: "worktreeRoot must be the canonical"},
 	}
 
 	for _, tt := range tests {
@@ -120,6 +122,29 @@ func TestNormalizeUsesGivenRegistry(t *testing.T) {
 	}
 	if _, err := Normalize(Input{Root: "/tmp/app", Registry: registry, Preset: "node"}); err == nil || !strings.Contains(err.Error(), "expected custom") {
 		t.Fatalf("Normalize(node) error = %v", err)
+	}
+}
+
+func TestNormalizeRejectsDefinitionsThatShadowCoreHostMounts(t *testing.T) {
+	home, root := t.TempDir(), t.TempDir()
+	t.Setenv("HOME", home)
+	node, _ := presets.Builtin().Lookup("node")
+	for _, target := range []string{root, filepath.Dir(root), WorktreeRootPath(home), filepath.Join(WorktreeRootPath(home), "nested")} {
+		t.Run(target, func(t *testing.T) {
+			raw := fmt.Sprintf("schema = 2\nkind = 'addon'\nname = 'shadow'\nversion = '1.0.0'\ndescription = 'shadow'\n[[container.mounts]]\nsource = '${localEnv:HOME}/source'\ntarget = %q\nsource_kind = 'directory'\nread_only = false\n", target)
+			addon, err := presets.Parse([]byte(raw), "shadow.toml")
+			if err != nil {
+				t.Fatal(err)
+			}
+			registry, err := presets.NewRegistry(node, addon)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = Normalize(Input{Root: root, Registry: registry, Preset: "node", Addons: []string{"shadow"}})
+			if err == nil || !strings.Contains(err.Error(), "overlaps core-managed path") {
+				t.Fatalf("Normalize() error = %v", err)
+			}
+		})
 	}
 }
 

@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -29,6 +30,34 @@ func TestReadManifestRejectsUnsupportedSchema(t *testing.T) {
 	_, err := config.ReadManifest(strings.NewReader(`{"schemaVersion":3}`))
 	if err == nil || !strings.Contains(err.Error(), "unsupported schemaVersion 3") {
 		t.Fatalf("ReadManifest() error = %v", err)
+	}
+}
+
+func TestWorktreeRootFailsClosedWithPreviousStrictReader(t *testing.T) {
+	cfg, err := config.Normalize(config.Input{Root: "/tmp/app", Preset: "node"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(config.NewManifest(cfg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var previous struct {
+		SchemaVersion  json.RawMessage `json:"schemaVersion"`
+		ProjectName    json.RawMessage `json:"projectName"`
+		Preset         json.RawMessage `json:"preset"`
+		Addons         json.RawMessage `json:"addons"`
+		Options        json.RawMessage `json:"options"`
+		PostgresImage  json.RawMessage `json:"postgresImage"`
+		AITools        json.RawMessage `json:"aiTools"`
+		Ports          json.RawMessage `json:"ports"`
+		SystemPackages json.RawMessage `json:"systemPackages"`
+		GeneratedBy    json.RawMessage `json:"generatedBy"`
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(data)))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&previous); err == nil || !strings.Contains(err.Error(), `unknown field "worktreeRoot"`) {
+		t.Fatalf("previous strict reader error = %v", err)
 	}
 }
 
@@ -100,6 +129,9 @@ func TestManifestRoundTripsConfig(t *testing.T) {
 	if manifest.SchemaVersion != config.SchemaVersion || manifest.Preset != node.Ref() || len(manifest.Addons) != 1 || manifest.Addons[0].Name != "postgres" {
 		t.Fatalf("NewManifest() = %+v", manifest)
 	}
+	if manifest.WorktreeRoot != config.WorktreeRoot {
+		t.Fatalf("worktreeRoot = %q, want %q", manifest.WorktreeRoot, config.WorktreeRoot)
+	}
 	if manifest.Preset.Version != "1.0.0" || manifest.Preset.Source != presets.SourceBuiltin || len(manifest.Preset.SHA256) != 64 {
 		t.Fatalf("preset ref = %+v", manifest.Preset)
 	}
@@ -123,5 +155,14 @@ func TestManifestRoundTripsConfig(t *testing.T) {
 	changed.SchemaVersion = 1
 	if !config.SameSelection(changed, manifest) {
 		t.Fatal("SameSelection compared digests that a schema 1 manifest does not record")
+	}
+	changed = manifest
+	changed.WorktreeRoot = ""
+	if !config.SameSelection(changed, manifest) {
+		t.Fatal("SameSelection rejected a pre-v0.12 manifest without worktreeRoot")
+	}
+	changed.WorktreeRoot = "/noncanonical"
+	if config.SameSelection(changed, manifest) {
+		t.Fatal("SameSelection ignored a noncanonical worktreeRoot")
 	}
 }

@@ -232,6 +232,71 @@ func TestRunUpgradeConvertsLegacyGeneratedConfigurationToCompose(t *testing.T) {
 	}
 }
 
+func TestRunUpgradeAddsWorktreeRootToV011Schema2Output(t *testing.T) {
+	root, home := t.TempDir(), t.TempDir()
+	t.Setenv("HOME", home)
+	cfg, err := config.Normalize(config.Input{Root: root, ProjectName: "v011", Preset: "node", AITools: []config.AITool{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := generate.Write(root, cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	manifestPath := filepath.Join(root, ".devcontainer", "projectsetup.json")
+	manifest, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := strings.Replace(string(manifest), "  \"worktreeRoot\": \""+config.WorktreeRoot+"\",\n", "", 1)
+	if old == string(manifest) {
+		t.Fatal("generated manifest did not contain worktreeRoot")
+	}
+	if err := os.WriteFile(manifestPath, []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	devcontainerPath := filepath.Join(root, ".devcontainer", "devcontainer.json")
+	devcontainer, err := os.ReadFile(devcontainerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldDevcontainer := strings.Replace(string(devcontainer), "  \"mounts\": [\n    \""+config.WorkspaceHostMount+"\"\n  ],\n", "", 1)
+	if oldDevcontainer == string(devcontainer) {
+		t.Fatal("generated devcontainer did not contain the core host-path mount")
+	}
+	if err := os.WriteFile(devcontainerPath, []byte(oldDevcontainer), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	composePath := filepath.Join(root, ".devcontainer", "compose.yaml")
+	compose, err := os.ReadFile(composePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	worktreeBind := "      - type: bind\n        source: " + config.ComposeWorktreeRoot + "\n        target: " + config.ComposeWorktreeRoot + "\n        bind:\n          create_host_path: false\n"
+	oldCompose := strings.Replace(string(compose), worktreeBind, "", 1)
+	if oldCompose == string(compose) {
+		t.Fatal("generated compose did not contain the worktree-root bind")
+	}
+	if err := os.WriteFile(composePath, []byte(oldCompose), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	diagnostics := validate.Check(root, validate.Options{})
+	if validate.ErrorCount(diagnostics) == 0 || !strings.Contains(diagnostics[0].Message, "run projectsetup upgrade") {
+		t.Fatalf("v0.11 check diagnostics = %#v", diagnostics)
+	}
+	if err := runUpgrade(root, nil, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runUpgrade() error = %v", err)
+	}
+	upgraded := readManifest(t, root)
+	if upgraded.SchemaVersion != 2 || upgraded.WorktreeRoot != config.WorktreeRoot {
+		t.Fatalf("upgraded manifest = %+v", upgraded)
+	}
+	devcontainer, _ = os.ReadFile(devcontainerPath)
+	compose, _ = os.ReadFile(composePath)
+	if !strings.Contains(string(devcontainer), config.WorkspaceHostMount) || !strings.Contains(string(compose), "create_host_path: false") {
+		t.Fatalf("upgrade omitted core mounts:\n%s\n%s", devcontainer, compose)
+	}
+}
+
 func TestRunUpgradeAcceptsDetectedPatchVersionForConfiguredReleaseLine(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", t.TempDir())
@@ -1109,7 +1174,7 @@ func TestLegacyPostgresProjectKeepsVersion17(t *testing.T) {
 	devDir := writeLegacyPostgresProject(t, root)
 
 	diagnostics := validate.Check(root, validate.Options{})
-	if count := validate.ErrorCount(diagnostics); count != 0 {
+	if count := validate.ErrorCount(diagnostics); count != 1 || !strings.Contains(diagnostics[0].Message, "run projectsetup upgrade") {
 		t.Fatalf("check on legacy project: errors = %d, diagnostics = %#v", count, diagnostics)
 	}
 	if err := runUpgrade(root, nil, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
@@ -1213,10 +1278,7 @@ func TestRunUpgradeMovesHostIntegrationsToCompose(t *testing.T) {
 	devcontainer, _ := os.ReadFile(filepath.Join(devDir, "devcontainer.json"))
 	bind := "      - type: bind\n        source: ${PROJECTSETUP_TEST_TOOLS:?export it on the host for projectsetup host integration /opt/tools}\n        target: /opt/tools\n        read_only: true\n"
 	legacyCompose := strings.Replace(string(compose), bind, "", 1)
-	legacyDevcontainer := strings.Replace(string(devcontainer), `  "postCreateCommand"`, `  "mounts": [
-    "source=${localEnv:PROJECTSETUP_TEST_TOOLS},target=/opt/tools,type=bind,readonly"
-  ],
-  "postCreateCommand"`, 1)
+	legacyDevcontainer := strings.Replace(string(devcontainer), config.WorkspaceHostMount, "source=${localEnv:PROJECTSETUP_TEST_TOOLS},target=/opt/tools,type=bind,readonly", 1)
 	if legacyCompose == string(compose) || legacyDevcontainer == string(devcontainer) {
 		t.Fatalf("unexpected generated files:\n%s\n%s", compose, devcontainer)
 	}
@@ -1225,7 +1287,7 @@ func TestRunUpgradeMovesHostIntegrationsToCompose(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if diagnostics := validate.Check(root, validate.Options{}); validate.ErrorCount(diagnostics) != 2 {
+	if diagnostics := validate.Check(root, validate.Options{}); validate.ErrorCount(diagnostics) != 3 {
 		t.Fatalf("legacy layout diagnostics = %#v", diagnostics)
 	}
 	if err := runUpgrade(root, nil, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {

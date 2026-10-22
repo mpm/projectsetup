@@ -12,6 +12,9 @@
   "containerEnv": {
     "PATH": "/home/vscode/.local/bin:/home/vscode/.opencode/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   },
+  "mounts": [
+    "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind"
+  ],
   "postCreateCommand": ".devcontainer/scripts/post-create.sh",
   "shutdownAction": "stopCompose"
 }

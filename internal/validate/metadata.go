@@ -163,10 +163,14 @@ func probeMetadata(root, devDir, image string, built bool, want devcontainerDocu
 		fail("inspect effective built metadata: %s", commandFailure(err, output))
 		return
 	}
-	validateMergedMetadata(output, want, fail)
+	validateMergedMetadataAt(root, output, want, fail)
 }
 
 func validateMergedMetadata(output []byte, want devcontainerDocument, fail func(string, ...any)) {
+	validateMergedMetadataAt("", output, want, fail)
+}
+
+func validateMergedMetadataAt(root string, output []byte, want devcontainerDocument, fail func(string, ...any)) {
 	var result struct {
 		Merged map[string]json.RawMessage `json:"mergedConfiguration"`
 	}
@@ -205,15 +209,16 @@ func validateMergedMetadata(output []byte, want devcontainerDocument, fail func(
 	if len(effective.Features) != len(want.Features) || (len(want.Features) > 0 && !reflect.DeepEqual(effective.Features, want.Features)) {
 		fail("effective feature requests differ from the generated installation plan; baked feature IDs are metadata, not installer requests")
 	}
-	// Generated devcontainer.json mounts are the AI mounts, which reference only
-	// HOME; typed host integrations live in compose.yaml, outside this metadata.
+	// Generated devcontainer.json mounts are the host-path workspace bind and AI
+	// mounts. Typed host integrations live in compose.yaml, outside this metadata.
 	wantMounts := make([]string, len(want.Mounts))
 	home, err := os.UserHomeDir()
 	if err != nil && len(want.Mounts) > 0 {
-		fail("resolve expected AI mounts for effective metadata: %v", err)
+		fail("resolve expected core and AI mounts for effective metadata: %v", err)
 	}
 	for index, mount := range want.Mounts {
 		wantMounts[index] = strings.ReplaceAll(mount, "${localEnv:HOME}", home)
+		wantMounts[index] = strings.ReplaceAll(wantMounts[index], "${localWorkspaceFolder}", root)
 	}
 	if len(effective.Mounts) != len(wantMounts) || (len(wantMounts) > 0 && !reflect.DeepEqual(effective.Mounts, wantMounts)) {
 		fail("effective mounts differ from the generated mounts; remove inherited project or credential mounts, and keep host integrations in compose.yaml")
