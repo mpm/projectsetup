@@ -237,11 +237,12 @@ printf '%s\n' 'mkdir -p "$HOME/.local/share/claude/versions"' 'printf "#!/usr/bi
 	}
 	command := exec.Command("bash", installer, "claude")
 	command.Env = append(os.Environ(), "HOME="+home, "PATH="+bin+":"+filepath.Join(home, ".local/bin")+":"+os.Getenv("PATH"))
-	if output, err := command.CombinedOutput(); err != nil {
+	output, err := command.CombinedOutput()
+	if err != nil {
 		t.Fatalf("install-ai-tools.sh claude: %v\n%s", err, output)
 	}
-	if target, err := os.Readlink(filepath.Join(home, ".local/bin/claude")); err != nil || target != filepath.Join(home, ".local/share/claude/versions/1.0.0") {
-		t.Fatalf("Claude link target = %q, error = %v", target, err)
+	if !strings.Contains(string(output), "1.0.0") {
+		t.Fatalf("Claude launcher did not run the installed version:\n%s", output)
 	}
 }
 

@@ -1,6 +1,7 @@
 package generate
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -244,7 +245,7 @@ fi
 				t.Fatalf("%v\n%s", err, output)
 			}
 			if !failed && !strings.Contains(output, "claude-2") {
-				t.Fatalf("updated binary was not relinked: %s", output)
+				t.Fatalf("launcher did not run the updated version: %s", output)
 			}
 		})
 	}
@@ -426,31 +427,35 @@ func TestGeneratedAIInstallerDefaultsAndOverrides(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("%v\n%s", err, output)
 			}
-			_, linkErr := os.Readlink(filepath.Join(home, ".local/bin/claude"))
-			if (linkErr == nil) != tt.wantClaude {
-				t.Fatalf("Claude link: %v\n%s", linkErr, output)
+			launcher := filepath.Join(home, ".local/bin/claude")
+			if _, err := os.Lstat(launcher); (err == nil) != tt.wantClaude {
+				t.Fatalf("Claude launcher: %v\n%s", err, output)
 			}
 			if !tt.wantClaude {
 				return
 			}
-			// Host cleanup deletes the selected version; a new host version appears.
+			// Host cleanup deletes the installed version and a host update adds a
+			// new one; the launcher follows without rerunning the installer.
 			if err := os.Remove(version); err != nil {
 				t.Fatal(err)
 			}
-			replacement := filepath.Join(filepath.Dir(version), "2.11.0")
-			writeTestFile(t, replacement, "#!/bin/sh\necho claude-repaired\n", 0755)
-			output, err = runAIInstallerScript(t, script, home, bin)
-			if err != nil || !strings.Contains(output, "claude-repaired") {
-				t.Fatalf("rerun: %v\n%s", err, output)
-			}
-			if target, err := os.Readlink(filepath.Join(home, ".local/bin/claude")); err != nil || target != replacement {
-				t.Fatalf("link = %q: %v", target, err)
+			writeTestFile(t, filepath.Join(filepath.Dir(version), "2.11.0"), "#!/bin/sh\necho claude-host-update\n", 0755)
+			if output, err := runClaudeLauncher(t, home); err != nil || !strings.Contains(output, "claude-host-update") {
+				t.Fatalf("launcher after host update: %v\n%s", err, output)
 			}
 		})
 	}
 }
 
-func TestClaudeRepairsLinkToHighestVersion(t *testing.T) {
+func runClaudeLauncher(t *testing.T, home string, args ...string) (string, error) {
+	t.Helper()
+	command := exec.Command(filepath.Join(home, ".local/bin/claude"), args...)
+	command.Env = append(os.Environ(), "HOME="+home)
+	output, err := command.CombinedOutput()
+	return string(output), err
+}
+
+func TestClaudeLauncherReplacesPinnedLink(t *testing.T) {
 	for _, state := range []string{"missing", "older version", "deleted version"} {
 		t.Run(state, func(t *testing.T) {
 			home, bin := t.TempDir(), t.TempDir()
@@ -465,16 +470,16 @@ func TestClaudeRepairsLinkToHighestVersion(t *testing.T) {
 			if err := os.Chtimes(newest, past, past); err != nil {
 				t.Fatal(err)
 			}
-			link := filepath.Join(home, ".local/bin/claude")
+			launcher := filepath.Join(home, ".local/bin/claude")
 			if state != "missing" {
-				if err := os.MkdirAll(filepath.Dir(link), 0755); err != nil {
+				if err := os.MkdirAll(filepath.Dir(launcher), 0755); err != nil {
 					t.Fatal(err)
 				}
 				target := older
 				if state == "deleted version" {
 					target = filepath.Join(versions, "2.8.0")
 				}
-				if err := os.Symlink(target, link); err != nil {
+				if err := os.Symlink(target, launcher); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -482,9 +487,34 @@ func TestClaudeRepairsLinkToHighestVersion(t *testing.T) {
 			if err != nil || !strings.Contains(output, "claude-newest") {
 				t.Fatalf("%v\n%s", err, output)
 			}
-			if target, err := os.Readlink(link); err != nil || target != newest {
-				t.Fatalf("link = %q: %v", target, err)
+			// Claude Code's updater only replaces launchers that are symlinks into
+			// versions/, so the launcher must be a regular executable file.
+			if info, err := os.Lstat(launcher); err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0755 {
+				t.Fatalf("launcher = %v: %v", info, err)
+			}
+			// Partial or foreign files never win over a release version.
+			writeTestFile(t, filepath.Join(versions, "2.12.0.tmp"), "#!/bin/sh\necho claude-partial\n", 0755)
+			writeTestFile(t, filepath.Join(versions, "2.11.0"), "#!/bin/sh\necho claude-\"$@\"\n", 0755)
+			if output, err := runClaudeLauncher(t, home, "passed", "args"); err != nil || strings.TrimSpace(output) != "claude-passed args" {
+				t.Fatalf("launcher: %v\n%s", err, output)
 			}
 		})
+	}
+}
+
+func TestClaudeLauncherWithoutVersions(t *testing.T) {
+	home, bin := t.TempDir(), t.TempDir()
+	writeTestFile(t, filepath.Join(bin, "curl"), "#!/bin/sh\nexit 99\n", 0755)
+	writeTestFile(t, filepath.Join(home, ".local/share/claude/versions/2.10.0"), "#!/bin/sh\necho claude-test\n", 0755)
+	if output, err := runAIInstaller(t, home, bin, "claude"); err != nil {
+		t.Fatalf("%v\n%s", err, output)
+	}
+	if err := os.RemoveAll(filepath.Join(home, ".local/share/claude/versions")); err != nil {
+		t.Fatal(err)
+	}
+	output, err := runClaudeLauncher(t, home)
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 127 || !strings.Contains(output, "install-ai-tools.sh claude") {
+		t.Fatalf("launcher without versions: %v\n%s", err, output)
 	}
 }

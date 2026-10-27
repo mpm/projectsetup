@@ -607,13 +607,13 @@ dworm exec -- .devcontainer/scripts/install-ai-tools.sh --update codex
 dworm exec -- .devcontainer/scripts/install-ai-tools.sh --update opencode codex
 ```
 
-To check all selected agents and repair their command links without requesting updates, rerun the generated script without arguments:
+To check all selected agents and repair their commands without requesting updates, rerun the generated script without arguments:
 
 ```bash
 dworm exec -- .devcontainer/scripts/install-ai-tools.sh
 ```
 
-Claude's container command links to a specific version in the host-mounted `~/.local/share/claude/versions` directory. Host updates and cleanup can leave that link pointing to an old or deleted binary. Rerunning the script selects the highest executable version by version number, validates it, and replaces the link. If that binary is missing or invalid, it runs the native installer.
+Claude's container command `~/.local/bin/claude` is a small launcher, not a symlink. On every call it runs the highest version by version number in the host-mounted `~/.local/share/claude/versions` directory. Host updates take effect in the container immediately, host cleanup of old versions cannot break the command, and `claude update` inside the container installs into the same shared directory. Claude Code's updater leaves a launcher that is not a symlink into `versions/` in place, and `claude doctor` reports that it was not created by the native installer; this is expected. Containers created before v0.13.0 still have the old pinned symlink: rerun the script once to replace it with the launcher. If no valid version exists, the script runs the native installer.
 
 Use only agents selected for that container, so their installation and state mounts are available. The shared installer also accepts `--update claude`. It reports versions and validates the resulting executable, propagating download or update failures. Normal post-create setup installs missing tools and leaves working versions alone.
 

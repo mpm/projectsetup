@@ -528,7 +528,7 @@ Required behavior:
 - Validate binaries with `--version`.
 - By default install only missing or invalid tools through their native installers, except incompatible existing Codex binaries must fail for host repair. Explicit `--update TOOL...` updates requested tools, reports versions, and verifies the result. Reject invalid arguments before mutations.
 - Keep OpenCode at `~/.opencode/bin/opencode` with a link in `~/.local/bin`.
-- Discover and link the newest persisted Claude binary by version number (not modification time) under `~/.local/share/claude/versions`.
+- Install `~/.local/bin/claude` as a launcher script, not a symlink, that runs the newest persisted Claude binary by version number (not modification time) under `~/.local/share/claude/versions` on every call, so host updates, host cleanup, and in-container `claude update` never pin or break the container command.
 - Ensure OpenCode's unmounted `~/.local/state` is writable.
 - Fail with actionable errors.
 
