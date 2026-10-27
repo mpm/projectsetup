@@ -35,8 +35,7 @@ The first version supports:
 - Ruby on Rails projects
 - Python projects
 - Optional SQLite in the primary container or PostgreSQL sidecar
-- OpenCode, enabled by default
-- Optional Claude Code and Codex
+- OpenCode, Claude Code, and Codex, all enabled by default
 - GitHub CLI
 - Project detection and interactive initialization
 - Non-interactive initialization through flags
@@ -949,7 +948,7 @@ When implementation exposes an unspecified detail, prefer the smallest determini
 - One primary service name, such as `app`, across all presets.
 - Workspace path `/workspaces/<sanitized-project-name>`.
 - User `vscode` and home `/home/vscode`.
-- OpenCode enabled by default; Claude and Codex opt-in. Accept any validated agent combination, deduplicated and sorted.
+- OpenCode, Claude, and Codex enabled by default; `--ai` narrows the selection. Accept any validated agent combination, deduplicated and sorted.
 - No database by default unless confidently detected and confirmed interactively.
 - No default forwarded application port when framework detection is uncertain.
 - No server auto-start.

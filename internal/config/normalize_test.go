@@ -37,7 +37,7 @@ func TestNormalize(t *testing.T) {
 				WorktreeRoot: WorktreeRoot, ProjectName: "my-project", Preset: "node", Addons: []string{},
 				Options:     map[string]map[string]string{"node": {"package_manager": "npm", "version": "26"}},
 				Definitions: definitions("node"),
-				AITools:     []AITool{AIToolOpenCode},
+				AITools:     []AITool{AIToolClaude, AIToolCodex, AIToolOpenCode},
 				Ports:       []int{1024, 3000}, SystemPackages: []string{"curl", "libpq-dev"},
 				Workspace: Workspace{HostPath: "/tmp/My Project", ContainerPath: "/workspaces/my-project"},
 				Container: Container{User: "vscode", Home: "/home/vscode", ComposeProjectName: "my-project", ServiceName: "app"},
@@ -272,7 +272,7 @@ func TestNormalizeAITools(t *testing.T) {
 		input, want []AITool
 		fail        bool
 	}{
-		{nil, []AITool{AIToolOpenCode}, false},
+		{nil, []AITool{AIToolClaude, AIToolCodex, AIToolOpenCode}, false},
 		{[]AITool{}, []AITool{}, false},
 		{[]AITool{AIToolOpenCode, AIToolCodex, AIToolClaude, AIToolCodex}, []AITool{AIToolClaude, AIToolCodex, AIToolOpenCode}, false},
 		{[]AITool{AIToolCodex}, []AITool{AIToolCodex}, false},

@@ -386,7 +386,7 @@ func TestRunInitInteractiveUsesDetectedDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runInit() error = %v", err)
 	}
-	if !strings.Contains(stdout.String(), "Configuration:") || !strings.Contains(stdout.String(), "AI tools: opencode") {
+	if !strings.Contains(stdout.String(), "Configuration:") || !strings.Contains(stdout.String(), "AI tools: claude, codex, opencode") {
 		t.Fatalf("stdout does not contain normalized summary:\n%s", stdout.String())
 	}
 	if _, err := os.Stat(filepath.Join(root, ".devcontainer", "projectsetup.json")); err != nil {
@@ -1005,6 +1005,8 @@ const wantListOptionsJSON = `{
     "codex"
   ],
   "defaultAITools": [
+    "claude",
+    "codex",
     "opencode"
   ],
   "projectNamePattern": "^[a-z0-9][a-z0-9_-]*$"

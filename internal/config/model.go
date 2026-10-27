@@ -24,9 +24,10 @@ func AITools() []AITool {
 	return []AITool{AIToolOpenCode, AIToolClaude, AIToolCodex}
 }
 
-// DefaultAITools returns the AI tools used when no selection is made.
+// DefaultAITools returns the AI tools used when no selection is made, in
+// normalized order.
 func DefaultAITools() []AITool {
-	return []AITool{AIToolOpenCode}
+	return []AITool{AIToolClaude, AIToolCodex, AIToolOpenCode}
 }
 
 func ParseAITool(value string) (AITool, error) {

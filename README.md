@@ -8,7 +8,7 @@ The current implementation provides interactive and flag-driven `init`, static `
 
 - Presets: Node with npm, pnpm, or Yarn; Ruby with Bundler; Rails; Python with pip, Poetry, or uv
 - Add-ons: SQLite in the app container, a PostgreSQL sidecar (18 by default), a Redis sidecar (8 by default), and Go (1.27 by default) and Rust (1.99 by default) toolchains in the app image
-- OpenCode by default, optional Claude Code and Codex, and GitHub CLI
+- OpenCode, Claude Code, and Codex by default (any subset or none can be selected), and GitHub CLI
 
 Presets and add-ons are TOML definition files. You can copy and edit a built-in, write your own, or install definitions from a URL; see [Presets and add-ons](#presets-and-add-ons). Definitions use a constrained schema and cannot change the parts `dworm` relies on.
 
@@ -124,7 +124,7 @@ These older flags remain as aliases:
 --postgres-version MAJOR     --set postgres.version=MAJOR
 ```
 
-`--set` can only name the preset and selected add-ons. `projectsetup init --list-options` lists every option with its default and accepted values. Option values are detected from version files, manifests, and lockfiles. Without a detected language version, the defaults are Node 26, Ruby 4.0, and Python 3.14. OpenCode is enabled by default, and no add-on is selected by default. Interactive mode offers detected add-on suggestions, such as PostgreSQL for a Rails project whose `config/database.yml` uses the PostgreSQL adapter, as the default.
+`--set` can only name the preset and selected add-ons. `projectsetup init --list-options` lists every option with its default and accepted values. Option values are detected from version files, manifests, and lockfiles. Without a detected language version, the defaults are Node 26, Ruby 4.0, and Python 3.14. OpenCode, Claude Code, and Codex are all enabled by default, and no add-on is selected by default. Interactive mode offers detected add-on suggestions, such as PostgreSQL for a Rails project whose `config/database.yml` uses the PostgreSQL adapter, as the default.
 
 Ruby projects are detected from a root-level `Gemfile`, `Gemfile.lock`, `.ruby-version`, or `*.gemspec`. The Ruby version comes from `.ruby-version` when present, then from a literal `ruby "VERSION"` declaration in the Gemfile. Rails-specific signals take precedence over generic Ruby detection. The Ruby preset installs the selected Ruby version and runs `bundle install` when a `Gemfile` exists; it does not add Node, Active Storage, Rails setup, or a default port.
 
@@ -176,7 +176,7 @@ The JSON output is indented and ends with a newline. Shortened to one preset and
     }
   },
   "aiTools": ["opencode", "claude", "codex"],
-  "defaultAITools": ["opencode"],
+  "defaultAITools": ["claude", "codex", "opencode"],
   "projectNamePattern": "^[a-z0-9][a-z0-9_-]*$"
 }
 ```

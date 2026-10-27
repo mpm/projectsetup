@@ -126,6 +126,11 @@ func TestGoldenTrees(t *testing.T) {
 			t.Setenv("HOME", t.TempDir())
 			t.Setenv("CODEX_HOME", "")
 			tt.input.Root = root
+			if tt.input.AITools == nil {
+				// Fixtures without a selection stay OpenCode-only; node-all-agents
+				// covers the default selection of every tool.
+				tt.input.AITools = []config.AITool{config.AIToolOpenCode}
+			}
 			cfg, err := config.Normalize(tt.input)
 			if err != nil {
 				t.Fatalf("Normalize() error = %v", err)

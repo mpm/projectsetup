@@ -464,7 +464,7 @@ func chooseAITools(value string, wasProvided bool, prompt *prompter) ([]config.A
 	if wasProvided || prompt == nil {
 		return parseAITools(value, wasProvided)
 	}
-	selected, err := prompt.choice("AI tools", []string{"opencode", "opencode,claude", "opencode,codex", "opencode,claude,codex", "claude", "codex", "claude,codex", "none"}, "opencode")
+	selected, err := prompt.choice("AI tools", []string{"opencode,claude,codex", "opencode", "opencode,claude", "opencode,codex", "claude", "codex", "claude,codex", "none"}, "opencode,claude,codex")
 	if err != nil {
 		return nil, err
 	}
