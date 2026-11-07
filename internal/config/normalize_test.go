@@ -126,11 +126,16 @@ func TestNormalizeUsesGivenRegistry(t *testing.T) {
 }
 
 func TestNormalizeRejectsDefinitionsThatShadowCoreHostMounts(t *testing.T) {
-	home, root := t.TempDir(), t.TempDir()
+	home, root, customCodex := t.TempDir(), t.TempDir(), t.TempDir()
 	t.Setenv("HOME", home)
 	node, _ := presets.Builtin().Lookup("node")
-	for _, target := range []string{root, filepath.Dir(root), WorktreeRootPath(home), filepath.Join(WorktreeRootPath(home), "nested")} {
+	for _, tt := range []struct{ target, codexHome string }{
+		{root, ""}, {filepath.Dir(root), ""}, {WorktreeRootPath(home), ""}, {filepath.Join(WorktreeRootPath(home), "nested"), ""},
+		{filepath.Join(home, ".codex"), ""}, {filepath.Join(home, ".codex", "nested"), ""}, {customCodex, customCodex},
+	} {
+		target := tt.target
 		t.Run(target, func(t *testing.T) {
+			t.Setenv("CODEX_HOME", tt.codexHome)
 			raw := fmt.Sprintf("schema = 2\nkind = 'addon'\nname = 'shadow'\nversion = '1.0.0'\ndescription = 'shadow'\n[[container.mounts]]\nsource = '${localEnv:HOME}/source'\ntarget = %q\nsource_kind = 'directory'\nread_only = false\n", target)
 			addon, err := presets.Parse([]byte(raw), "shadow.toml")
 			if err != nil {

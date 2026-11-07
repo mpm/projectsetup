@@ -25,14 +25,15 @@ func renderCompose(cfg config.Config, resolved presets.Resolved) ([]byte, error)
 			str("bind"), mapping(str("create_host_path"), boolean(false)),
 		),
 	)
-	for _, tool := range cfg.AITools {
-		if tool == config.AIToolCodex {
-			appVolumes.Content = append(appVolumes.Content, mapping(
-				str("type"), str("bind"),
-				str("source"), str(config.CodexStateSource),
-				str("target"), str(cfg.Container.Home+"/.codex"),
-			))
-		}
+	// Codex state is mounted at its host path so the official installer's
+	// absolute links resolve on the host and in the container.
+	codex := slices.Contains(cfg.AITools, config.AIToolCodex)
+	if codex {
+		appVolumes.Content = append(appVolumes.Content, mapping(
+			str("type"), str("bind"),
+			str("source"), str(config.CodexStateSource),
+			str("target"), str(config.CodexStateSource),
+		))
 	}
 	for _, mount := range resolved.Mounts {
 		volume := mapping(
@@ -49,8 +50,12 @@ func renderCompose(cfg config.Config, resolved presets.Resolved) ([]byte, error)
 		str("build"), mapping(str("context"), str(".."), str("dockerfile"), str(".devcontainer/Dockerfile")),
 		str("command"), str("sleep infinity"),
 		str("user"), str(cfg.Container.User),
-		str("volumes"), appVolumes,
 	)
+	if codex {
+		// Compose supports the nested default that containerEnv cannot express.
+		app.Content = append(app.Content, str("environment"), mapping(str("CODEX_HOME"), str(config.CodexStateSource)))
+	}
+	app.Content = append(app.Content, str("volumes"), appVolumes)
 
 	names := sortedKeys(resolved.Services)
 	dependsOn := mapping()

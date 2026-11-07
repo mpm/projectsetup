@@ -84,37 +84,43 @@ for tool in "$@"; do
   esac
 done
 
+# Codex uses the official standalone installation in CODEX_HOME. Generated
+# containers mount CODEX_HOME at its host path and set CODEX_HOME to it, so the
+# installer's absolute links resolve on the host and in every container, and
+# both sides can update the same installation.
 install_codex() (
-  local installer
+  local root="$1" installer
   installer="$(mktemp)" || fail "cannot create temporary Codex installer"
   trap 'rm -f "$installer"' EXIT
   curl -fsSL https://chatgpt.com/codex/install.sh -o "$installer" || fail "download Codex installer failed"
-  # Keep the installation separate from the real CODEX_HOME and its credentials.
-  CODEX_HOME="$codex_install" CODEX_INSTALL_DIR="$codex_install/bin" \
-    CODEX_NON_INTERACTIVE=1 PATH="$codex_install/bin:$PATH" sh "$installer" ||
+  CODEX_HOME="$root" CODEX_INSTALL_DIR="$HOME/.local/bin" CODEX_NON_INTERACTIVE=1 sh "$installer" ||
     fail "Codex installer failed"
 )
 
-# The official installer writes absolute symlinks. Use relative links within
-# the mounted installation so host and container home paths can differ.
-relocate_codex() {
-  local standalone="$codex_install/packages/standalone"
-  local target release command_target
-  target="$(readlink "$standalone/current")" || fail "Codex installer did not create packages/standalone/current"
-  release="${target##*/}"
-  [[ -n "$release" && "$release" != . && "$release" != .. && -d "$standalone/releases/$release" ]] ||
-    fail "Codex installer created an unexpected release link: $target"
-  ln -s "releases/$release" "$standalone/.current-projectsetup-$$"
-  mv -Tf "$standalone/.current-projectsetup-$$" "$standalone/current"
-  if [[ -x "$standalone/current/bin/codex" ]]; then
-    command_target="../packages/standalone/current/bin/codex"
-  elif [[ -x "$standalone/current/codex" ]]; then
-    command_target="../packages/standalone/current/codex"
+# Prints the command inside the selected release, using the same path as the
+# installer's visible command link, or nothing when no release is selected.
+codex_command() {
+  local current="$1/packages/standalone/current"
+  [[ -e "$current" || -L "$current" ]] || return 0
+  if [[ ! -e "$current/bin/codex" && -e "$current/codex" ]]; then
+    printf '%s\n' "$current/codex"
   else
-    fail "Codex installer did not create an executable release"
+    printf '%s\n' "$current/bin/codex"
   fi
-  ln -s "$command_target" "$codex_install/bin/.codex-projectsetup-$$"
-  mv -Tf "$codex_install/bin/.codex-projectsetup-$$" "$codex_install/bin/codex"
+}
+
+# Release directories are named VERSION-TARGET. A host on another platform,
+# such as macOS, installs releases this container cannot execute.
+codex_foreign_platform() {
+  local release
+  release="$(readlink "$1/packages/standalone/current" 2>/dev/null)" || return 1
+  release="${release%/}"
+  release="${release##*/}"
+  case "$release" in
+    *-"$(uname -m)"-unknown-linux-musl) return 1 ;;
+    *-apple-darwin | *-unknown-linux-musl | *-unknown-linux-gnu | *-pc-windows-msvc) return 0 ;;
+  esac
+  return 1
 }
 
 ensure_parent "$HOME/.local"
@@ -164,27 +170,30 @@ for tool in "$@"; do
       fi
       ;;
     codex)
-      codex_install="$HOME/.local/share/codex"
-      ensure_writable "${CODEX_HOME:-$HOME/.codex}" "host CODEX_HOME or ~/.codex"
-      ensure_writable "$codex_install" "host ~/.local/share/codex"
-      command -v flock >/dev/null 2>&1 || fail "flock (util-linux) is required to serialize shared Codex updates"
-      exec {codex_lock}>"$codex_install/.projectsetup-install.lock"
-      flock -x "$codex_lock" || fail "cannot lock shared Codex installation"
-      codex_binary="$codex_install/bin/codex"
-      if [[ -e "$codex_binary" || -L "$codex_binary" ]]; then
+      codex_home="${CODEX_HOME:-$HOME/.codex}"
+      [[ "$codex_home" == /* ]] || fail "CODEX_HOME must be an absolute path, got $codex_home"
+      ensure_writable "$codex_home" "host CODEX_HOME or ~/.codex"
+      codex_root="$codex_home"
+      if codex_foreign_platform "$codex_home"; then
+        # Never replace the host's own release with a Linux build.
+        codex_root="$HOME/.local/share/codex-container"
+        printf 'Codex: %s/packages/standalone is built for another platform; using container-local %s\n' "$codex_home" "$codex_root"
+        mkdir -p "$codex_root" || fail "cannot create $codex_root"
+      fi
+      codex_binary="$(codex_command "$codex_root")"
+      if [[ -n "$codex_binary" ]]; then
         previous="$("$codex_binary" --version 2>/dev/null)" ||
-          fail "shared Codex binary $codex_binary cannot run; host and container must use compatible Linux/CPU architectures and relative installation links. Repair the shared installation on the host"
+          fail "Codex binary $codex_binary cannot run; host and container must use compatible Linux/CPU architectures. Repair the installation on the host by rerunning the official Codex installer"
         printf 'Codex: %s\n' "$previous"
       fi
-      if "$update" || [[ ! -e "$codex_binary" ]]; then
-        install_codex
-        relocate_codex
+      if "$update" || [[ -z "$codex_binary" ]]; then
+        install_codex "$codex_root"
+        codex_binary="$(codex_command "$codex_root")"
+        [[ -n "$codex_binary" ]] || fail "Codex installer did not create $codex_root/packages/standalone/current"
       fi
-      [[ -x "$codex_binary" ]] || fail "Codex installer did not create $codex_binary"
-      ln -sfn "../share/codex/bin/codex" "$HOME/.local/bin/codex"
-      "$codex_binary" --version || fail "shared Codex installation is not executable; check host/container platform compatibility"
-      flock -u "$codex_lock"
-      exec {codex_lock}>&-
+      ln -s "$codex_binary" "$HOME/.local/bin/.codex-projectsetup-$$"
+      mv -Tf "$HOME/.local/bin/.codex-projectsetup-$$" "$HOME/.local/bin/codex"
+      "$HOME/.local/bin/codex" --version || fail "Codex installation is not executable; check host/container platform compatibility"
       ;;
     *)
       fail "unsupported AI tool: $tool"

@@ -41,8 +41,15 @@ func runAIInstaller(t *testing.T, home, bin string, args ...string) (string, err
 
 func runAIInstallerScript(t *testing.T, script, home, bin string, args ...string) (string, error) {
 	t.Helper()
+	return runAIInstallerWithCodexHome(t, script, home, filepath.Join(home, ".codex"), bin, args...)
+}
+
+// runAIInstallerWithCodexHome models a container whose HOME differs from the
+// host while CODEX_HOME is mounted at its host path.
+func runAIInstallerWithCodexHome(t *testing.T, script, home, codexHome, bin string, args ...string) (string, error) {
+	t.Helper()
 	command := exec.Command("bash", append([]string{script}, args...)...)
-	command.Env = append(os.Environ(), "HOME="+home, "CODEX_HOME="+filepath.Join(home, ".codex"),
+	command.Env = append(os.Environ(), "HOME="+home, "CODEX_HOME="+codexHome,
 		"PATH="+bin+":"+filepath.Join(home, ".local/bin")+":"+os.Getenv("PATH"))
 	output, err := command.CombinedOutput()
 	return string(output), err
@@ -88,18 +95,27 @@ fi
 	}
 }
 
+// fakeCodexInstaller mirrors the official installer's layout: releases named
+// VERSION-TARGET under CODEX_HOME, an absolute current link, an absolute
+// visible command link, and its own lock.
 const fakeCodexInstaller = `#!/bin/sh
 set -eu
 test "$CODEX_NON_INTERACTIVE" = 1
-test "$CODEX_HOME" = "$HOME/.local/share/codex"
-test "$CODEX_INSTALL_DIR" = "$CODEX_HOME/bin"
+test "$CODEX_HOME" = "${TEST_CODEX_EXPECT_HOME:-$CODEX_HOME}"
+test "$CODEX_INSTALL_DIR" = "$HOME/.local/bin"
 test "${TEST_FAILURE:-}" != install
-release="$CODEX_HOME/packages/standalone/releases/${TEST_CODEX_VERSION:-1}-linux"
-mkdir -p "$release/bin" "$CODEX_INSTALL_DIR"
+root="$CODEX_HOME/packages/standalone"
+mkdir -p "$root" "$CODEX_INSTALL_DIR"
+exec 9>"$root/install.lock"
+flock 9
+release="$root/releases/${TEST_CODEX_VERSION:-1}-$(uname -m)-unknown-linux-musl"
+mkdir -p "$release/bin"
 printf '#!/bin/sh\necho codex-%s\n' "${TEST_CODEX_VERSION:-1}" > "$release/bin/codex"
 chmod +x "$release/bin/codex"
-ln -sfn "$release" "$CODEX_HOME/packages/standalone/current"
-ln -sfn "$CODEX_HOME/packages/standalone/current/bin/codex" "$CODEX_INSTALL_DIR/codex"
+ln -s "$release" "$root/.current.$$"
+mv -Tf "$root/.current.$$" "$root/current"
+ln -s "$root/current/bin/codex" "$CODEX_INSTALL_DIR/.codex.$$"
+mv -Tf "$CODEX_INSTALL_DIR/.codex.$$" "$CODEX_INSTALL_DIR/codex"
 `
 
 func fakeCodexCurl(t *testing.T, bin string) {
@@ -116,38 +132,81 @@ cp "$(dirname "$0")/installer" "$4"
 }
 
 func TestCodexSharedInstallationAndUpdate(t *testing.T) {
-	home, bin := t.TempDir(), t.TempDir()
+	host, bin := t.TempDir(), t.TempDir()
+	codexHome := filepath.Join(host, ".codex")
 	fakeCodexCurl(t, bin)
 	t.Setenv("TEST_FAILURE", "")
 	t.Setenv("TEST_CODEX_VERSION", "1")
-	writeTestFile(t, filepath.Join(home, ".codex/auth.json"), "test-credential-sentinel", 0600)
-	writeTestFile(t, filepath.Join(home, ".codex/history.jsonl"), "test-history-sentinel", 0600)
-	if output, err := runAIInstaller(t, home, bin, "codex"); err != nil {
+	t.Setenv("TEST_CODEX_EXPECT_HOME", codexHome)
+	writeTestFile(t, filepath.Join(codexHome, "auth.json"), "test-credential-sentinel", 0600)
+	writeTestFile(t, filepath.Join(codexHome, "history.jsonl"), "test-history-sentinel", 0600)
+	if output, err := runAIInstaller(t, host, bin, "codex"); err != nil {
 		t.Fatalf("%v\n%s", err, output)
 	}
+	// An existing installation is reused without downloading.
 	t.Setenv("TEST_FAILURE", "download")
-	if output, err := runAIInstaller(t, home, bin, "codex"); err != nil {
+	if output, err := runAIInstaller(t, host, bin, "codex"); err != nil {
 		t.Fatalf("%v\n%s", err, output)
+	}
+	// A container has its own HOME but sees CODEX_HOME at the host path, so
+	// the installer's absolute links resolve and it updates the same release.
+	script := writeAIInstaller(t, "")
+	container := t.TempDir()
+	if output, err := runAIInstallerWithCodexHome(t, script, container, codexHome, bin, "codex"); err != nil || !strings.Contains(output, "codex-1") {
+		t.Fatalf("container setup: %v\n%s", err, output)
 	}
 	t.Setenv("TEST_FAILURE", "")
 	t.Setenv("TEST_CODEX_VERSION", "2")
-	if output, err := runAIInstaller(t, home, bin, "--update", "codex"); err != nil || !strings.Contains(output, "codex-2") {
-		t.Fatalf("%v\n%s", err, output)
+	if output, err := runAIInstallerWithCodexHome(t, script, container, codexHome, bin, "--update", "codex"); err != nil || !strings.Contains(output, "codex-2") {
+		t.Fatalf("container update: %v\n%s", err, output)
 	}
-	// Moving the entire home invalidates every absolute link to its former path.
-	relocated := filepath.Join(t.TempDir(), "different-home")
-	if err := os.Rename(home, relocated); err != nil {
-		t.Fatal(err)
+	want := filepath.Join(codexHome, "packages/standalone/current/bin/codex")
+	for _, home := range []string{host, container} {
+		command := filepath.Join(home, ".local/bin/codex")
+		if target, err := os.Readlink(command); err != nil || target != want {
+			t.Fatalf("%s links to %q (%v), want %q", command, target, err, want)
+		}
+		output, err := exec.Command(command, "--version").CombinedOutput()
+		if err != nil || strings.TrimSpace(string(output)) != "codex-2" {
+			t.Fatalf("%s: %v\n%s", command, err, output)
+		}
 	}
-	output, err := exec.Command(filepath.Join(relocated, ".local/bin/codex"), "--version").CombinedOutput()
-	if err != nil || strings.TrimSpace(string(output)) != "codex-2" {
-		t.Fatalf("relocated command: %v\n%s", err, output)
+	if _, err := os.Lstat(filepath.Join(host, ".local/share/codex")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("separate shared installation was created: %v", err)
 	}
 	for name, want := range map[string]string{"auth.json": "test-credential-sentinel", "history.jsonl": "test-history-sentinel"} {
-		data, err := os.ReadFile(filepath.Join(relocated, ".codex", name))
+		data, err := os.ReadFile(filepath.Join(codexHome, name))
 		if err != nil || string(data) != want {
 			t.Fatalf("state %s was changed: %v", name, err)
 		}
+	}
+}
+
+func TestCodexForeignPlatformUsesContainerLocalInstallation(t *testing.T) {
+	home, bin := t.TempDir(), t.TempDir()
+	codexHome := filepath.Join(home, ".codex")
+	fakeCodexCurl(t, bin)
+	t.Setenv("TEST_FAILURE", "")
+	t.Setenv("TEST_CODEX_VERSION", "1")
+	local := filepath.Join(home, ".local/share/codex-container")
+	t.Setenv("TEST_CODEX_EXPECT_HOME", local)
+	// A macOS host's own release, which the Linux container cannot execute.
+	hostRelease := filepath.Join(codexHome, "packages/standalone/releases/0.166.0-aarch64-apple-darwin")
+	writeTestFile(t, filepath.Join(hostRelease, "bin/codex"), "#!/bin/sh\nexit 126\n", 0755)
+	current := filepath.Join(codexHome, "packages/standalone/current")
+	if err := os.Symlink(hostRelease, current); err != nil {
+		t.Fatal(err)
+	}
+	output, err := runAIInstaller(t, home, bin, "codex")
+	if err != nil || !strings.Contains(output, "built for another platform") || !strings.Contains(output, "codex-1") {
+		t.Fatalf("%v\n%s", err, output)
+	}
+	if target, err := os.Readlink(current); err != nil || target != hostRelease {
+		t.Fatalf("host release selection changed to %q: %v", target, err)
+	}
+	want := filepath.Join(local, "packages/standalone/current/bin/codex")
+	if target, err := os.Readlink(filepath.Join(home, ".local/bin/codex")); err != nil || target != want {
+		t.Fatalf("command links to %q (%v), want %q", target, err, want)
 	}
 }
 
@@ -157,15 +216,17 @@ func TestCodexInstallationFailures(t *testing.T) {
 			home, bin := t.TempDir(), t.TempDir()
 			fakeCodexCurl(t, bin)
 			t.Setenv("TEST_FAILURE", failure)
-			target := filepath.Join(home, ".local/share/codex/bin/codex")
+			current := filepath.Join(home, ".codex/packages/standalone/current")
+			release := "/missing-host-path/release"
 			if failure == "incompatible" {
-				writeTestFile(t, target, "#!/bin/sh\nexit 126\n", 0755)
+				release = filepath.Join(home, ".codex/packages/standalone/releases/1-unknown")
+				writeTestFile(t, filepath.Join(release, "bin/codex"), "#!/bin/sh\nexit 126\n", 0755)
 			}
-			if failure == "broken-link" {
-				if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+			if failure == "incompatible" || failure == "broken-link" {
+				if err := os.MkdirAll(filepath.Dir(current), 0755); err != nil {
 					t.Fatal(err)
 				}
-				if err := os.Symlink("/missing-host-path/codex", target); err != nil {
+				if err := os.Symlink(release, current); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -173,8 +234,13 @@ func TestCodexInstallationFailures(t *testing.T) {
 			if err == nil {
 				t.Fatalf("expected error: %s", output)
 			}
-			if (failure == "incompatible" || failure == "broken-link") && !strings.Contains(output, "host and container") {
-				t.Fatalf("unhelpful error: %s", output)
+			if failure == "incompatible" || failure == "broken-link" {
+				if !strings.Contains(output, "host and container") {
+					t.Fatalf("unhelpful error: %s", output)
+				}
+				if target, err := os.Readlink(current); err != nil || target != release {
+					t.Fatalf("existing installation was replaced: %q %v", target, err)
+				}
 			}
 		})
 	}
@@ -358,7 +424,6 @@ func TestAIInstallerPreservesOwnedReadOnlyCodexFiles(t *testing.T) {
 	}{
 		{".codex/packages/standalone/releases/1/voice/lib/libvoice.so", 0555},
 		{".codex/.tmp/plugins/.git/objects/pack/test.pack", 0444},
-		{".local/share/codex/vendor/libvoice.so", 0555},
 		{".codex/auth.json", 0600},
 	}
 	for _, file := range files {
@@ -369,7 +434,11 @@ func TestAIInstallerPreservesOwnedReadOnlyCodexFiles(t *testing.T) {
 	}
 	// Use an already installed executable: this rerun must never download or
 	// change vendor file modes, while still repairing the container command link.
-	writeTestFile(t, filepath.Join(home, ".local/share/codex/bin/codex"), "#!/bin/sh\necho codex-existing\n", 0755)
+	release := filepath.Join(home, ".codex/packages/standalone/releases/1")
+	writeTestFile(t, filepath.Join(release, "bin/codex"), "#!/bin/sh\necho codex-existing\n", 0755)
+	if err := os.Symlink(release, filepath.Join(home, ".codex/packages/standalone/current")); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("TEST_FAILURE", "download")
 	if output, err := runAIInstaller(t, home, bin, "codex"); err != nil {
 		t.Fatalf("read-only vendor files: %v\n%s", err, output)

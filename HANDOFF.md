@@ -508,13 +508,12 @@ CLAUDE_CONFIG_DIR=/home/vscode/.claude
 Codex mounts when enabled:
 
 ```text
-Compose source: ${CODEX_HOME:-${HOME}/.codex} -> /home/vscode/.codex
-${localEnv:HOME}/.local/share/codex -> /home/vscode/.local/share/codex
+Compose source and identical target: ${CODEX_HOME:-${HOME}/.codex}
 ```
 
-Set `CODEX_HOME=/home/vscode/.codex` in `containerEnv`. Use Compose for state because Dev Container interpolation does not support nested defaults. Host directory creation, checks, and doctor honor an absolute exported host `CODEX_HOME`; it must be consistent at generation and container startup.
+Set the `app` service's Compose `environment` to `CODEX_HOME: ${CODEX_HOME:-${HOME}/.codex}`, so direct `dworm exec` sees the host path. Do not set `CODEX_HOME` in `containerEnv`. Use Compose because Dev Container interpolation does not support nested defaults. Host directory creation, checks, and doctor honor an absolute exported host `CODEX_HOME`; it must be consistent at generation and container startup.
 
-Use the official standalone installer with installation-only `CODEX_HOME=~/.local/share/codex` and `CODEX_INSTALL_DIR=~/.local/share/codex/bin`. Keep runtime state separate. Normalize the installer's current-release and command links to relative links; link the local command through `~/.local/bin/codex`. Mount the entire installation directory. Require a shared executable compatible with the Linux container's CPU architecture and fail on an existing incompatible or broken binary without replacing it. Document how to put the shared command on the host PATH; do not migrate arbitrary existing host installations.
+Codex uses the official standalone installation in `CODEX_HOME/packages/standalone`, the same location a standard host installation uses. Its installer writes absolute links. Mounting `CODEX_HOME` at its host path keeps those links valid on the host and in every container, so `codex update` works on either side and Codex recognizes its own installation. The setup script runs the official installer with `CODEX_HOME` unchanged and `CODEX_INSTALL_DIR=~/.local/bin` only when no release is selected or on explicit `--update`, then links `~/.local/bin/codex` to `CODEX_HOME/packages/standalone/current/bin/codex`. The installer serializes concurrent installations itself. Fail on an existing broken binary for the container's platform without replacing it. When the selected release is built for another platform, such as a macOS host, never replace it; install a container-local copy under `~/.local/share/codex-container` instead. Do not migrate arbitrary existing host installations. `doctor` warns about the obsolete `~/.local/share/codex` installation used before v0.14.0 and tells the user how to remove it; nothing removes it automatically, because projects that have not been upgraded still mount it.
 
 File-based Codex credentials and all local history/session state are shared. Doctor checks auth.json metadata only and warns about missing file-based login or keyring/auto configuration. Never silently rewrite host Codex configuration, print credentials, or recursively chown its state directory.
 
@@ -933,7 +932,7 @@ The first version is complete when:
 - A user can initialize an existing Node, Ruby, Rails, or Python project interactively.
 - The same setup can be generated non-interactively with stable output.
 - OpenCode works after first container creation and persists its state on the host.
-- Claude Code and Codex do the same when selected. Codex shares its installation separately from credentials/history; test relative installation links across different home paths and custom CODEX_HOME resolution.
+- Claude Code and Codex do the same when selected. Codex shares its standalone installation inside `CODEX_HOME`, mounted at the host path; test that host and container with different home paths share and update one installation, custom CODEX_HOME resolution, and the foreign-platform fallback.
 - `dworm up`, `dworm shell`, and normal `dworm exec -- ...` commands work with the generated primary container.
 - PostgreSQL setups produce a healthy sidecar and a consistent `DB_HOST` value.
 - Static checks identify mismatched paths, users, services, versions, lockfiles, mounts, and scripts before a build.

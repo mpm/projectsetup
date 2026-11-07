@@ -82,7 +82,7 @@ func TestBindMountMergeConflicts(t *testing.T) {
 		t.Fatal(err)
 	}
 	base, _ := Builtin().Lookup("node")
-	for _, target := range []string{"/workspaces/app", "/workspaces", "/home/vscode", "/home/vscode/.codex", "/home/vscode/.local/share/codex/nested", "/usr/local/lib", "/tmp/dworm-ssh-agent.sock"} {
+	for _, target := range []string{"/workspaces/app", "/workspaces", "/home/vscode", "/home/vscode/.codex", "/home/vscode/.local/share/codex-container/nested", "/usr/local/lib", "/tmp/dworm-ssh-agent.sock"} {
 		d := addon
 		d.Container.Mounts = append([]BindMount(nil), addon.Container.Mounts...)
 		d.Container.Mounts[0].Target = target

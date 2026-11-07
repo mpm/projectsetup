@@ -325,8 +325,8 @@ func validateDevcontainer(root, devDir string, manifest config.Manifest, resolve
 	if containsTool(manifest.AITools, config.AIToolClaude) && document.ContainerEnv["CLAUDE_CONFIG_DIR"] != "/home/vscode/.claude" {
 		add(Error, path, "CLAUDE_CONFIG_DIR must be /home/vscode/.claude when Claude is selected")
 	}
-	if containsTool(manifest.AITools, config.AIToolCodex) && document.ContainerEnv["CODEX_HOME"] != "/home/vscode/.codex" {
-		add(Error, path, "CODEX_HOME must be /home/vscode/.codex when Codex is selected")
+	if _, ok := document.ContainerEnv["CODEX_HOME"]; ok {
+		add(Error, path, "containerEnv must not set CODEX_HOME; compose.yaml sets it to the host Codex state path; regenerate with projectsetup upgrade")
 	}
 	for _, mount := range document.Mounts {
 		lower := strings.ToLower(mount)
@@ -569,8 +569,15 @@ func validateCompose(root, devDir string, cfg config.Config, resolved presets.Re
 				add(Error, file, "service %s worktree root must set bind.create_host_path to false so Compose never creates the host directory", appName)
 			}
 		}
-		if containsTool(cfg.AITools, config.AIToolCodex) && !containsBind(app.Volumes, config.CodexStateSource, cfg.Container.Home+"/.codex") {
-			add(Error, file, "service %s must bind-mount %q to %s/.codex when Codex is selected", appName, config.CodexStateSource, cfg.Container.Home)
+		if containsTool(cfg.AITools, config.AIToolCodex) {
+			if !containsBind(app.Volumes, config.CodexStateSource, config.CodexStateSource) {
+				add(Error, file, "service %s must bind-mount %q to the identical target when Codex is selected; regenerate with projectsetup upgrade", appName, config.CodexStateSource)
+			}
+			if app.Environment["CODEX_HOME"] != config.CodexStateSource {
+				add(Error, file, "service %s environment CODEX_HOME must be %q when Codex is selected; regenerate with projectsetup upgrade", appName, config.CodexStateSource)
+			}
+		} else if _, ok := app.Environment["CODEX_HOME"]; ok {
+			add(Error, file, "service %s sets CODEX_HOME but Codex is not selected", appName)
 		}
 		validateComposeIntegrations(file, appName, app.Volumes, cfg, resolved.Mounts, add)
 	}
@@ -645,7 +652,7 @@ func validateComposeIntegrations(file, appName string, volumes []any, cfg config
 		if mount["type"] == "bind" && mount["source"] == config.ComposeWorktreeRoot && target == config.ComposeWorktreeRoot {
 			continue
 		}
-		if mount["type"] == "bind" && (integrationTarget(mounts, target) || (containsTool(cfg.AITools, config.AIToolCodex) && mount["source"] == config.CodexStateSource && target == cfg.Container.Home+"/.codex")) {
+		if mount["type"] == "bind" && (integrationTarget(mounts, target) || (containsTool(cfg.AITools, config.AIToolCodex) && mount["source"] == config.CodexStateSource && target == config.CodexStateSource)) {
 			continue
 		}
 		add(Error, file, "service %s has unexpected volume %v; declare host integrations in the selected definition", appName, volume)
@@ -814,9 +821,6 @@ func expectedAIMounts(tools []config.AITool) []string {
 				"source=${localEnv:HOME}/.opencode,target=/home/vscode/.opencode,type=bind",
 				"source=${localEnv:HOME}/.cache/opencode,target=/home/vscode/.cache/opencode,type=bind",
 			)
-		case config.AIToolCodex:
-			mounts = append(mounts,
-				"source=${localEnv:HOME}/.local/share/codex,target=/home/vscode/.local/share/codex,type=bind")
 		case config.AIToolClaude:
 			mounts = append(mounts,
 				"source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind",

@@ -7,6 +7,8 @@ services:
       dockerfile: .devcontainer/Dockerfile
     command: sleep infinity
     user: vscode
+    environment:
+      CODEX_HOME: ${CODEX_HOME:-${HOME}/.codex}
     volumes:
       - ..:/workspaces/python-codex
       - type: bind
@@ -16,4 +18,4 @@ services:
           create_host_path: false
       - type: bind
         source: ${CODEX_HOME:-${HOME}/.codex}
-        target: /home/vscode/.codex
+        target: ${CODEX_HOME:-${HOME}/.codex}

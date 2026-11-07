@@ -271,7 +271,7 @@ PROJECTSETUP_RUNTIME_TESTS=1 PROJECTSETUP_RUNTIME_BASE=<local-node-gh-image> \
   go test ./internal/generate -run '^TestSharedImageRuntimeIntegration$' -v -timeout 10m
 ```
 
-The Codex-specific smoke test uses isolated temporary directories to verify official installation, explicit update, custom state sharing, and host execution of the container-installed binary:
+The Codex-specific smoke test uses an isolated temporary `CODEX_HOME` to verify official installation, explicit update, custom state sharing at the host path, and host execution of the container-installed binary:
 
 ```bash
 PROJECTSETUP_SMOKE_TESTS=1 go test ./internal/generate -run '^TestSmokeCodexSharedInstallation$' -v -timeout 12m
@@ -283,7 +283,7 @@ PROJECTSETUP_SMOKE_TESTS=1 go test ./internal/generate -run '^TestSmokeCodexShar
 projectsetup doctor
 ```
 
-`doctor` reports Docker, the Docker daemon, Dev Container CLI, `dworm`, host architecture, SSH and GPG agent sockets, and the selected AI tools' persistence directories. Informational results go to standard output; warnings and errors go to standard error. Errors produce a non-zero exit status.
+`doctor` reports Docker, the Docker daemon, Dev Container CLI, `dworm`, host architecture, SSH and GPG agent sockets, and the selected AI tools' persistence directories. With Codex selected it also reports the shared standalone installation and warns about the obsolete `~/.local/share/codex` installation that releases before v0.14.0 used. Informational results go to standard output; warnings and errors go to standard error. Errors produce a non-zero exit status.
 
 ## Generated files
 
@@ -565,25 +565,23 @@ Claude Code additionally uses:
 ~/.local/share/claude
 ```
 
-Codex uses two separate writable mounts:
+Codex mounts one writable directory, `CODEX_HOME` (default `~/.codex`), at the **same absolute path** inside the container, for example `/home/alex/.codex`. It holds configuration, authorization, history, session state, and the standalone installation that Codex's official installer puts in `CODEX_HOME/packages/standalone`. The path is interpolated by Compose from the host's `HOME` or `CODEX_HOME` when the container starts, so generated files contain no user-specific path. The container's `HOME` stays `/home/vscode`; Docker creates the host-path parents as root-owned directories that `vscode` only traverses.
 
-| Host directory | Container directory | Purpose |
-| --- | --- | --- |
-| `CODEX_HOME`, default `~/.codex` | `/home/vscode/.codex` | Configuration, authorization, history, and session state |
-| `~/.local/share/codex` | `/home/vscode/.local/share/codex` | Shared standalone installation |
+Compose also sets `CODEX_HOME` to that path in the `app` service environment, so direct `dworm exec` access works. Export a custom `CODEX_HOME` as an absolute path consistently when running `projectsetup` and `dworm up`. Compose's `.env` can also affect interpolation; keep it consistent with the exported host setting.
 
-Codex state is mounted through Compose, which supports the host `CODEX_HOME` fallback. Export a custom `CODEX_HOME` as an absolute path consistently when running `projectsetup` and `dworm up`. Compose's `.env` can also affect interpolation; keep it consistent with the exported host setting. Runtime `CODEX_HOME=/home/vscode/.codex` is set in `containerEnv` for direct `dworm exec` access.
+The installer writes absolute links, which resolve identically on the host and in the container. This makes the container and a standard host installation one and the same:
 
-The canonical installer installs Codex into the shared installation directory when absent. It keeps links relative so the same files work under different host and container home paths. An existing incompatible or broken Codex binary produces an actionable error instead of being overwritten. Sharing executables requires compatible Linux/CPU architectures.
+- Install Codex on the host with the official installer (`curl -fsSL https://chatgpt.com/codex/install.sh | sh`), or let the first container setup install it into the shared `CODEX_HOME`.
+- `codex update` works on the host and in any container and updates every container at once. Restart running Codex processes to use the new version.
+- The setup script links the container's `~/.local/bin/codex` to `CODEX_HOME/packages/standalone/current/bin/codex`. An existing broken binary for the container's platform produces an actionable error instead of being overwritten.
+- When the shared release is built for another platform, for example on a macOS host, the script leaves it untouched and installs a container-local Linux copy in `~/.local/share/codex-container`. That copy is not shared and is reinstalled when the container is recreated.
 
-To use this same installation on the host after the first container setup, put its command first in your host PATH:
+An existing npm or Homebrew host installation is not moved or replaced. If a container installed Codex first, put `~/.local/bin` on the host PATH and link the shared command once:
 
 ```bash
-export PATH="$HOME/.local/share/codex/bin:$PATH"
+ln -sfn "${CODEX_HOME:-$HOME/.codex}/packages/standalone/current/bin/codex" ~/.local/bin/codex
 codex --version
 ```
-
-An existing npm, Homebrew, or default standalone host installation is not moved or replaced automatically. Selecting the shared command on PATH makes subsequent host and container invocations use the same installation.
 
 For shared authorization, set this top-level value in the host's `CODEX_HOME/config.toml` (default `~/.codex/config.toml`), then run `codex login` on the host if no file-based login exists:
 
@@ -623,7 +621,7 @@ For an older container without the updated script, OpenCode can already update i
 dworm exec -- opencode upgrade --method curl
 ```
 
-Updates persist in shared host installation directories and affect every container using them; restart running agent processes to use the updated version. No container rebuild is needed for a binary update. For Codex, use the generated update script on the Linux host or in the container so installation placement and relative links are preserved.
+Updates persist in shared host installation directories and affect every container using them; restart running agent processes to use the updated version. No container rebuild is needed for a binary update. Codex can also update itself with `codex update` on the host or in a container.
 
 ## PostgreSQL
 

@@ -129,11 +129,11 @@ path = ["/usr/bin"]
 	}
 	// First-run installer must repair root-owned container parents while leaving
 	// a read-only nested host bind untouched; use fake installer, no downloads.
-	bin, installation, state, nested := t.TempDir(), t.TempDir(), t.TempDir(), t.TempDir()
+	bin, state, nested := t.TempDir(), t.TempDir(), t.TempDir()
 	fakeCodexCurl(t, bin)
 	writeTestFile(t, filepath.Join(nested, "sentinel"), "nested-host-state", 0400)
 	script := writeAIInstaller(t, "")
-	args := []string{"run", "--rm", "--network", "none", "--user", "vscode", "--env", "PATH=/fixtures:/usr/bin:/bin", "--env", "CODEX_HOME=/home/vscode/.codex", "--mount", "type=bind,source=" + script + ",target=/installer,readonly", "--mount", "type=bind,source=" + bin + ",target=/fixtures,readonly", "--mount", "type=bind,source=" + installation + ",target=/home/vscode/.local/share/codex", "--mount", "type=bind,source=" + state + ",target=/home/vscode/.codex", "--mount", "type=bind,source=" + nested + ",target=/home/vscode/.local/state/nested,readonly", "--entrypoint", "/bin/bash", image, "/installer", "codex"}
+	args := []string{"run", "--rm", "--network", "none", "--user", "vscode", "--env", "PATH=/fixtures:/usr/bin:/bin", "--env", "CODEX_HOME=" + state, "--mount", "type=bind,source=" + script + ",target=/installer,readonly", "--mount", "type=bind,source=" + bin + ",target=/fixtures,readonly", "--mount", "type=bind,source=" + state + ",target=" + state, "--mount", "type=bind,source=" + nested + ",target=/home/vscode/.local/state/nested,readonly", "--entrypoint", "/bin/bash", image, "/installer", "codex"}
 	output := run(args...)
 	if !strings.Contains(output, "codex-1") {
 		t.Fatalf("first-run output: %s", output)

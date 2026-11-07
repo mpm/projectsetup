@@ -229,11 +229,16 @@ func checkCodex(home string, environment Environment, add func(Severity, string,
 	} else if !errors.Is(err, os.ErrNotExist) {
 		add(Warning, "Codex authorization", "cannot read Codex config.toml: %v", err)
 	}
-	binary := filepath.Join(home, ".local/share/codex/bin/codex")
-	if _, err := environment.Stat(binary); err != nil {
-		add(Warning, "Codex installation", "shared command %s is missing or inaccessible; container setup installs it when absent. Add its bin directory to the host PATH to use the same installation", binary)
+	current := filepath.Join(state, "packages/standalone/current")
+	if _, err := environment.Stat(current); err != nil {
+		add(Warning, "Codex installation", "no standalone installation at %s; container setup installs it with the official installer when absent. Install Codex on the host with the official installer to share and update one installation", current)
 	} else {
-		add(Info, "Codex installation", "shared command at %s; container setup checks --version for Linux/CPU compatibility", binary)
+		add(Info, "Codex installation", "shared standalone installation at %s; update it with codex update on the host or in a container. Container setup uses a container-local installation when this one is built for another platform", current)
+	}
+	// Releases before v0.14.0 kept a separate shared installation here.
+	legacy := filepath.Join(home, ".local/share/codex")
+	if _, err := environment.Stat(legacy); err == nil {
+		add(Warning, "Codex installation", "obsolete projectsetup Codex installation at %s is no longer used; after running projectsetup upgrade in every project and recreating its container, remove it with rm -rf %s", legacy, legacy)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/mpm/projectsetup/internal/presets"
@@ -50,6 +51,11 @@ func Resolve(cfg Config) (presets.Resolved, error) {
 		return presets.Resolved{}, fmt.Errorf("locate host home directory for core mounts: %w", err)
 	}
 	coreTargets := []string{cfg.Workspace.HostPath, WorktreeRootPath(home)}
+	if codexState, err := AIHostDirectory(".codex", home, os.Getenv); err == nil {
+		coreTargets = append(coreTargets, codexState)
+	} else if slices.Contains(cfg.AITools, AIToolCodex) {
+		return presets.Resolved{}, err
+	}
 	for _, mount := range resolved.Mounts {
 		for _, target := range coreTargets {
 			if pathsOverlap(mount.Target, target) {

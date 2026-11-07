@@ -51,7 +51,7 @@ func AIHostDirectories(tools []AITool) []string {
 		case AIToolClaude:
 			directories = append(directories, ".claude", ".local/share/claude")
 		case AIToolCodex:
-			directories = append(directories, ".codex", ".local/share/codex")
+			directories = append(directories, ".codex")
 		}
 	}
 	sort.Strings(directories)
@@ -128,6 +128,8 @@ type Container struct {
 }
 
 // CodexStateSource uses Compose interpolation, which supports nested defaults.
+// It is the bind source, the identical bind target, and the container's
+// CODEX_HOME, so Codex sees the same absolute path on the host and inside.
 const CodexStateSource = "${CODEX_HOME:-${HOME}/.codex}"
 
 const (

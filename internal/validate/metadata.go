@@ -206,6 +206,10 @@ func validateMergedMetadataAt(root string, output []byte, want devcontainerDocum
 			fail("effective containerEnv.%s conflicts with the vscode user/home", key)
 		}
 	}
+	// compose.yaml owns CODEX_HOME; inherited containerEnv would override it.
+	if _, ok := effective.ContainerEnv["CODEX_HOME"]; ok {
+		fail("effective containerEnv.CODEX_HOME overrides the Compose host-path Codex state; remove the inherited setting")
+	}
 	if len(effective.Features) != len(want.Features) || (len(want.Features) > 0 && !reflect.DeepEqual(effective.Features, want.Features)) {
 		fail("effective feature requests differ from the generated installation plan; baked feature IDs are metadata, not installer requests")
 	}

@@ -483,7 +483,8 @@ func TestCodexComposeStateResolution(t *testing.T) {
 			}
 			var document struct {
 				Services map[string]struct {
-					Volumes []struct{ Source, Target, Type string }
+					Environment map[string]string
+					Volumes     []struct{ Source, Target, Type string }
 				}
 			}
 			if err := json.Unmarshal(output, &document); err != nil {
@@ -493,10 +494,13 @@ func TestCodexComposeStateResolution(t *testing.T) {
 			if want == "" {
 				want = filepath.Join(home, ".codex")
 			}
+			if got := document.Services["app"].Environment["CODEX_HOME"]; got != want {
+				t.Fatalf("resolved CODEX_HOME = %q; want %q", got, want)
+			}
 			for _, volume := range document.Services["app"].Volumes {
-				if volume.Target == "/home/vscode/.codex" {
+				if volume.Target == want {
 					if volume.Source != want || volume.Type != "bind" {
-						t.Fatalf("resolved mount = %#v; want %s", volume, want)
+						t.Fatalf("resolved mount = %#v; want %s at the identical path", volume, want)
 					}
 					return
 				}
@@ -506,8 +510,8 @@ func TestCodexComposeStateResolution(t *testing.T) {
 	}
 }
 
-// This opt-in test uses isolated state and installation directories, never the
-// developer's actual Codex credentials, and removes only its own container.
+// This opt-in test uses an isolated state directory, never the developer's
+// actual Codex credentials, and removes only its own container.
 func TestSmokeCodexSharedInstallation(t *testing.T) {
 	if os.Getenv("PROJECTSETUP_SMOKE_TESTS") != "1" {
 		t.Skip("set PROJECTSETUP_SMOKE_TESTS=1 for the Codex container smoke test")
@@ -560,7 +564,8 @@ func TestSmokeCodexSharedInstallation(t *testing.T) {
 	}
 	command := exec.CommandContext(ctx, docker, "exec", "--user", "vscode", result.ContainerID, "bash", "-c", `
 set -euo pipefail
-test "$CODEX_HOME" = /home/vscode/.codex
+test "$CODEX_HOME" = "`+os.Getenv("CODEX_HOME")+`"
+test "$(readlink "$HOME/.local/bin/codex")" = "$CODEX_HOME/packages/standalone/current/bin/codex"
 test "$(cat "$CODEX_HOME/sharing-test")" = from-host
 printf 'from-container\n' > "$CODEX_HOME/sharing-test"
 codex --version
@@ -577,9 +582,9 @@ codex --version
 	if err != nil || string(shared) != "from-container\n" {
 		t.Fatalf("shared state: %q, %v", shared, err)
 	}
-	// The container wrote the symlinks with /home/vscode as HOME; they must also
-	// resolve at the host's distinct temporary home path.
-	host := exec.CommandContext(ctx, filepath.Join(home, ".local/share/codex/bin/codex"), "--version")
+	// The container installed into CODEX_HOME at its host path, so the
+	// installer's absolute links resolve on the host as well.
+	host := exec.CommandContext(ctx, filepath.Join(os.Getenv("CODEX_HOME"), "packages/standalone/current/bin/codex"), "--version")
 	if output, err := host.CombinedOutput(); err != nil || !strings.Contains(string(output), "codex") {
 		t.Fatalf("host shared binary: %v\n%s", err, output)
 	} else {

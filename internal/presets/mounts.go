@@ -103,7 +103,7 @@ func normalizeMounts(mounts []BindMount, workspace string) ([]BindMount, []error
 	var errs []error
 	// Reserve runtime/system roots and every core AI location, even when its tool
 	// is not selected, so later --ai changes cannot introduce hidden collisions.
-	protected := []string{workspace, "/home/vscode/.ssh", "/home/vscode/.gitconfig", "/home/vscode/.config/opencode", "/home/vscode/.local/share/opencode", "/home/vscode/.opencode", "/home/vscode/.cache/opencode", "/home/vscode/.claude", "/home/vscode/.local/share/claude", "/home/vscode/.codex", "/home/vscode/.local/share/codex", "/home/vscode/.local/bin", "/bin", "/usr", "/etc", "/lib", "/lib64", "/sbin", "/proc", "/sys", "/dev", "/tmp/dworm-ssh-agent.sock"}
+	protected := []string{workspace, "/home/vscode/.ssh", "/home/vscode/.gitconfig", "/home/vscode/.config/opencode", "/home/vscode/.local/share/opencode", "/home/vscode/.opencode", "/home/vscode/.cache/opencode", "/home/vscode/.claude", "/home/vscode/.local/share/claude", "/home/vscode/.codex", "/home/vscode/.local/share/codex-container", "/home/vscode/.local/bin", "/bin", "/usr", "/etc", "/lib", "/lib64", "/sbin", "/proc", "/sys", "/dev", "/tmp/dworm-ssh-agent.sock"}
 	for i, mount := range result {
 		for _, p := range protected {
 			if p != "" && pathsOverlap(mount.Target, p) {

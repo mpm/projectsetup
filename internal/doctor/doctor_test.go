@@ -160,6 +160,59 @@ func assertDiagnostic(t *testing.T, diagnostics []doctor.Diagnostic, severity do
 	t.Errorf("missing %s diagnostic for %s containing %q in %#v", severity, subject, message, diagnostics)
 }
 
+func TestCodexInstallationDiagnostics(t *testing.T) {
+	for _, tt := range []struct {
+		name              string
+		installed, legacy bool
+	}{
+		{"missing", false, false}, {"installed", true, false}, {"legacy leftover", true, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root, home, state := t.TempDir(), t.TempDir(), t.TempDir()
+			writeManifest(t, root, `["codex"]`)
+			if tt.installed {
+				release := filepath.Join(state, "packages/standalone/releases/1")
+				if err := os.MkdirAll(release, 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(release, filepath.Join(state, "packages/standalone/current")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			legacy := filepath.Join(home, ".local/share/codex")
+			if tt.legacy {
+				if err := os.MkdirAll(legacy, 0755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			env := commandEnvironment(map[string]string{}, func(string, ...string) ([]byte, error) { return nil, errors.New("unexpected command") })
+			env.Getenv = func(name string) string {
+				if name == "CODEX_HOME" {
+					return state
+				}
+				return ""
+			}
+			env.UserHomeDir = func() (string, error) { return home, nil }
+			diagnostics := doctor.Check(root, env)
+			if tt.installed {
+				assertDiagnostic(t, diagnostics, doctor.Info, "Codex installation", "shared standalone installation at "+filepath.Join(state, "packages/standalone/current"))
+			} else {
+				assertDiagnostic(t, diagnostics, doctor.Warning, "Codex installation", "no standalone installation")
+			}
+			found := false
+			for _, d := range diagnostics {
+				found = found || strings.Contains(d.Message, "obsolete projectsetup Codex installation")
+			}
+			if found != tt.legacy {
+				t.Fatalf("legacy installation warning = %t; want %t: %#v", found, tt.legacy, diagnostics)
+			}
+			if tt.legacy {
+				assertDiagnostic(t, diagnostics, doctor.Warning, "Codex installation", "rm -rf "+legacy)
+			}
+		})
+	}
+}
+
 func TestCodexAuthorizationDiagnostics(t *testing.T) {
 	for _, tt := range []struct {
 		name, config string
