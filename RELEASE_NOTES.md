@@ -1,27 +1,33 @@
-# projectsetup v0.13.0
+# projectsetup v0.14.0
 
-This release selects every supported AI tool by default and makes the container's `claude` command follow the shared Claude Code installation instead of pinning one version.
+This release makes containers use the standard Codex installation in `CODEX_HOME` instead of a separate projectsetup-managed copy, so `codex update` on the host or in any container updates the one installation every container runs.
 
 ## Changed
 
-- `init` without `--ai` now selects OpenCode, Claude Code, and Codex instead of OpenCode only. The interactive prompt offers all three first and uses them as its default. `--ai` still narrows the selection, and `--ai none` selects no tools. `init --list-options --json` reports `"defaultAITools": ["claude", "codex", "opencode"]`.
-- Existing manifests keep their recorded selection; `upgrade` does not add tools.
-
-## Fixed
-
-- `~/.local/bin/claude` in the container is now a launcher script instead of a symlink to the version that was newest when the container was created. On every call it runs the highest release version in the host-mounted `~/.local/share/claude/versions` directory, so:
-  - Claude Code updates made on the host take effect in the container immediately.
-  - Host cleanup of old versions no longer leaves a dangling `claude` command.
-  - `claude update` inside the container installs into the shared directory and is used on the next call. Claude Code's updater does not replace a launcher that is not a symlink into `versions/`; `claude doctor` notes this, which is expected.
-- Only plain version names are considered, so partial or foreign files in `versions/` are ignored, and a symlinked `versions` directory is followed.
+- `CODEX_HOME` (default `~/.codex`) is now mounted at its **host path** inside the container, for example `/home/alex/.codex`, and the `app` service's Compose environment sets `CODEX_HOME` to the same path. The path is interpolated from the host's `HOME` or `CODEX_HOME` when the container starts; generated files contain no user-specific path. The container's `HOME` stays `/home/vscode`.
+- The official Codex installer writes absolute links into `CODEX_HOME/packages/standalone`. With identical paths they resolve on the host and in every container, and Codex recognizes its own installation, so `codex update` works everywhere.
+- The setup script runs the official installer with the real `CODEX_HOME` only when no release is selected or on `--update codex`, and links the container's `~/.local/bin/codex` to `CODEX_HOME/packages/standalone/current/bin/codex`. It no longer rewrites installer links or takes its own lock; the installer serializes concurrent installations itself.
+- When the shared release is built for another platform, such as a macOS host's own installation, the script leaves it untouched and installs a container-local Linux copy in `~/.local/share/codex-container`.
+- `~/.local/share/codex` is no longer mounted or created, and `CODEX_HOME` is no longer set in `devcontainer.json` `containerEnv`.
+- `check` validates the identical-path Codex bind and the Compose `CODEX_HOME`, and rejects a `CODEX_HOME` in `containerEnv` or inherited effective metadata. Definition mounts that overlap the host Codex state directory are rejected.
+- `doctor` reports the standalone installation in `CODEX_HOME` and warns when the obsolete `~/.local/share/codex` installation is still present.
 
 ## Existing projects
 
-Regenerate the scripts, then either recreate the container or replace the old symlink in place:
+Regenerate each project that selects Codex and recreate its container:
 
 ```bash
 projectsetup upgrade
-dworm exec -- .devcontainer/scripts/install-ai-tools.sh claude
+dworm down
+dworm up -d
 ```
 
-[All changes since v0.12.0](https://github.com/mpm/projectsetup/compare/v0.12.0...v0.13.0)
+If you used the old shared installation on the host through `~/.local/share/codex/bin` on your PATH, remove that PATH entry and use the standard installation (`~/.local/bin/codex`). After every project has been upgraded and its container recreated, remove the old installation:
+
+```bash
+rm -rf ~/.local/share/codex
+```
+
+Projects that have not been upgraded still mount that directory, so it is not removed automatically.
+
+[All changes since v0.13.0](https://github.com/mpm/projectsetup/compare/v0.13.0...v0.14.0)
