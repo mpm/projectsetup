@@ -14,13 +14,22 @@ This release makes containers use the standard Codex installation in `CODEX_HOME
 
 ## Existing projects
 
-Regenerate each project that selects Codex and recreate its container:
+Regenerate each project that selects Codex and recreate its container. `dworm down` followed by `dworm up -d` only restarts the existing container with its old mounts; `dworm rebuild` recreates it and keeps Compose volumes such as database data:
 
 ```bash
 projectsetup upgrade
-dworm down
-dworm up -d
+dworm rebuild
 ```
+
+`rebuild` starts the container. Run `dworm down` afterward if it was stopped before.
+
+If the build fails with `additional privileges requested: pass "--allow=fs.read=..."` for the Dev Container CLI's temporary `Dockerfile-with-features`, your Compose/Bake version requires a filesystem entitlement for that file. Disable the check for this one invocation:
+
+```bash
+BUILDX_BAKE_ENTITLEMENTS_FS=0 dworm rebuild
+```
+
+If a rebuild already failed this way, the old container has been removed; start the new one with `BUILDX_BAKE_ENTITLEMENTS_FS=0 dworm up -d`.
 
 If you used the old shared installation on the host through `~/.local/share/codex/bin` on your PATH, remove that PATH entry and use the standard installation (`~/.local/bin/codex`). After every project has been upgraded and its container recreated, remove the old installation:
 
