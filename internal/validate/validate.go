@@ -516,6 +516,7 @@ type composeService struct {
 		Context    string `yaml:"context"`
 		Dockerfile string `yaml:"dockerfile"`
 	} `yaml:"build"`
+	Init        *bool             `yaml:"init"`
 	Environment map[string]string `yaml:"environment"`
 	Healthcheck struct {
 		Test []string `yaml:"test"`
@@ -551,6 +552,9 @@ func validateCompose(root, devDir string, cfg config.Config, resolved presets.Re
 	} else {
 		if app.Build.Context != ".." || app.Build.Dockerfile != ".devcontainer/Dockerfile" {
 			add(Error, file, "service %s must build context .. with dockerfile .devcontainer/Dockerfile", appName)
+		}
+		if app.Init == nil || !*app.Init {
+			add(Warning, file, "service %s should set init: true so an init process reaps orphaned processes instead of leaving zombies; regenerate with projectsetup upgrade", appName)
 		}
 		if workspace := "..:" + cfg.Workspace.ContainerPath; !containsVolume(app.Volumes, workspace) {
 			add(Error, file, "service %s must mount the project with volume %q", appName, workspace)

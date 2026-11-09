@@ -49,6 +49,9 @@ func renderCompose(cfg config.Config, resolved presets.Resolved) ([]byte, error)
 	app := mapping(
 		str("build"), mapping(str("context"), str(".."), str("dockerfile"), str(".devcontainer/Dockerfile")),
 		str("command"), str("sleep infinity"),
+		// sleep doesn't reap, so orphaned processes from dworm exec sessions
+		// would pile up as zombies under PID 1 without an init process.
+		str("init"), boolean(true),
 		str("user"), str(cfg.Container.User),
 	)
 	if codex {

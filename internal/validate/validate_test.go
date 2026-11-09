@@ -564,8 +564,24 @@ func TestCheckAcceptsComposeFromEarlierReleases(t *testing.T) {
 	if err := os.WriteFile(path, []byte(legacyCompose), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if diagnostics := validate.Check(root, validate.Options{}); validate.ErrorCount(diagnostics) > 0 {
+	diagnostics := validate.Check(root, validate.Options{})
+	if validate.ErrorCount(diagnostics) > 0 {
 		t.Fatalf("Check() = %#v, want no errors", diagnostics)
+	}
+	// Releases before v0.15.0 didn't set init; that only warns.
+	assertDiagnostic(t, diagnostics, validate.Warning, "service app should set init: true")
+	for _, replacement := range []string{"    command: sleep infinity\n    init: false\n", "    command: sleep infinity\n    init: true\n"} {
+		if err := os.WriteFile(path, []byte(strings.Replace(legacyCompose, "    command: sleep infinity\n", replacement, 1)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		diagnostics := validate.Check(root, validate.Options{})
+		warned := false
+		for _, diagnostic := range diagnostics {
+			warned = warned || strings.Contains(diagnostic.Message, "should set init: true")
+		}
+		if want := strings.Contains(replacement, "false"); warned != want {
+			t.Fatalf("%q: init warning = %v, want %v; diagnostics %#v", replacement, warned, want, diagnostics)
+		}
 	}
 
 	for _, tt := range []struct{ old, replacement, want string }{

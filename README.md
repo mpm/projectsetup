@@ -303,7 +303,7 @@ projectsetup doctor
     └── post-create.sh
 ```
 
-Every setup uses Compose with an `app` service and a project-scoped network. Add-ons with sidecars, such as PostgreSQL and Redis, add their services and named data volumes. `presets/` holds a copy of each selected definition. The scripts are executable.
+Every setup uses Compose with an `app` service and a project-scoped network. The `app` service runs `sleep infinity` with `init: true`, so Docker's init process is PID 1 and reaps processes orphaned by `dworm exec` sessions, which would otherwise stay behind as zombies; `check` warns when an older `compose.yaml` lacks it. Add-ons with sidecars, such as PostgreSQL and Redis, add their services and named data volumes. `presets/` holds a copy of each selected definition. The scripts are executable.
 
 The ordinary workspace remains `..:/workspaces/<project>` with `workspaceFolder` set to that path. In addition, every `devcontainer.json` contains exactly this core bind so absolute Git links back to the primary checkout resolve inside the container:
 

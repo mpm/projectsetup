@@ -360,7 +360,7 @@ All setups:
     └── post-create.sh
 ```
 
-Use Compose for every generated setup. A project without a database or with SQLite has only the primary `app` service; selecting PostgreSQL adds the `postgres` service and its data volume. SQLite is installed in the app image. The project-scoped user-defined network is intentional so Docker's embedded DNS behavior is consistent across presets.
+Use Compose for every generated setup. A project without a database or with SQLite has only the primary `app` service; selecting PostgreSQL adds the `postgres` service and its data volume. SQLite is installed in the app image. The project-scoped user-defined network is intentional so Docker's embedded DNS behavior is consistent across presets. The `app` service sets `init: true`: its `sleep infinity` command doesn't reap, and processes orphaned by `dworm exec` sessions are reparented to PID 1. `check` only warns when it is missing or false, so files from earlier releases still pass; `upgrade` adds it.
 
 The normal workspace remains mounted at `/workspaces/<project>`. Dev Container metadata additionally mounts `${localWorkspaceFolder}` to itself. Compose mounts the one global `${HOME}/.local/share/projectsetup/worktrees` root only into `app` at the same absolute path with `bind.create_host_path: false`; sidecars never receive it. The host root is prepared by `init`/`upgrade`, and collision-safe child naming belongs to Massimo.
 
@@ -719,7 +719,7 @@ Presets and add-ons are described by TOML definition files instead of Go code. `
 Definitions cannot change:
 
 - The `vscode` user, `/home/vscode`, `containerUser`, `remoteUser`, and the final Dockerfile `USER vscode`. A schema 2 top-level preset may assert fixed positive UID/GID through `[image.ownership]` (`mode = "fixed"`, `uid`, `gid`); the base must already provide those IDs. Fixed policy renders `updateRemoteUserUID: false`; absence preserves portable adjustment. Linux requires matching host primary IDs, macOS Docker Desktop uses file sharing without numeric equality, and other fixed-policy hosts/remote daemons are unsupported.
-- The Compose project name, the `app` service, its build, command, workspace volume, and `workspaceFolder`.
+- The Compose project name, the `app` service, its build, command, init, workspace volume, and `workspaceFolder`.
 - AI tool mounts, AI environment variables, and the canonical `install-ai-tools.sh`. Post-create runs AI setup before any definition script.
 - The GitHub CLI feature and the core `containerEnv.PATH` entries. A schema 2 preset's fixed `image.preinstalled.tools.gh` declaration suppresses the feature; declared tool paths supplement the generated PATH using the core's deterministic ordering.
 - Core host mounts and credential forwarding, including the host-path primary checkout and global worktree root. Schema 2 presets/add-ons may contribute explicit typed `[[container.mounts]]` integrations (including matching variants), rendered as long-syntax `compose.yaml` app binds because the Dev Container CLI drops `readonly` from `devcontainer.json` mounts of Compose projects, but cannot overlap either host-path mount or core workspace/AI/system paths and cannot expose host `.ssh`/`.gitconfig`. Sidecar volumes remain named volumes only. See [Explicit host integrations](README.md#explicit-host-integrations) for source kinds, localEnv references, offline checks, Linux local-daemon restrictions, and snapshot behavior.
