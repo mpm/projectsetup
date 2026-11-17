@@ -17,7 +17,7 @@ import (
 )
 
 // SchemaVersion is the newest definition format this build reads. Schema 1
-// remains supported; built-in definitions retain their original bytes.
+// remains supported; project snapshots retain their exact definition bytes.
 const SchemaVersion = 2
 
 type Kind string

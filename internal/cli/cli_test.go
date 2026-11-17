@@ -909,10 +909,18 @@ const wantListOptionsJSON = `{
       "definitionSchema": 1,
       "name": "python",
       "kind": "preset",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "source": "builtin",
       "description": "Python with pip, Poetry, or uv",
       "options": {
+        "install_tools": {
+          "description": "Install the Python feature's bundled development tools via pipx",
+          "default": "false",
+          "choices": [
+            "false",
+            "true"
+          ]
+        },
         "package_manager": {
           "description": "Python package manager",
           "default": "pip",
@@ -1058,6 +1066,7 @@ func TestRunInitListOptionsText(t *testing.T) {
 		"Databases (--database, alias for --addon): none, postgres, sqlite\n",
 		"  node.package_manager: Node.js package manager: npm (default), pnpm, yarn\n",
 		"  node.version: Node.js version; default 26\n",
+		"  python.install_tools: Install the Python feature's bundled development tools via pipx: false (default), true\n",
 		"  python.package_manager: Python package manager: pip (default), poetry, uv\n",
 		"  postgres.version: PostgreSQL major version; default 18\n",
 	} {

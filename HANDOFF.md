@@ -429,6 +429,8 @@ Post-create behavior:
 
 Use an official Dev Containers Python image or the official Python feature on the shared base, with an explicit version.
 
+The built-in Python definition v1.1.0 defaults `install_tools` to `"false"`, rendering the feature's native `installTools: false`. The validated `"true"` choice opts into its bundled development tools and pipx. Keep `/usr/local/py-utils/bin` in generated PATH only for that opt-in; uv and Poetry setup use `python -m pip install --user` independently. Existing schema 2 snapshots retain their behavior until `upgrade --refresh-presets` adopts the new definition and adds the new option's default.
+
 The container should include common build prerequisites only when needed. Avoid installing a large universal native dependency set. Users can add packages with repeatable `--system-package` flags.
 
 Post-create dependency setup:
@@ -475,7 +477,7 @@ Application-specific database names and framework configuration are not rewritte
 - `rust` installs the official Rust feature with an explicit `version` option (default `1.99`) and adds `/usr/local/cargo/bin` to `containerEnv.PATH`.
 - `redis` adds a `redis` sidecar (`redis:VERSION-trixie`, default version `8`) with a `redis-cli ping` health check and the `redis-data` named volume at `/data`, installs `redis-tools` in the app image, and sets `REDIS_URL=redis://redis:6379`. Like PostgreSQL, its port is not published.
 
-The generated `containerEnv.PATH` replaces PATH changes that features make through their own `containerEnv`, so every definition that installs a feature lists its PATH entries: the Node feature needs `/usr/local/share/nvm/current/bin` (node and rails presets), the Python feature `/usr/local/python/current/bin` and `/usr/local/py-utils/bin`, and the Ruby feature the mise shims. The opt-in smoke test checks each preset runtime and add-on tool through a non-login `docker exec`, as `dworm exec` runs commands.
+The generated `containerEnv.PATH` replaces PATH changes that features make through their own `containerEnv`, so every definition that installs a feature lists its PATH entries: the Node feature needs `/usr/local/share/nvm/current/bin` (node and rails presets), the Python feature `/usr/local/python/current/bin` (plus `/usr/local/py-utils/bin` only with `install_tools=true`), and the Ruby feature the mise shims. The opt-in smoke test checks each preset runtime and add-on tool through a non-login `docker exec`, as `dworm exec` runs commands.
 
 ## SQLite Capability
 

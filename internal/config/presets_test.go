@@ -15,7 +15,7 @@ func TestResolveMapsConfigToDefinitions(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]map[string]string{
-		"python":   {"version": "3.12", "package_manager": "uv"},
+		"python":   {"version": "3.12", "package_manager": "uv", "install_tools": "false"},
 		"postgres": {"version": "17"},
 	}
 	if !reflect.DeepEqual(resolved.Options, want) {

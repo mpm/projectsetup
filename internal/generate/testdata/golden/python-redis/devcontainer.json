@@ -8,11 +8,12 @@
   "features": {
     "ghcr.io/devcontainers/features/github-cli:1": {},
     "ghcr.io/devcontainers/features/python:1": {
+      "installTools": false,
       "version": "3.14"
     }
   },
   "containerEnv": {
-    "PATH": "/home/vscode/.local/bin:/home/vscode/.opencode/bin:/usr/local/python/current/bin:/usr/local/py-utils/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "PATH": "/home/vscode/.local/bin:/home/vscode/.opencode/bin:/usr/local/python/current/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
     "REDIS_URL": "redis://redis:6379"
   },
   "mounts": [

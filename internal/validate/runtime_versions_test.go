@@ -147,15 +147,26 @@ path = ['/opt/bin']
 
 func TestFixedRuntimeDoesNotTreatPythonRequirementAsExactPin(t *testing.T) {
 	root := t.TempDir()
-	definition, _ := presets.Builtin().Lookup("python")
 	// An ejected preset may retain old inference rules and a compatible
 	// version constraint; neither turns requires-python into an exact pin.
-	source := strings.Replace(string(definition.Raw), "schema = 1", "schema = 2", 1)
-	source = strings.Replace(source, `name = "python"`, `name = "shared-python"`, 1)
-	source = strings.Replace(source, "[features.\"ghcr.io/devcontainers/features/python:1\"]\nversion = \"${option:version}\"", `[image.preinstalled.tools.python]
+	source := `schema = 2
+kind = "preset"
+name = "shared-python"
+version = "1.0.0"
+description = "Shared Python with legacy requirement inference"
+[options.version]
+description = "Python version constraint"
+default = "3.14"
+pattern = '[0-9]+(\.[0-9]+){0,2}'
+[options.version.detect]
+sources = [{ file = "pyproject.toml", pattern = '''(?m)^\s*requires-python\s*=\s*["'][^"']*?(\d+(?:\.\d+){1,2})''' }]
+[image]
+base = "mcr.microsoft.com/devcontainers/base:ubuntu-24.04"
+[image.preinstalled.tools.python]
 version = "3.14.0"
 executable = "/opt/bin/python"
-path = ["/opt/bin"]`, 1)
+path = ["/opt/bin"]
+`
 	definition, err := presets.Parse([]byte(source), "shared-python.toml")
 	if err != nil {
 		t.Fatal(err)

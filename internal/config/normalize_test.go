@@ -50,7 +50,7 @@ func TestNormalize(t *testing.T) {
 			want: Config{
 				WorktreeRoot: WorktreeRoot, ProjectName: "api", Preset: "python", Addons: []string{"postgres", "sqlite"},
 				Options: map[string]map[string]string{
-					"python":   {"package_manager": "uv", "version": "3.14"},
+					"python":   {"install_tools": "false", "package_manager": "uv", "version": "3.14"},
 					"postgres": {"version": "17"},
 				},
 				Definitions: definitions("python", "postgres", "sqlite"),

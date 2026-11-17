@@ -165,6 +165,11 @@ func TestPreinstalledInstallerConflicts(t *testing.T) {
 				t.Run(pair.tool+suffix+"/"+location, func(t *testing.T) {
 					claims := strings.Replace(installedNode, "tools.node", "tools."+pair.tool, 1)
 					feature := fmt.Sprintf("[features.%q]\nversion = '22.14.0'\n", pair.repository+suffix)
+					if pair.tool == "python" {
+						// Disabling bundled tools still installs the runtime and must
+						// conflict with a preinstalled Python declaration.
+						feature += "installTools = false\n"
+					}
 					presetSource := sharedPreset + claims
 					addonSource := "schema = 1\nkind = 'addon'\nname = 'extra'\nversion = '1.0.0'\ndescription = 'extra'\n"
 					switch location {

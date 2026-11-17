@@ -1,8 +1,13 @@
 schema = 1
 kind = "preset"
 name = "python"
-version = "1.0.0"
+version = "1.1.0"
 description = "Python with pip, Poetry, or uv"
+
+[options.install_tools]
+description = "Install the Python feature's bundled development tools via pipx"
+default = "false"
+choices = ["false", "true"]
 
 [options.version]
 description = "Python version"
@@ -38,11 +43,11 @@ base = "mcr.microsoft.com/devcontainers/base:ubuntu-24.04"
 
 [features."ghcr.io/devcontainers/features/python:1"]
 version = "${option:version}"
+installTools = false
 
-# The feature puts Python and its pipx tools on PATH through containerEnv,
-# which the generated containerEnv.PATH replaces; dworm exec needs them here.
+# Generated containerEnv.PATH replaces the feature's PATH; dworm exec needs Python here.
 [container]
-path = ["/usr/local/python/current/bin", "/usr/local/py-utils/bin"]
+path = ["/usr/local/python/current/bin"]
 
 [setup]
 script = '''
@@ -71,3 +76,11 @@ case "${option:package_manager}" in
     ;;
 esac
 '''
+
+# Options are strings; a variant keeps the rendered feature option a JSON boolean.
+[[variant]]
+when = { option = { install_tools = { in = ["true"] } } }
+[variant.features."ghcr.io/devcontainers/features/python:1"]
+installTools = true
+[variant.container]
+path = ["/usr/local/py-utils/bin"]
